@@ -44,12 +44,23 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 200, body: { "messages" => [ message_payload ], "next_cursor" => nil }.to_json)
     stub_request(:get, %r{#{BASE_URL}/tasks})
       .to_return(status: 200, body: { "tasks" => [ task_payload ], "next_cursor" => nil }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/timelines/.+/webhook_endpoints})
+      .to_return(status: 201, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/webhook_endpoints/.+/enablement})
+      .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+    stub_request(:delete, %r{#{BASE_URL}/webhook_endpoints/.+/enablement})
+      .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/webhook_endpoints/.+/rotation})
+      .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+    stub_request(:get, %r{#{BASE_URL}/webhook_events})
+      .to_return(status: 200, body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json)
   end
 
   def teardown
     ENV.delete("BASECRADLE_TOKEN")
     Dir.chdir(@original_dir)
     FileUtils.remove_entry(@workdir)
+    super
   end
 
   def test_readme_has_ruby_examples

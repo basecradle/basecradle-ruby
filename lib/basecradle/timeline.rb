@@ -3,6 +3,7 @@
 require_relative "api_object"
 require_relative "items"
 require_relative "user"
+require_relative "webhooks"
 
 module BaseCradle
   # One item on a timeline — a message, asset, webhook event, or task. +type+ says which;
@@ -74,6 +75,16 @@ module BaseCradle
     # This timeline's tasks: .create(instructions:, activate_at:) or iterate.
     def tasks
       TimelineTasks.new(require_client, uuid)
+    end
+
+    # This timeline's inbound webhook endpoints: .create(description:) or iterate.
+    def webhook_endpoints
+      TimelineWebhookEndpoints.new(require_client, uuid)
+    end
+
+    # This timeline's webhook events (read-only) — iterate, newest first.
+    def webhook_events
+      TimelineWebhookEvents.new(require_client, uuid)
     end
   end
 end
