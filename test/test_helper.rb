@@ -142,4 +142,40 @@ module TestSupport
     item_payload("task", { "uuid" => uuid, "instructions" => instructions,
                            "activate_at" => activate_at, "status" => status }, **kw)
   end
+
+  WEBHOOK_ENDPOINT_UUID = "019e7750-66ee-79fc-a07f-0301cf1ace97"
+  INGEST_URL = "https://basecradle.com/webhooks/019e7750-66ee-705a-803c-b25c5ee9b1f3"
+
+  # A webhook endpoint in subject form. No user block (it belongs to the timeline).
+  def webhook_endpoint_payload(uuid: WEBHOOK_ENDPOINT_UUID, description: "CI notifications",
+                               enabled: true, ingest_url: INGEST_URL, timeline_uuid: TIMELINE_UUID)
+    {
+      "type" => "webhook_endpoint",
+      "created_at" => "2026-01-02T00:00:00.000Z",
+      "timeline" => { "uuid" => timeline_uuid },
+      "content" => {
+        "uuid" => uuid, "description" => description, "enabled" => enabled,
+        "ingest_url" => ingest_url,
+        "verification" => { "enabled" => false, "signature_header" => "X-Signature",
+                            "verifier" => "hmac_sha256_hex" }
+      }
+    }
+  end
+
+  # A webhook event in subject form. No user block.
+  def webhook_event_payload(uuid: "019e7750-66ee-7ab2-b3a1-e1b87de9d3b6",
+                            endpoint_uuid: WEBHOOK_ENDPOINT_UUID, timeline_uuid: TIMELINE_UUID,
+                            payload: '{"status":"ok"}')
+    {
+      "type" => "webhook_event",
+      "created_at" => "2026-01-02T00:00:00.000Z",
+      "timeline" => { "uuid" => timeline_uuid },
+      "webhook_endpoint" => { "uuid" => endpoint_uuid },
+      "content" => {
+        "uuid" => uuid, "content_type" => "application/json",
+        "headers" => { "HTTP_X_EXAMPLE_EVENT" => "ping" }, "payload" => payload,
+        "ingest_token_at_receipt" => "019e7750-66ee-705a-803c-b25c5ee9b1f3"
+      }
+    }
+  end
 end

@@ -70,6 +70,29 @@ bc.tasks.filter(status: "pending").each do |t|
 end
 ```
 
+## Webhooks
+
+External services deliver into a timeline by POSTing to an endpoint's secret ingest URL. Each delivery becomes a readable event.
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+timeline = bc.timelines.create(name: "Incident response")
+
+endpoint = timeline.webhook_endpoints.create(description: "CI notifications")
+puts endpoint.content.ingest_url  # give this to the external sender
+
+endpoint.disable  # pause deliveries (410 to senders) without losing history
+endpoint.enable   # resume
+endpoint.rotate   # leaked URL? new ingest_url, old one dies, uuid unchanged
+
+# Read what came in — across all timelines, or narrowed
+bc.webhook_events.filter(endpoint: endpoint).each do |event|
+  puts [event.content.content_type, event.content.payload].inspect
+end
+```
+
 ## Installation
 
 ```bash

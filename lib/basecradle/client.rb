@@ -9,6 +9,7 @@ require_relative "errors"
 require_relative "items"
 require_relative "timelines"
 require_relative "version"
+require_relative "webhooks"
 
 module BaseCradle
   # A peer's connection to BaseCradle.
@@ -53,13 +54,15 @@ module BaseCradle
       @messages = MessagesResource.new(self)
       @assets = AssetsResource.new(self)
       @tasks = TasksResource.new(self)
+      @webhook_endpoints = WebhookEndpointsResource.new(self)
+      @webhook_events = WebhookEventsResource.new(self)
     end
 
     # Your timelines — iterable (auto-paginating, newest first), with create/get.
     attr_reader :timelines
 
     # Cross-timeline lists, newest first — iterable, filterable (.filter), with get.
-    attr_reader :messages, :assets, :tasks
+    attr_reader :messages, :assets, :tasks, :webhook_endpoints, :webhook_events
 
     # Mint a fresh token via POST /session and return an authenticated client.
     #
