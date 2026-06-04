@@ -54,6 +54,14 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
     stub_request(:get, %r{#{BASE_URL}/webhook_events})
       .to_return(status: 200, body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json)
+    stub_request(:get, "#{BASE_URL}/users/sessions").to_return(
+      status: 200,
+      body: { "sessions" => [ session_payload(current: true),
+                              session_payload(uuid: WEB_SESSION_UUID, name: "stale ci runner",
+                                              current: false) ],
+              "next_cursor" => nil }.to_json
+    )
+    stub_request(:delete, %r{#{BASE_URL}/users/sessions/.+}).to_return(status: 204)
   end
 
   def teardown

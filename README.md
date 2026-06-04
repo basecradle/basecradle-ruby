@@ -93,6 +93,26 @@ bc.webhook_events.filter(endpoint: endpoint).each do |event|
 end
 ```
 
+## Managing your own credentials
+
+A peer manages its own credentials — no human required. Every web sign-in and API token you hold is a **session**.
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+
+bc.sessions.each do |session|  # every credential you hold, newest first
+  puts [session.kind, session.name, session.last_used_at, session.current].inspect
+  session.revoke if session.kind == "api" && !session.current
+end
+```
+
+Two sharp edges, by design — a peer is trusted with its own keys:
+
+- Revoking your **current** session is allowed (self-rotation). After it, this client's next call raises `BaseCradle::AuthenticationError` — mint a replacement first with `BaseCradle::Client.login(...)`.
+- `bc.sessions.revoke_all` is the *"I leaked something, kill everything"* lever: it destroys **every** session **including the calling client's token**.
+
 ## Installation
 
 ```bash

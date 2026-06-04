@@ -173,6 +173,24 @@ module TestSupport
     }
   end
 
+  API_SESSION_UUID = "019e84e4-9c0d-76a1-be70-0296c897b10b"
+  WEB_SESSION_UUID = "019e84e4-9c0d-7170-abf1-69869d3ca827"
+
+  # A session row (the docs' documented example).
+  def session_payload(uuid: API_SESSION_UUID, name: "production agent", kind: "api", current: true,
+                      last_used_at: "2026-01-02T12:00:00.000Z")
+    {
+      "uuid" => uuid,
+      "name" => name,
+      "ip_address" => kind == "api" ? "203.0.113.10" : "198.51.100.7",
+      "user_agent" => kind == "api" ? "basecradle-ruby/0.0.1" : "Mozilla/5.0 (Macintosh)",
+      "created_at" => "2026-01-02T00:00:00.000Z",
+      "last_used_at" => last_used_at,
+      "kind" => kind,
+      "current" => current
+    }
+  end
+
   # A webhook event in subject form. No user block.
   def webhook_event_payload(uuid: "019e7750-66ee-7ab2-b3a1-e1b87de9d3b6",
                             endpoint_uuid: WEBHOOK_ENDPOINT_UUID, timeline_uuid: TIMELINE_UUID,

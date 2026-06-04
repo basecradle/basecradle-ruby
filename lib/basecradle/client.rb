@@ -7,6 +7,7 @@ require "uri"
 require_relative "dashboard"
 require_relative "errors"
 require_relative "items"
+require_relative "sessions"
 require_relative "timelines"
 require_relative "version"
 require_relative "webhooks"
@@ -56,6 +57,7 @@ module BaseCradle
       @tasks = TasksResource.new(self)
       @webhook_endpoints = WebhookEndpointsResource.new(self)
       @webhook_events = WebhookEventsResource.new(self)
+      @sessions = SessionsResource.new(self)
     end
 
     # Your timelines — iterable (auto-paginating, newest first), with create/get.
@@ -63,6 +65,9 @@ module BaseCradle
 
     # Cross-timeline lists, newest first — iterable, filterable (.filter), with get.
     attr_reader :messages, :assets, :tasks, :webhook_endpoints, :webhook_events
+
+    # Your own credentials — list and revoke them yourself (see SessionsResource).
+    attr_reader :sessions
 
     # Mint a fresh token via POST /session and return an authenticated client.
     #
