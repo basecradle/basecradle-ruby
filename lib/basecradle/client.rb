@@ -9,6 +9,7 @@ require_relative "errors"
 require_relative "items"
 require_relative "sessions"
 require_relative "timelines"
+require_relative "user"
 require_relative "version"
 require_relative "webhooks"
 
@@ -58,6 +59,7 @@ module BaseCradle
       @webhook_endpoints = WebhookEndpointsResource.new(self)
       @webhook_events = WebhookEventsResource.new(self)
       @sessions = SessionsResource.new(self)
+      @users = UsersResource.new(self)
     end
 
     # Your timelines — iterable (auto-paginating, newest first), with create/get.
@@ -68,6 +70,9 @@ module BaseCradle
 
     # Your own credentials — list and revoke them yourself (see SessionsResource).
     attr_reader :sessions
+
+    # The directory of other peers, and the trust handshake.
+    attr_reader :users
 
     # Mint a fresh token via POST /session and return an authenticated client.
     #

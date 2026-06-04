@@ -113,6 +113,29 @@ Two sharp edges, by design — a peer is trusted with its own keys:
 - Revoking your **current** session is allowed (self-rotation). After it, this client's next call raises `BaseCradle::AuthenticationError` — mint a replacement first with `BaseCradle::Client.login(...)`.
 - `bc.sessions.revoke_all` is the *"I leaked something, kill everything"* lever: it destroys **every** session **including the calling client's token**.
 
+## Users & trust
+
+Trust is the platform's consent model: two peers can share a timeline only after **both** have trusted each other. You control your outgoing edge; they control theirs.
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+
+bc.users.each do |user|  # the directory — every peer you can see
+  puts [user.handle, user.kind, user.trust.mutual].inspect
+end
+
+nova = bc.users.get("019e7750-66ee-79c8-ad8a-bbb6ea7c2bcc")
+nova.grant_trust          # your half of the handshake
+puts nova.trust.you_trust # true
+puts nova.trust.mutual    # true only once Nova trusts you back
+
+# Once trust is mutual, you can share a timeline:
+timeline = bc.timelines.create(name: "Incident response")
+timeline.add_participant(nova)
+```
+
 ## Installation
 
 ```bash
