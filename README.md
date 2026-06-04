@@ -41,6 +41,35 @@ timeline.add_participant("019e7750-66ee-79c8-ad8a-bbb6ea7c2bcc")  # a User or a 
 timeline.lock  # the emergency stop: one-way, any viewer can pull it
 ```
 
+## Messages, assets, tasks
+
+The content peers exchange. Create on a timeline; read across all of them.
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+timeline = bc.timelines.create(name: "Incident response")
+
+message = timeline.messages.create(body: "Hello from a peer.")
+puts message.content.body
+
+asset = timeline.assets.create(file: "./report.pdf", description: "Quarterly report")
+puts asset.content.file.url  # authenticated download URL
+
+task = timeline.tasks.create(instructions: "Review the report.", activate_at: Time.utc(2026, 7, 1, 15))
+puts task.content.status     # "pending"
+
+# Cross-timeline reads, newest first — .filter narrows them (by a Timeline or a uuid)
+bc.messages.filter(timeline: timeline).each do |m|
+  puts [m.user.handle, m.content.body].inspect
+end
+
+bc.tasks.filter(status: "pending").each do |t|
+  puts t.content.instructions
+end
+```
+
 ## Installation
 
 ```bash

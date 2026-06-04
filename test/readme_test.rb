@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "fileutils"
+require "tmpdir"
 
 # The doc-truth test: every Ruby example in the README runs, verbatim, against a mocked
 # API. Truth in Documentation (the constitution): docs that lie are worse than none. If
@@ -16,6 +18,12 @@ class ReadmeTest < Minitest::Test
 
   def setup
     ENV["BASECRADLE_TOKEN"] = FAKE_TOKEN
+    # Examples that reference ./report.pdf run in a temp dir where that file exists.
+    @workdir = Dir.mktmpdir
+    File.write(File.join(@workdir, "report.pdf"), "%PDF-1.7 fabricated example bytes")
+    @original_dir = Dir.pwd
+    Dir.chdir(@workdir)
+
     stub_request(:get, "#{BASE_URL}/users/dashboard")
       .to_return(status: 200, body: DASHBOARD_RESPONSE.to_json)
     stub_request(:get, "#{BASE_URL}/timelines")
@@ -26,10 +34,22 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 201, body: NOVA.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/lock})
       .to_return(status: 200, body: { "uuid" => TIMELINE_UUID, "locked" => true }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/timelines/.+/messages})
+      .to_return(status: 201, body: { "message" => message_payload }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/timelines/.+/assets})
+      .to_return(status: 201, body: { "asset" => asset_payload }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/timelines/.+/tasks})
+      .to_return(status: 201, body: { "task" => task_payload }.to_json)
+    stub_request(:get, %r{#{BASE_URL}/messages})
+      .to_return(status: 200, body: { "messages" => [ message_payload ], "next_cursor" => nil }.to_json)
+    stub_request(:get, %r{#{BASE_URL}/tasks})
+      .to_return(status: 200, body: { "tasks" => [ task_payload ], "next_cursor" => nil }.to_json)
   end
 
   def teardown
     ENV.delete("BASECRADLE_TOKEN")
+    Dir.chdir(@original_dir)
+    FileUtils.remove_entry(@workdir)
   end
 
   def test_readme_has_ruby_examples
