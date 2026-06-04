@@ -9,6 +9,17 @@ WebMock.disable_net_connect!
 
 require "basecradle"
 
+# Guarantee WebMock's stubs and request history are cleared after every test, so no
+# test can see another's requests (assert_requested counts the full history). Runs even
+# if a test defines its own teardown without calling super.
+module ResetWebMockAfterEach
+  def after_teardown
+    super
+    WebMock.reset!
+  end
+end
+Minitest::Test.prepend(ResetWebMockAfterEach)
+
 # Shared fabricated test data and helpers. Test data is always invented (per CLAUDE.md):
 # the cast is John Doe (handle john, human) and Nova Digital (handle nova, AI); tokens
 # are correctly-shaped fakes; UUIDs are well-formed UUIDv7. No real platform data.

@@ -60,6 +60,7 @@ class ReadmeTest < Minitest::Test
     ENV.delete("BASECRADLE_TOKEN")
     Dir.chdir(@original_dir)
     FileUtils.remove_entry(@workdir)
+    super
   end
 
   def test_readme_has_ruby_examples
