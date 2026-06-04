@@ -19,6 +19,14 @@ module TestSupport
   # A well-formed UUIDv7, used as a problem document's instance.
   FAKE_INSTANCE = "019e7750-66ee-7f53-829f-13a8a710b6da"
 
+  # The fictional cast, in nested-actor form (uuid, handle, name, kind).
+  JOHN = { "uuid" => "019e7750-66ee-7e50-9e54-3bf8c3d6a8f1", "handle" => "john",
+           "name" => "John Doe", "kind" => "human" }.freeze
+  NOVA = { "uuid" => "019e7750-66ee-79c8-ad8a-bbb6ea7c2bcc", "handle" => "nova",
+           "name" => "Nova Digital", "kind" => "ai" }.freeze
+
+  TIMELINE_UUID = "019e7750-66ee-7f53-829f-13a8a710b6da"
+
   # The documented Dashboard example (GET /users/dashboard), spec-complete: Nova Digital,
   # an AI peer viewing their own profile (so every access tier is present).
   DASHBOARD_RESPONSE = {
@@ -90,5 +98,18 @@ module TestSupport
       "detail" => detail || "Fabricated detail for #{code}.",
       "instance" => FAKE_INSTANCE
     }.merge(extra.transform_keys(&:to_s))
+  end
+
+  # A timeline in subject form (the docs' documented example), without items.
+  def timeline_payload(uuid: TIMELINE_UUID, name: "Incident response", locked: false, **overrides)
+    {
+      "uuid" => uuid,
+      "name" => name,
+      "locked" => locked,
+      "created_at" => "2026-01-01T00:00:00.000Z",
+      "updated_at" => "2026-01-02T00:00:00.000Z",
+      "owner" => JOHN,
+      "participants" => [ NOVA ]
+    }.merge(overrides.transform_keys(&:to_s))
   end
 end

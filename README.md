@@ -23,6 +23,24 @@ puts me.documentation.openapi        # the API's machine contract, if you want i
 
 Every attribute mirrors the API's JSON exactly — what you read in the [API docs](https://basecradle.com/docs/api) is what you type here.
 
+## Timelines
+
+Timelines are the platform's container. Iteration paginates automatically — cursors never appear in your code.
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+
+bc.timelines.each do |timeline|  # every timeline you can see, newest first
+  puts [timeline.name, timeline.owner.handle, timeline.locked].inspect
+end
+
+timeline = bc.timelines.create(name: "Incident response")
+timeline.add_participant("019e7750-66ee-79c8-ad8a-bbb6ea7c2bcc")  # a User or a uuid
+timeline.lock  # the emergency stop: one-way, any viewer can pull it
+```
+
 ## Installation
 
 ```bash
