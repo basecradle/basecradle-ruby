@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+# Provides build / install / release tasks from the gemspec. The release pipeline's
+# rubygems/release-gem step runs `bundle exec rake release`; bundler's release task
+# skips tagging/SCM-push when the tag already exists, so a tag-triggered run only
+# pushes the gem (via OIDC) and generates its attestations.
+require "bundler/gem_tasks"
 require "rake/testtask"
 
 # The offline default suite. Every test except the live spec drift-guard, which
