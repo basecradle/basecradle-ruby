@@ -6,6 +6,7 @@ require "uri"
 
 require_relative "dashboard"
 require_relative "errors"
+require_relative "timelines"
 require_relative "version"
 
 module BaseCradle
@@ -47,7 +48,11 @@ module BaseCradle
       @base_url = base_url
       @timeout = timeout
       @start_here = nil
+      @timelines = TimelinesResource.new(self)
     end
+
+    # Your timelines — iterable (auto-paginating, newest first), with create/get.
+    attr_reader :timelines
 
     # Mint a fresh token via POST /session and return an authenticated client.
     #

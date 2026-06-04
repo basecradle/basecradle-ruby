@@ -3,6 +3,16 @@
 require_relative "errors"
 
 module BaseCradle
+  # The uuid for a value that may be a model object or a uuid string. A model's identity
+  # is its top-level +uuid+ (timelines, users) or, failing that, its +content.uuid+
+  # (items, webhook endpoints) — mirroring how the API addresses them.
+  def self.uuid_of(value)
+    return value unless value.is_a?(ApiObject)
+
+    data = value.to_h
+    data["uuid"] || data.fetch("content")["uuid"]
+  end
+
   # A read-only, wire-exact view of one API JSON object.
   #
   # Subclasses declare their wire fields with the +attribute+ macro; readers return the
