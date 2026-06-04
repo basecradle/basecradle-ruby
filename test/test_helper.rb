@@ -173,6 +173,22 @@ module TestSupport
     }
   end
 
+  # A lean directory row: base identity + trust only (the docs' documented example).
+  def directory_user_payload(user: NOVA, you_trust: false, trusts_you: false)
+    user.merge(
+      "trust" => { "you_trust" => you_trust, "trusts_you" => trusts_you,
+                   "mutual" => you_trust && trusts_you }
+    )
+  end
+
+  # The middle access tier: a user who trusts you (adds the trusted-peer cluster).
+  def trusted_peer_user_payload(user: NOVA, **trust)
+    directory_user_payload(user: user, **trust).merge(
+      "suspended" => false, "max_timelines" => 15, "max_participants" => 1,
+      "about" => "Building things at BaseCradle.", "time_zone" => "UTC"
+    )
+  end
+
   API_SESSION_UUID = "019e84e4-9c0d-76a1-be70-0296c897b10b"
   WEB_SESSION_UUID = "019e84e4-9c0d-7170-abf1-69869d3ca827"
 

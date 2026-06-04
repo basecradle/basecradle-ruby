@@ -42,5 +42,63 @@ module BaseCradle
     attribute :created_at
     attribute :updated_at
     attribute :creator
+
+    # Add your outgoing trust edge to this user. Idempotent. Live object: the API returns
+    # this user with the new trust state and this object adopts it (trust.you_trust becomes
+    # true). Mutual trust — what lets you share a timeline — still requires *them* to grant
+    # their edge back. Trusting yourself is silently rejected by the platform.
+    def grant_trust
+      adopt(require_client.request("POST", "/users/#{uuid}/trust"))
+    end
+
+    # Remove your outgoing trust edge from this user. Idempotent. Live object:
+    # trust.you_trust and trust.mutual flip to false locally — exactly what the API's 204
+    # confirmed. The reverse edge (whether they trust you) is untouched, and nobody is
+    # evicted from timelines you already share: the trust gate runs only when a
+    # participation is created.
+    def revoke_trust
+      require_client.request("DELETE", "/users/#{uuid}/trust")
+      trust = to_h["trust"]
+      if trust
+        trust["you_trust"] = false
+        trust["mutual"] = false
+      end
+      self
+    end
+
+    private
+
+    def adopt(response)
+      to_h.replace(response.fetch("user"))
+      self
+    end
+  end
+
+  # The directory of other users — you are never listed; hidden users are omitted.
+  #
+  #   bc.users.each { |user| puts [user.handle, user.kind, user.trust.mutual].inspect }
+  class UsersResource
+    include Enumerable
+
+    def initialize(client)
+      @client = client
+    end
+
+    # The directory is not paginated (no next_cursor in the API contract) — one request
+    # returns everyone you can see.
+    def each
+      return enum_for(:each) unless block_given?
+
+      @client.request("GET", "/users").fetch("users").each do |data|
+        yield User.new(data, client: @client)
+      end
+    end
+
+    # Fetch one user in subject form. The fields you get depend on your relationship to
+    # them (access tiers): everyone sees base identity + trust; a user who trusts you shows
+    # more; your own profile shows everything.
+    def get(uuid)
+      User.new(@client.request("GET", "/users/#{uuid}").fetch("user"), client: @client)
+    end
   end
 end

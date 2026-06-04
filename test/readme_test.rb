@@ -62,6 +62,13 @@ class ReadmeTest < Minitest::Test
               "next_cursor" => nil }.to_json
     )
     stub_request(:delete, %r{#{BASE_URL}/users/sessions/.+}).to_return(status: 204)
+    stub_request(:get, "#{BASE_URL}/users")
+      .to_return(status: 200, body: { "users" => [ directory_user_payload(trusts_you: true) ] }.to_json)
+    stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}")
+      .to_return(status: 200, body: { "user" => directory_user_payload(trusts_you: true) }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/users/.+/trust})
+      .to_return(status: 201,
+                 body: { "user" => trusted_peer_user_payload(you_trust: true, trusts_you: true) }.to_json)
   end
 
   def teardown
