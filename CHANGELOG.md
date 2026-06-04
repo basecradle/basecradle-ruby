@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-06-04
+
+### Fixed
+
+- **Asset upload from an IO or `Pathname` no longer raises `NameError`.** `items.rb`
+  referenced `Pathname` without requiring `"pathname"`, so in a bare consumer process
+  (one not loading Rails/activesupport) any non-`String` `file:` argument — `StringIO`,
+  `File`, `Pathname` — crashed with `uninitialized constant Pathname`; only `String`
+  paths worked, by short-circuit luck. The gem now requires its own `pathname`
+  dependency. ([#31](https://github.com/basecradle/basecradle-ruby/issues/31))
+
 ## [0.1.0] - 2026-06-04
 
 The first real release — the full read/write surface of the BaseCradle API, mirroring
@@ -33,4 +44,5 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.1.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.1.1
 [0.1.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.1.0

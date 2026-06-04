@@ -147,6 +147,23 @@ class ItemsTest < Minitest::Test
     end
   end
 
+  def test_asset_upload_accepts_a_pathname
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets")
+      .to_return(status: 201, body: { "asset" => asset_payload }.to_json)
+
+    Tempfile.create([ "report", ".pdf" ]) do |file|
+      file.write("%PDF fabricated")
+      file.flush
+      asset = timeline.assets.create(file: Pathname(file.path), description: "Quarterly report")
+      assert_instance_of BaseCradle::Asset, asset
+    end
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets") do |req|
+      req.headers["Content-Type"].to_s.start_with?("multipart/form-data")
+    end
+  end
+
   def test_timeline_messages_iterate_filtered_by_that_timeline
     timeline = fetch_timeline
     stub_request(:get, "#{BASE_URL}/messages").with(query: { "timeline" => TIMELINE_UUID })
