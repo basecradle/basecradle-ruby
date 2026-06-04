@@ -4,6 +4,11 @@
 # Publishing). The workflow filename (release.yml) and the environment name
 # (rubygems) are contractual — they match the trusted publisher registered on
 # RubyGems; renaming either breaks the trust relationship and the publish 403s.
+#
+# We publish the *exact* gem the rehearsal verified: rehearsal builds it, proves
+# it installs and loads on the 3.2 floor, and uploads it; publish downloads that
+# same artifact and pushes it. No `rake release`, no re-tagging — the tag already
+# exists (it is what triggered this run).
 name: Release
 
 on:
@@ -33,10 +38,16 @@ jobs:
         run: |
           gem install ./basecradle-*.gem
           ruby -e 'require "basecradle"; abort "bad version: #{BaseCradle::VERSION.inspect}" unless Gem::Version.correct?(BaseCradle::VERSION); puts "basecradle #{BaseCradle::VERSION} installs and loads cleanly"'
+      - name: Upload the built gem
+        uses: actions/upload-artifact@v4
+        with:
+          name: gem
+          path: "*.gem"
+          if-no-files-found: error
 
   # The real publish. The rubygems environment requires the project owner's approval
-  # (Drawk) — the one correct manual gate in this repo. rubygems/release-gem builds
-  # and pushes via OIDC; no API key is ever stored.
+  # (Drawk) — the one correct manual gate in this repo. Credentials come from OIDC
+  # trusted publishing; no API key is ever stored.
   publish:
     name: publish to RubyGems
     runs-on: ubuntu-latest
@@ -45,14 +56,16 @@ jobs:
       name: rubygems
       url: https://rubygems.org/gems/basecradle
     permissions:
-      contents: write
+      contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.4"
-          bundler-cache: true
-      - uses: rubygems/release-gem@v1
+      - uses: rubygems/configure-rubygems-credentials@v2.0.0
+      - name: Download the rehearsed gem
+        uses: actions/download-artifact@v4
+        with:
+          name: gem
+      - name: Push the gem
+        run: gem push ./basecradle-*.gem
