@@ -102,7 +102,16 @@ Only the gem owner can do this; it is a `⏸️ WAITING ON YOU` human gate. Thes
    ⚠️ The form pre-suggests `release` for Environment — **overwrite it with `rubygems`**. Ecosystem convention: the publish environment is named for the destination registry (Python uses `pypi`; Ruby uses `rubygems`), and it must equal the `environment:` key in the release workflow's publish job.
 4. Submit. The first successful `0.0.1` publish converts this pending publisher into a normal one for the gem.
 
-The matching **GitHub side** — a `rubygems` environment whose protection rule requires Drawk's approval — is configured when the release pipeline is built (it needs Drawk's GitHub username for the required-reviewer field). That approval gate is the one correct manual gate in this repo.
+The matching **GitHub side** — a `rubygems` environment whose protection rule requires Drawk's approval — is configured (required reviewer: `drawkkwast`). That approval gate is the one correct manual gate in this repo.
+
+### Releasing a version (procedure + hard rules)
+
+The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04). On a `v*` tag it runs **rehearsal** (build the gem; verify a clean `gem install` + `require` on the 3.2 floor; upload the artifact) → **publish** (gated by the `rubygems` environment, then `gem push` the *rehearsed artifact* after `rubygems/configure-rubygems-credentials` sets up OIDC creds).
+
+- **Publish the rehearsed artifact; do not use `rake release`.** `rubygems/release-gem` runs `bundle exec rake release`, which also creates/pushes the SCM tag — colliding with the tag that triggered the run. Pushing the gem only (`configure-rubygems-credentials` + `gem push`) avoids that and mirrors the Python artifact-publish flow.
+- **Release PRs never carry `Closes #N`.** A merged release PR auto-closes the issue *before* the publish is verified, and an issue that closed before its work was proven live is a lie. (This bit #4 once — do not repeat it.)
+- **Close the release issue manually, only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` is the real test — the RubyGems JSON API caches and lags. Record version + URL in the closing comment.
+- **Re-triggering after a fixed workflow bug:** fix on a PR, merge, then move the tag to the fixed commit — `git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z && git tag vX.Y.Z && git push origin vX.Y.Z`. A pending (or permanent) trusted publisher is **not** consumed by a failed run — it survives until a successful push.
 
 ## First Milestone — Reserve the Name Professionally
 
