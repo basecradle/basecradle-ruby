@@ -57,18 +57,18 @@ Key API facts:
 - **Pagination**: cursor-based (`next_cursor` → `?before=`), newest-first, 50/page.
 - **Responses**: enveloped under their resource name (`{"timeline": {...}}`, `{"sessions": [...]}`).
 
-## Stack (proposed omakase — confirm with Drawk before locking)
+## Stack (omakase — decided once, not relitigated)
 
-Decided once, not relitigated — but because Drawk is the Ruby expert and this repo is sovereign, the two starred rows below want his explicit blessing before the first PR locks them in.
+Locked 2026-06-04 with Drawk (the Ruby expert, sovereign over this repo). The two formerly-starred rows — test framework and HTTP client — are now decided; both resolved toward the constitution's defaults over the Python-mirroring proposal.
 
-| Concern | Proposed choice | Notes |
+| Concern | Choice | Notes |
 |---|---|---|
-| Ruby | **3.2+** | Modern floor; no legacy baggage. CI matrix across supported minors. |
+| Ruby | **3.2+** | Modern floor; no legacy baggage. CI matrix across supported minors (currently 3.2 · 3.3 · 3.4). |
 | Toolchain | **Bundler + Rake** | Standard gem workflow. |
-| Lint + format | **RuboCop** | Reuse the style from the core Rails app's `.rubocop.yml` where sensible. |
-| Tests ★ | **RSpec + WebMock** | RSpec mirrors the ergonomic choice pytest was on the Python side; WebMock is the respx analogue (stubs HTTP, never hits the network). Minitest is the leaner stdlib alternative — Drawk's call. |
-| HTTP ★ | **Faraday** *or* **Net::HTTP** | Python's ethos: minimal deps (httpx was the *only* runtime dep). Net::HTTP = zero deps, more boilerplate; Faraday = one dep, idiomatic and pluggable. Drawk's call. |
-| Packaging | **gemspec + Bundler** | `bundle gem` skeleton. No legacy. |
+| Lint + format | **RuboCop (`rubocop-rails-omakase`)** | The constitution's mandated Ruby style. Inherits omakase's `rubocop.yml`; `TargetRubyVersion: 3.2`. |
+| Tests | **Minitest + WebMock** | Minitest is the DHH/Rails-omakase default the constitution mandates (ships in stdlib — zero added dependency); the "Python used pytest" argument doesn't transfer, since the port matches *behavior and surface, not tooling*. WebMock stubs HTTP at the Net::HTTP layer — tests never hit the network. |
+| HTTP | **Net::HTTP** | Zero runtime dependencies — the truest read of "an SDK depends on almost nothing." Ruby's stdlib client is capable (keep-alive + `set_form` multipart), so unlike Python (whose urllib is awful, justifying httpx) we give up nothing. The SDK funnels every call through one transport method, so the boilerplate is contained. |
+| Packaging | **gemspec + Bundler** | Hand-built skeleton (cleaner than `bundle gem`'s opinionated output). `Gemfile.lock` is **gitignored** (gem convention): the CI matrix resolves dev deps per Ruby version, so no single committed lock can serve all supported minors (e.g. `parallel` 2.x drops 3.2). |
 | Types | **RBS signatures** (may defer past 0.1) | The `py.typed` analogue — "types are documentation, not theater." Sorbet is the heavier alternative; not required for v0. |
 
 Runtime dependencies: keep the list at zero or one, and argue every addition in a PR against the constitution's "every dependency is debt" principle.

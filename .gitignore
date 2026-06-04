@@ -43,9 +43,10 @@ build-iPhoneSimulator/
 /vendor/bundle
 /lib/bundler/man/
 
-# for a library or gem, you might want to ignore these files since the code is
-# intended to run in multiple environments; otherwise, check them in:
-# Gemfile.lock
+# A gem tested across a Ruby matrix does NOT commit its lock: dev-dependency
+# resolution differs per Ruby version (e.g. parallel 2.x drops 3.2), so a single
+# committed lock can't serve every supported minor. Each CI job resolves its own.
+Gemfile.lock
 # .ruby-version
 # .ruby-gemset
 
