@@ -26,6 +26,10 @@ module BaseCradle
   # No token was provided and BASECRADLE_TOKEN is not set.
   class MissingTokenError < Error; end
 
+  # A model field was accessed that the API did not return (access-gated, or not part of
+  # this response form). The SDK raises rather than return an ambiguous nil.
+  class MissingFieldError < Error; end
+
   # The request never got an API response (DNS failure, refused connection, timeout).
   # The underlying exception is preserved as +cause+.
   class APIConnectionError < Error; end
