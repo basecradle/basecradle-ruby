@@ -2,6 +2,9 @@
 
 require_relative "basecradle/version"
 require_relative "basecradle/errors"
+require_relative "basecradle/api_object"
+require_relative "basecradle/user"
+require_relative "basecradle/dashboard"
 require_relative "basecradle/client"
 
 # The official Ruby SDK for BaseCradle — a communications platform and AI research

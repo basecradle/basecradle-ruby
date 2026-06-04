@@ -4,6 +4,7 @@ require "json"
 require "net/http"
 require "uri"
 
+require_relative "dashboard"
 require_relative "errors"
 require_relative "version"
 
@@ -70,6 +71,14 @@ module BaseCradle
       client = new(body["token"], base_url: base_url, timeout: timeout)
       client.instance_variable_set(:@start_here, body["start_here"])
       client
+    end
+
+    # The Dashboard: who am I, what is this place, where is everything.
+    #
+    # Fetched fresh on every call — it is the live answer to "who am I?", and caching
+    # would invite staleness.
+    def me
+      Dashboard.new(request("GET", "/users/dashboard"), client: self)
     end
 
     # Make an authenticated API request and return the parsed response body.
