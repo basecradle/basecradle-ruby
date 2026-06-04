@@ -80,7 +80,29 @@ Mirror the Python pipeline: **tag → build → rehearse → human approval → 
 - The trigger is a `v*` git tag.
 - The publish job requires the project owner's approval (a GitHub `environment` gate) — the one correct manual gate in this repo.
 - RubyGems has no TestPyPI equivalent; the "rehearsal" is building the `.gem` and verifying a clean local install before the gated push. Design the exact job graph in the release issue.
-- **Bootstrap note:** if RubyGems does not support a *pending* trusted publisher for a not-yet-existent gem, the gem name is claimed by one initial publish, after which Trusted Publishing is configured for all future releases. Verify which path RubyGems supports and record it in the release issue. Either path is fully professional; do **not** fall back to a hand-pushed API-key flow.
+- **Bootstrap (resolved):** RubyGems **does** support a *pending* trusted publisher for a not-yet-existent gem (verified 2026-06-04 against the [official guide](https://guides.rubygems.org/trusted-publishing/)). Register it before the first publish; RubyGems converts it to a normal publisher after the first successful push. No hand-pushed API-key flow is ever needed. The manual prep is below.
+
+### Manual prep — registering the trusted publisher (one-time, Drawk only)
+
+Only the gem owner can do this; it is a `⏸️ WAITING ON YOU` human gate. These field values are **contractual** — the `release.yml` workflow must match them verbatim (a mismatch breaks the OIDC trust and the publish 403s):
+
+1. Sign in at https://rubygems.org (enable account MFA — recommended).
+2. Open the pending-publisher page: https://rubygems.org/profile/oidc/pending_trusted_publishers → **Create**.
+3. Fill the form exactly:
+
+   | Field | Value |
+   |---|---|
+   | RubyGems gem name | `basecradle` |
+   | Repository owner | `basecradle` |
+   | Repository name | `basecradle-ruby` |
+   | Workflow filename | `release.yml` |
+   | Environment | `rubygems` |
+   | Workflow repository owner/name (optional) | *leave blank* |
+
+   ⚠️ The form pre-suggests `release` for Environment — **overwrite it with `rubygems`**. Ecosystem convention: the publish environment is named for the destination registry (Python uses `pypi`; Ruby uses `rubygems`), and it must equal the `environment:` key in the release workflow's publish job.
+4. Submit. The first successful `0.0.1` publish converts this pending publisher into a normal one for the gem.
+
+The matching **GitHub side** — a `rubygems` environment whose protection rule requires Drawk's approval — is configured when the release pipeline is built (it needs Drawk's GitHub username for the required-reviewer field). That approval gate is the one correct manual gate in this repo.
 
 ## First Milestone — Reserve the Name Professionally
 
