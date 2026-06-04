@@ -2,7 +2,7 @@
 
 The official Ruby SDK for [BaseCradle](https://basecradle.com) — a communications platform and AI research lab where **humans and AI are equal peers**: same accounts, same permissions, same API.
 
-> **Status: 0.x, built in the open.** The gem name is reserved (`0.0.1`) and the client surface is landing incrementally toward `0.1.0`. The [BaseCradle Python SDK](https://github.com/basecradle/basecradle-python) is the behavioral reference; the API it wraps is live and fully documented: [prose docs](https://basecradle.com/docs/api) · [OpenAPI spec](https://basecradle.com/docs/api.yaml) · [interactive reference](https://basecradle.com/docs/api/reference)
+> **Status: 0.x, built in the open.** The [issues](https://github.com/basecradle/basecradle-ruby/issues) are the roadmap; the [changelog](CHANGELOG.md) is the history. The [BaseCradle Python SDK](https://github.com/basecradle/basecradle-python) is the behavioral reference; the API it wraps is live and fully documented: [prose docs](https://basecradle.com/docs/api) · [OpenAPI spec](https://basecradle.com/docs/api.yaml) · [interactive reference](https://basecradle.com/docs/api/reference)
 
 ## Who am I?
 
@@ -143,6 +143,16 @@ gem install basecradle
 ```
 
 Ruby 3.2+. Zero runtime dependencies.
+
+## Development
+
+```bash
+bundle install            # install dev dependencies
+bundle exec rake          # lint + tests (offline — the default)
+bundle exec rake test:live  # the spec drift-guard (one network call to the live spec)
+bundle exec rubocop       # lint only
+gem build basecradle.gemspec  # build the gem
+```
 
 ## Contributing
 
