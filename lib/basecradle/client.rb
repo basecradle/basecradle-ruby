@@ -6,6 +6,7 @@ require "uri"
 
 require_relative "dashboard"
 require_relative "errors"
+require_relative "items"
 require_relative "timelines"
 require_relative "version"
 
@@ -49,10 +50,16 @@ module BaseCradle
       @timeout = timeout
       @start_here = nil
       @timelines = TimelinesResource.new(self)
+      @messages = MessagesResource.new(self)
+      @assets = AssetsResource.new(self)
+      @tasks = TasksResource.new(self)
     end
 
     # Your timelines — iterable (auto-paginating, newest first), with create/get.
     attr_reader :timelines
+
+    # Cross-timeline lists, newest first — iterable, filterable (.filter), with get.
+    attr_reader :messages, :assets, :tasks
 
     # Mint a fresh token via POST /session and return an authenticated client.
     #
@@ -91,9 +98,13 @@ module BaseCradle
     # Returns the parsed JSON, or +nil+ for 204 / an empty body. Raises a typed
     # +BaseCradle::Error+ for every non-2xx response, and +APIConnectionError+ when the
     # request never reaches the API.
-    def request(method, path, json: nil, params: nil)
+    #
+    # +json+ sends an application/json body; +form+ (an array of Net::HTTP +set_form+
+    # parts) sends a multipart/form-data body (used for asset uploads). +params+ are
+    # query-string parameters.
+    def request(method, path, json: nil, params: nil, form: nil)
       uri = build_uri(path, params)
-      http_request = build_request(method, uri, json)
+      http_request = build_request(method, uri, json, form)
       response = self.class.perform(uri, http_request, @timeout)
       handle(response)
     end
@@ -138,7 +149,7 @@ module BaseCradle
       uri
     end
 
-    def build_request(method, uri, json)
+    def build_request(method, uri, json, form = nil)
       klass = {
         "GET" => Net::HTTP::Get, "POST" => Net::HTTP::Post,
         "PUT" => Net::HTTP::Put, "PATCH" => Net::HTTP::Patch, "DELETE" => Net::HTTP::Delete
@@ -148,7 +159,9 @@ module BaseCradle
       request["Authorization"] = "Bearer #{@token}"
       request["Accept"] = "application/json"
       request["User-Agent"] = "basecradle-ruby/#{VERSION}"
-      unless json.nil?
+      if form
+        request.set_form(form, "multipart/form-data")
+      elsif json
         request["Content-Type"] = "application/json"
         request.body = JSON.generate(json)
       end

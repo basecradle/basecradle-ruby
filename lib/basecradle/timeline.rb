@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "api_object"
+require_relative "items"
 require_relative "user"
 
 module BaseCradle
@@ -58,6 +59,21 @@ module BaseCradle
         to_h["participants"] = to_h["participants"].reject { |p| p["uuid"] == removed_uuid }
       end
       self
+    end
+
+    # This timeline's messages: .create(body:) or iterate (newest first).
+    def messages
+      TimelineMessages.new(require_client, uuid)
+    end
+
+    # This timeline's assets: .create(file:, description:) (multipart) or iterate.
+    def assets
+      TimelineAssets.new(require_client, uuid)
+    end
+
+    # This timeline's tasks: .create(instructions:, activate_at:) or iterate.
+    def tasks
+      TimelineTasks.new(require_client, uuid)
     end
   end
 end

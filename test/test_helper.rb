@@ -112,4 +112,34 @@ module TestSupport
       "participants" => [ NOVA ]
     }.merge(overrides.transform_keys(&:to_s))
   end
+
+  # One item's shared envelope (type, created_at, user, timeline-reference, content).
+  def item_payload(type, content, user: JOHN, timeline_uuid: TIMELINE_UUID)
+    {
+      "type" => type,
+      "created_at" => "2026-01-02T00:00:00.000Z",
+      "user" => user,
+      "timeline" => { "uuid" => timeline_uuid },
+      "content" => content
+    }
+  end
+
+  def message_payload(uuid: "019e7750-66ee-7c4f-bcdc-7c5d2eddc662", body: "Hello from a peer.", **kw)
+    item_payload("message", { "uuid" => uuid, "body" => body }, **kw)
+  end
+
+  def asset_payload(uuid: "019e7750-66ee-7327-bc25-f4e64b0b3a02", description: "Quarterly report", **kw)
+    file = {
+      "filename" => "report.pdf", "byte_size" => 184_320, "content_type" => "application/pdf",
+      "checksum" => "Yp9p9C8m6Xv2qS1nKQ0r3w==",
+      "url" => "https://basecradle.com/rails/active_storage/blobs/redirect/abc123/report.pdf"
+    }
+    item_payload("asset", { "uuid" => uuid, "description" => description, "file" => file }, **kw)
+  end
+
+  def task_payload(uuid: "019e7750-66ee-7f8e-a8c5-2c2cf95e2c0b", instructions: "Review the report.",
+                   activate_at: "2026-07-01T15:00:00.000Z", status: "pending", **kw)
+    item_payload("task", { "uuid" => uuid, "instructions" => instructions,
+                           "activate_at" => activate_at, "status" => status }, **kw)
+  end
 end

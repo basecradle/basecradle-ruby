@@ -96,4 +96,10 @@ module BaseCradle
             "form. Fields present: #{@data.keys.sort.inspect}"
     end
   end
+
+  # A record in reference form — just a uuid to dereference (e.g. an item's +timeline+,
+  # or a webhook event's +webhook_endpoint+). Fetch the full record when you need it.
+  class Reference < ApiObject
+    attribute :uuid
+  end
 end
