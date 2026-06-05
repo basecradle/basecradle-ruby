@@ -113,11 +113,11 @@ The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` ship
 - **Close the release issue manually, only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` is the real test — the RubyGems JSON API caches and lags. Record version + URL in the closing comment.
 - **Re-triggering after a fixed workflow bug:** fix on a PR, merge, then move the tag to the fixed commit — `git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z && git tag vX.Y.Z && git push origin vX.Y.Z`. A pending (or permanent) trusted publisher is **not** consumed by a failed run.
 
-## First Milestone — Reserve the Name Professionally
+## First Milestone — Reserve the Name Professionally (shipped)
 
-Before porting any resources, ship a real, metadata-complete **`0.0.1`** placeholder gem to RubyGems through the Trusted Publishing pipeline. This does two things at once: it claims the `basecradle` gem name (a legitimate early release under our own brand — not squatting), and it proves the entire release machine end-to-end before any real code exists. The placeholder is a valid gem with correct gemspec metadata, MIT license, and a README that states it is an early release of the official SDK.
+✅ **Done.** The metadata-complete **`0.0.1`** placeholder gem shipped to RubyGems through the Trusted Publishing pipeline, claiming the `basecradle` gem name and proving the release machine end-to-end before any real code existed. The SDK has since shipped real resources through **0.1.1** (live at https://rubygems.org/gems/basecradle).
 
-⏸️ This milestone ends at a **human gate**: only Drawk can approve the publish environment and confirm the gem is live at https://rubygems.org/gems/basecradle. Announce the wait unmissably (see the human-action-gate convention below).
+This is kept as the record of how the name was reserved and the release pipeline first proven. The pattern it established — every publish ends at a **human gate** where only Drawk can approve the publish environment and confirm the gem is live — still governs every release (see "Releasing a version" above). Announce that wait unmissably (see the human-action-gate convention below).
 
 ## Conventions
 
@@ -185,12 +185,11 @@ Every BaseCradle ecosystem repo carries this same "Cross-Repo Handoffs" section 
 
 ## Where to Start
 
-This repo has no issue roadmap yet — creating it is the first planning task. In order:
+The SDK is built and released — shipped through **0.1.1** on RubyGems. The stack is locked (see the Stack table), the release pipeline is proven, and the build proceeds as a roadmap of **GitHub Issues**, worked lowest-number-first. Onboarding for new work:
 
-1. Read the constitution, then the Python SDK (`../python`): its `README.md`, `CLAUDE.md`, `src/`, and `tests/`.
-2. Confirm the two starred stack decisions (test framework, HTTP client) with Drawk.
-3. Plan the build as a dependency-ordered set of **GitHub Issues**, each one PR-sized, mirroring how `basecradle-python` was mapped (`gh issue list --repo basecradle/basecradle-python --state all` is a model). The **First Milestone** (placeholder gem via Trusted Publishing) is issue #1.
-4. Work the issues lowest-number-first, plan-first for anything non-trivial, branch → PR → green CI → merge.
+1. Read the constitution, then the Python SDK (`../python`): its `README.md`, `CLAUDE.md`, `src/`, and `tests/` — still the behavioral reference for anything being ported.
+2. Read this repo's own `README.md`, `CLAUDE.md`, `lib/`, and `test/` to see what already ships.
+3. Pick up the lowest-numbered open issue, plan-first for anything non-trivial, branch → PR → green CI → merge.
 
 ```bash
 gh issue list --repo basecradle/basecradle-ruby --state open
@@ -198,12 +197,12 @@ gh issue list --repo basecradle/basecradle-ruby --state open
 
 ## Development Commands
 
-To be established with the gem skeleton (first PR). Target shape:
+Minitest + WebMock, driven by Rake (mirrors the README's Development section):
 
 ```bash
-bundle install           # install deps
-bundle exec rspec        # tests (offline — the default)
-bundle exec rspec --tag live   # the spec drift-guard (one network call to the live spec)
-bundle exec rubocop      # lint + format
-gem build *.gemspec      # build the gem
+bundle install               # install dev dependencies
+bundle exec rake             # lint + tests (offline — the default)
+bundle exec rake test:live   # the spec drift-guard (one network call to the live spec)
+bundle exec rubocop          # lint only
+gem build basecradle.gemspec # build the gem
 ```
