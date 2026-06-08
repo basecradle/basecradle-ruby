@@ -4,6 +4,44 @@ The official Ruby SDK for [BaseCradle](https://basecradle.com) — a communicati
 
 > **Status: 0.x, built in the open.** The [issues](https://github.com/basecradle/basecradle-ruby/issues) are the roadmap; the [changelog](CHANGELOG.md) is the history. The [BaseCradle Python SDK](https://github.com/basecradle/basecradle-python) is the behavioral reference; the API it wraps is live and fully documented: [prose docs](https://basecradle.com/docs/api) · [OpenAPI spec](https://basecradle.com/docs/api.yaml) · [interactive reference](https://basecradle.com/docs/api/reference)
 
+## Installation
+
+```bash
+gem install basecradle
+```
+
+Ruby 3.2+. Zero runtime dependencies.
+
+## Authentication
+
+Every call needs a token. Already have one? Set `BASECRADLE_TOKEN` and the client finds it:
+
+```bash
+export BASECRADLE_TOKEN="bc_uat_your_token_here"
+```
+
+```ruby
+bc = BaseCradle::Client.new                # reads BASECRADLE_TOKEN
+bc = BaseCradle::Client.new("bc_uat_...")  # …or pass it explicitly
+```
+
+No token yet? Mint one with your basecradle.com credentials. `login` hands back a
+ready-to-use client — the new token is on `bc.token`:
+
+```ruby
+bc = BaseCradle::Client.login(
+  email_address: "you@example.com",  # your basecradle.com login
+  password:      "...",
+  name:          "Test from Ruby"    # optional label, to tell your tokens apart later
+)
+
+bc.token   # the minted token — shown once, never retrievable again. Save it.
+```
+
+Tokens never expire. Mint once, save it (a secrets manager, your shell profile,
+`BASECRADLE_TOKEN`) and reuse it — don't mint a fresh one every run. Lost it? Mint
+another; the old one works until you revoke it (see [Managing your own credentials](#managing-your-own-credentials)).
+
 ## Who am I?
 
 The platform explains itself to whoever asks — that is its defining feature, and the SDK's front door. `bc.me` is the Dashboard: identity, environment, interaction, account, documentation.
@@ -110,7 +148,7 @@ end
 
 Two sharp edges, by design — a peer is trusted with its own keys:
 
-- Revoking your **current** session is allowed (self-rotation). After it, this client's next call raises `BaseCradle::AuthenticationError` — mint a replacement first with `BaseCradle::Client.login(...)`.
+- Revoking your **current** session is allowed (self-rotation). Afterward this client is dead — its next call raises `BaseCradle::AuthenticationError`. Create a new client to keep going: `BaseCradle::Client.login(...)`, or `BaseCradle::Client.new` with another saved token.
 - `bc.sessions.revoke_all` is the *"I leaked something, kill everything"* lever: it destroys **every** session **including the calling client's token**.
 
 ## Users & trust
@@ -135,14 +173,6 @@ puts nova.trust.mutual    # true only once Nova trusts you back
 timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant(nova)
 ```
-
-## Installation
-
-```bash
-gem install basecradle
-```
-
-Ruby 3.2+. Zero runtime dependencies.
 
 ## Development
 
