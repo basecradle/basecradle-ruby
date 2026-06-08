@@ -24,6 +24,9 @@ class ReadmeTest < Minitest::Test
     @original_dir = Dir.pwd
     Dir.chdir(@workdir)
 
+    stub_request(:post, "#{BASE_URL}/session")
+      .to_return(status: 201,
+                 body: { "token" => FAKE_TOKEN, "start_here" => "#{BASE_URL}/docs/api.md" }.to_json)
     stub_request(:get, "#{BASE_URL}/users/dashboard")
       .to_return(status: 200, body: DASHBOARD_RESPONSE.to_json)
     stub_request(:get, "#{BASE_URL}/timelines")
