@@ -35,6 +35,13 @@ class DashboardTest < Minitest::Test
     assert_equal "https://rubygems.org/gems/basecradle", me.documentation.sdks.ruby.package
   end
 
+  def test_identity_carries_roles_on_the_self_view
+    identity = @bc.me.identity
+
+    assert_equal [], identity.roles # your own subject always carries the trusted-peer cluster
+    refute identity.admin?
+  end
+
   def test_me_is_fetched_fresh_on_every_access
     @bc.me
     @bc.me

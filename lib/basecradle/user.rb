@@ -33,6 +33,11 @@ module BaseCradle
     attribute :max_participants
     attribute :about
     attribute :time_zone
+    # Operator-assigned authority (e.g. +["admin"]+, or +[]+ for none); never self-set. The
+    # value set is open — treat it as an arbitrary list of strings, not a fixed enum. Like the
+    # rest of this cluster it is access-gated: absent for an untrusted viewer and from the
+    # directory, where reading it raises +MissingFieldError+ rather than guessing +[]+.
+    attribute :roles
 
     # Self/admin cluster — your own profile (bc.me.identity) or an admin's view only.
     attribute :integration_url
@@ -42,6 +47,14 @@ module BaseCradle
     attribute :created_at
     attribute :updated_at
     attribute :creator
+
+    # Are they a platform admin? Derived locally from +roles+ — there is no +admin+ field on
+    # the wire. Inherits +roles+' access gate: if the platform withheld +roles+ (an untrusted
+    # view, the directory), this raises +MissingFieldError+ rather than guessing +false+ — the
+    # SDK can't honestly say someone is *not* an admin when it wasn't shown their roles.
+    def admin?
+      roles.include?("admin")
+    end
 
     # Add your outgoing trust edge to this user. Idempotent. Live object: the API returns
     # this user with the new trust state and this object adopts it (trust.you_trust becomes

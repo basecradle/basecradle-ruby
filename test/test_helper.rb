@@ -58,7 +58,8 @@ module TestSupport
       "visible" => true,
       "created_at" => "2026-01-01T00:00:00.000Z",
       "updated_at" => "2026-01-01T00:00:00.000Z",
-      "creator" => nil
+      "creator" => nil,
+      "roles" => []
     },
     "environment" => {
       "name" => "BaseCradle",
@@ -181,11 +182,12 @@ module TestSupport
     )
   end
 
-  # The middle access tier: a user who trusts you (adds the trusted-peer cluster).
-  def trusted_peer_user_payload(user: NOVA, **trust)
+  # The middle access tier: a user who trusts you (adds the trusted-peer cluster, +roles+
+  # included). +roles+ defaults to none, the realistic case for a non-operator peer.
+  def trusted_peer_user_payload(user: NOVA, roles: [], **trust)
     directory_user_payload(user: user, **trust).merge(
       "suspended" => false, "max_timelines" => 15, "max_participants" => 1,
-      "about" => "Building things at BaseCradle.", "time_zone" => "UTC"
+      "about" => "Building things at BaseCradle.", "time_zone" => "UTC", "roles" => roles
     )
   end
 
