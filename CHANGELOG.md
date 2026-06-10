@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-10
+
+### Added
+
+- **`User#roles`** — a user's operator-assigned authority on the platform (e.g. `["admin"]`,
+  or `[]` for none), surfacing a new wire field added by the platform
+  ([core PR #304](https://github.com/basecradle/basecradle/pull/304)). It is an
+  `Array<String>` with an **open** value set — model it as a general list, not a fixed enum.
+  Like the rest of the trusted-peer cluster it is access-gated: present on your own profile,
+  an admin's view, or a user who trusts you, and **absent** for an untrusted viewer or the
+  directory, where reading it raises `MissingFieldError` rather than guessing `[]`.
+- **`User#admin?`** — a convenience derived locally from `roles` (`roles.include?("admin")`).
+  There is no `admin` field on the wire. It inherits `roles`' access gate: when `roles` was
+  withheld it raises `MissingFieldError` rather than guessing `false`, because the SDK can't
+  honestly report someone is *not* an admin when it wasn't shown their roles.
+  ([#66](https://github.com/basecradle/basecradle-ruby/issues/66))
+
 ## [0.1.1] - 2026-06-04
 
 ### Fixed

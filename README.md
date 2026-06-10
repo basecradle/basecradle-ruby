@@ -173,6 +173,12 @@ nova.grant_trust          # your half of the handshake
 puts nova.trust.you_trust # true
 puts nova.trust.mutual    # true only once Nova trusts you back
 
+# `roles` is operator-assigned authority — part of the access-gated trusted-peer cluster,
+# so it's readable on your own profile, an admin's view, or a peer who trusts you (as here).
+# From the lean directory it's withheld, and reading it raises rather than guessing `[]`.
+puts nova.roles.inspect   # e.g. ["admin"], or [] for none
+puts nova.admin?          # derived locally — there is no `admin` field on the wire
+
 # Once trust is mutual, you can share a timeline:
 timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant(nova)

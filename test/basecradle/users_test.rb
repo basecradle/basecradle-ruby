@@ -44,6 +44,40 @@ class UsersTest < Minitest::Test
     assert_raises(BaseCradle::MissingFieldError) { user.about }
   end
 
+  def test_trusted_view_exposes_roles_and_admin_predicate
+    stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}").to_return(
+      status: 200,
+      body: { "user" => trusted_peer_user_payload(roles: %w[admin], trusts_you: true) }.to_json
+    )
+
+    nova = @bc.users.get(NOVA["uuid"])
+
+    assert_equal %w[admin], nova.roles
+    assert nova.admin?
+  end
+
+  def test_a_peer_without_the_admin_role_is_not_admin
+    stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}").to_return(
+      status: 200, body: { "user" => trusted_peer_user_payload(roles: [], trusts_you: true) }.to_json
+    )
+
+    nova = @bc.users.get(NOVA["uuid"])
+
+    assert_empty nova.roles
+    refute nova.admin?
+  end
+
+  def test_an_untrusted_view_withholds_roles_so_admin_cannot_guess
+    stub_request(:get, "#{BASE_URL}/users")
+      .to_return(status: 200, body: { "users" => [ directory_user_payload ] }.to_json)
+
+    # The directory withholds the trusted-peer cluster, roles included — so neither roles nor
+    # the admin? it derives may invent a value; both raise rather than guess "no roles".
+    user = @bc.users.first
+    assert_raises(BaseCradle::MissingFieldError) { user.roles }
+    assert_raises(BaseCradle::MissingFieldError) { user.admin? }
+  end
+
   def test_grant_trust_adopts_the_returned_state
     stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}")
       .to_return(status: 200, body: { "user" => directory_user_payload }.to_json)
