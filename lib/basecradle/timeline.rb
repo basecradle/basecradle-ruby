@@ -39,6 +39,20 @@ module BaseCradle
       self
     end
 
+    # Permanently delete this timeline and everything on it — messages, assets, tasks,
+    # webhook endpoints and their events, participations. Owner-only (an admin may delete
+    # any timeline); a mere participant gets NotTimelineOwnerError (a ForbiddenError,
+    # code +not_timeline_owner+).
+    #
+    # A locked timeline is still deletable: locking freezes content, not governance.
+    # Returns nil — the timeline is gone, so there is nothing left to return. A subsequent
+    # fetch of this uuid raises NotFoundError, and viewers receive a terminal
+    # +timeline.deleted+ firehose event whose resource pointer now 404s.
+    def delete
+      require_client.request("DELETE", "/timelines/#{uuid}")
+      nil
+    end
+
     # Add a peer to this timeline (owner or admin only; mutual trust required). Accepts a
     # User or a uuid. Idempotent. Returns the added user (also appended to +participants+).
     def add_participant(user)

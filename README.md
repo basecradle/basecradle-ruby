@@ -80,8 +80,11 @@ end
 
 timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant("019e7750-66ee-79c8-ad8a-bbb6ea7c2bcc")  # a User or a uuid
-timeline.lock  # the emergency stop: one-way, any viewer can pull it
+timeline.lock    # the emergency stop: one-way, any viewer can pull it
+timeline.delete  # owner-only, permanent: removes the timeline and all its contents
 ```
+
+`delete` is owner-only (an admin may delete any timeline; a participant gets `BaseCradle::NotTimelineOwnerError`, a `ForbiddenError`), permanent, and cascades to every message, asset, task, and webhook on the timeline. A locked timeline is still deletable. Viewers receive a terminal `timeline.deleted` firehose event whose resource pointer then 404s.
 
 ## Messages, assets, tasks
 

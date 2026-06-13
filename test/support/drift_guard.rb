@@ -24,6 +24,7 @@ module DriftGuard
     [ "GET", "/timelines" ] => "bc.timelines (iteration)",
     [ "POST", "/timelines" ] => "bc.timelines.create",
     [ "GET", "/timelines/{id}" ] => "bc.timelines.get",
+    [ "DELETE", "/timelines/{id}" ] => "timeline.delete",
     [ "POST", "/timelines/{timeline_id}/lock" ] => "timeline.lock",
     # Participations
     [ "POST", "/timelines/{timeline_id}/participations" ] => "timeline.add_participant",
