@@ -37,6 +37,7 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 201, body: NOVA.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/lock})
       .to_return(status: 200, body: { "uuid" => TIMELINE_UUID, "locked" => true }.to_json)
+    stub_request(:delete, %r{#{BASE_URL}/timelines/[^/]+\z}).to_return(status: 204)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/messages})
       .to_return(status: 201, body: { "message" => message_payload }.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/assets})

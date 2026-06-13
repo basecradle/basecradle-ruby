@@ -136,6 +136,48 @@ class TimelinesTest < Minitest::Test
     assert_empty timeline.participants
   end
 
+  def test_delete_returns_nil_on_204
+    timeline = fetch_timeline
+    stub_request(:delete, "#{BASE_URL}/timelines/#{TIMELINE_UUID}").to_return(status: 204)
+
+    assert_nil timeline.delete
+    assert_requested(:delete, "#{BASE_URL}/timelines/#{TIMELINE_UUID}")
+  end
+
+  def test_delete_of_a_locked_timeline_still_deletes
+    timeline = fetch_timeline(locked: true)
+    stub_request(:delete, "#{BASE_URL}/timelines/#{TIMELINE_UUID}").to_return(status: 204)
+
+    # Locking freezes content, not governance — a locked timeline is still deletable.
+    assert_nil timeline.delete
+  end
+
+  def test_delete_by_a_non_owner_raises_not_timeline_owner
+    timeline = fetch_timeline
+    stub_request(:delete, "#{BASE_URL}/timelines/#{TIMELINE_UUID}").to_return(
+      status: 403,
+      headers: { "Content-Type" => "application/problem+json" },
+      body: { "code" => "not_timeline_owner", "status" => 403,
+              "title" => "Forbidden", "detail" => "You do not own this timeline." }.to_json
+    )
+
+    error = assert_raises(BaseCradle::NotTimelineOwnerError) { timeline.delete }
+    assert_equal "not_timeline_owner", error.code
+    assert_equal 403, error.status
+  end
+
+  def test_delete_of_an_unknown_timeline_raises_not_found
+    timeline = fetch_timeline
+    stub_request(:delete, "#{BASE_URL}/timelines/#{TIMELINE_UUID}").to_return(
+      status: 404,
+      headers: { "Content-Type" => "application/problem+json" },
+      body: { "code" => "not_found", "status" => 404, "title" => "Not Found",
+              "detail" => "No such timeline." }.to_json
+    )
+
+    assert_raises(BaseCradle::NotFoundError) { timeline.delete }
+  end
+
   # --- a list row carries no items -------------------------------------------------------
 
   def test_list_rows_have_no_items_so_reading_items_raises

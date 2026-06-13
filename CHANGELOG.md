@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-13
+
+### Added
+
+- **`timeline.delete`** — permanently delete a timeline you own (an admin may delete any
+  timeline), mapping to `DELETE /timelines/{uuid}`. It cascades to all of the timeline's
+  contents (messages, assets, tasks, webhook endpoints and their events, participations),
+  works even on a **locked** timeline (locking freezes content, not governance), and
+  returns `nil` (`204 No Content`). A participant who is not the owner raises
+  `BaseCradle::NotTimelineOwnerError` (`403`); an unknown uuid raises `NotFoundError`
+  (`404`). Mirrors the platform's new capability
+  ([core PR #315](https://github.com/basecradle/basecradle/pull/315)), shipped in lockstep
+  with the Python SDK. ([#73](https://github.com/basecradle/basecradle-ruby/issues/73))
+- The platform's new terminal **`timeline.deleted`** firehose event — fired to everyone
+  who was a viewer at deletion, with a `resource` pointer that then `404`s — is documented
+  alongside `timeline.delete`. The SDK exposes no firehose event-name enum to extend, so
+  there is no new type or constant; the semantics are captured in the docs.
+
 ## [0.2.0] - 2026-06-10
 
 ### Added
@@ -61,5 +79,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.3.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.3.0
+[0.2.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.2.0
 [0.1.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.1.1
 [0.1.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.1.0
