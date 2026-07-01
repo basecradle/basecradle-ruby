@@ -122,7 +122,7 @@ This is kept as the record of how the name was reserved and the release pipeline
 
 ## Conventions
 
-- **Workflow**: branch → PR → CI green → squash-merge → delete the merged branch. Nobody pushes to `main`, human or AI. One concern per PR. PRs reference issues with `Closes #N`. Keep the open-branch list equal to the work in flight.
+- **Workflow**: branch → PR → CI green → squash-merge → delete the merged branch (remote: `git push origin --delete <branch>`; local: `git branch -D <branch>` — `-D` because squash-merges aren't detected as merged). Nobody pushes to `main`, human or AI. One concern per PR. PRs reference issues with `Closes #N`. Keep the open-branch list equal to the work in flight.
 - **`.filter(...)` idiom** for every filterable list (messages, assets, tasks, webhooks): returns a new lazy, composable, `Enumerable` resource; values may be model objects or uuid strings. Iterating the unfiltered resource lists everything you can see. Match the Python semantics exactly.
 - **Self-credential management is sharp by design** (mirror Python): revoking your *current* session is allowed (self-rotation); a "revoke everything" lever kills every credential including the calling client's token. Document it loudly; never block it — a peer managing its own keys is the platform's autonomy feature.
 - **Tests pin invariants** and read like documentation.
