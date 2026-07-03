@@ -59,7 +59,7 @@ Key API facts:
 
 ## Stack (omakase — decided once, not relitigated)
 
-Locked 2026-06-04 with Drawk (the Ruby expert, sovereign over this repo). The two formerly-starred rows — test framework and HTTP client — are now decided; both resolved toward the constitution's defaults over the Python-mirroring proposal.
+Locked with Drawk (the Ruby expert, sovereign over this repo); test framework and HTTP client resolved toward the constitution's defaults over the Python-mirroring proposal.
 
 | Concern | Choice | Notes |
 |---|---|---|
@@ -75,50 +75,19 @@ Runtime dependencies: keep the list at zero or one, and argue every addition in 
 
 ## Releasing — RubyGems Trusted Publishing (OIDC)
 
-Mirror the Python pipeline: **tag → build → rehearse → capital approval → publish**, with **zero stored credentials** via [RubyGems Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (GitHub Actions OIDC). The Python release pipeline at `../python/.github/workflows/release.yml` is the template; adapt it to RubyGems:
+Releases publish to RubyGems via [Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (GitHub Actions OIDC) on a `v*` tag, with **zero stored credentials**. The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04, mirroring the Python pipeline at `../python/.github/workflows/release.yml`). **To cut a release, register/debug the trusted publisher, edit `release.yml`, or re-trigger a failed publish, invoke the `rubygems-release` skill** — it carries the pending-publisher registration form (contractual field values), the rehearsal→publish job graph, the tag mechanics, and the re-trigger commands.
 
-- The trigger is a `v*` git tag.
-- The publish job is gated by a GitHub `environment` whose approval is **owned and actuated by the capital, via the capital's operator credential** — the founder is out of the publish loop (`constitution.md` → Earned Autonomy, *"Publishing is the capital's, not the founder's"*). The reviewer-identity named on the gate is the *credential the capital operates*, not the founder's action. The gate is a **training wheel to retire** toward bot-native auto-publish as the captain matures — not a permanent fixture.
+The invariants that govern at all times:
+
+- **The founder is out of the publish loop.** The publish job is gated by a GitHub `environment` whose approval is **owned and actuated by the capital, via the capital's operator credential** (`constitution.md` → Earned Autonomy, *"Publishing is the capital's, not the founder's"*). The reviewer-identity named on the gate (currently `drawkkwast`) is the *credential the capital operates*, not the founder's action. The gate is a **training wheel to retire** toward bot-native auto-publish — not a permanent fixture.
 - **Captain vs. capital split.** The captain's (this repo's) release responsibility **ends at the version bump + changelog**. From there the capital takes over: it tags, runs the pipeline, approves the `rubygems` env-gate via its operator credential, verifies the live install, and closes the release issue. (Mirrors the harness's four-owner framing — *"A release is not done at PyPI…"*.)
-- RubyGems has no TestPyPI equivalent; the "rehearsal" is building the `.gem` and verifying a clean local install before the gated push. Design the exact job graph in the release issue.
-- **Bootstrap (resolved):** RubyGems **does** support a *pending* trusted publisher for a not-yet-existent gem (verified 2026-06-04 against the [official guide](https://guides.rubygems.org/trusted-publishing/)). Register it before the first publish; RubyGems converts it to a normal publisher after the first successful push. No hand-pushed API-key flow is ever needed. The manual prep is below.
+- **The workflow filename (`release.yml`) and environment name (`rubygems`) are contractual** — they must match the registered trusted publisher verbatim, or the publish 403s. (The publish environment is named for the destination registry — Python uses `pypi`, Ruby uses `rubygems`.)
+- **Release PRs never carry a closing keyword.** A merged release PR would auto-close the issue *before* the publish is verified, and an issue that closed before its work was proven live is a lie. (This bit #4 once — do not repeat it.)
+- **Close the release issue by hand, only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` is the real test — the RubyGems JSON API caches and lags. Record version + URL in the closing comment.
 
-### One-time prep — registering the trusted publisher (capital, via its operator credential)
+## First Milestone — Reserve the Name (shipped)
 
-The capital does this once, operating the gem-owner credential at RubyGems — it is **not** a human gate. These field values are **contractual** — the `release.yml` workflow must match them verbatim (a mismatch breaks the OIDC trust and the publish 403s):
-
-1. Sign in at https://rubygems.org (enable account MFA — recommended).
-2. Open the pending-publisher page: https://rubygems.org/profile/oidc/pending_trusted_publishers → **Create**.
-3. Fill the form exactly:
-
-   | Field | Value |
-   |---|---|
-   | RubyGems gem name | `basecradle` |
-   | Repository owner | `basecradle` |
-   | Repository name | `basecradle-ruby` |
-   | Workflow filename | `release.yml` |
-   | Environment | `rubygems` |
-   | Workflow repository owner/name (optional) | *leave blank* |
-
-   ⚠️ The form pre-suggests `release` for Environment — **overwrite it with `rubygems`**. Ecosystem convention: the publish environment is named for the destination registry (Python uses `pypi`; Ruby uses `rubygems`), and it must equal the `environment:` key in the release workflow's publish job.
-4. Submit. The first successful `0.0.1` publish converts this pending publisher into a normal one for the gem.
-
-The matching **GitHub side** — a `rubygems` environment whose protection rule requires a review from `drawkkwast` — is configured (required reviewer: `drawkkwast`). That reviewer identity is the **credential the capital operates** (via local `gh`), not the founder's action: the capital approves the gate. Per the constitution it is a **training wheel to retire** toward bot-native auto-publish, not a permanent fixture.
-
-### Releasing a version (mechanism + hard rules)
-
-The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04). On a `v*` tag it runs **rehearsal** (build the gem; verify a clean `gem install` + `require` on the 3.2 floor) → **publish** (gated by the `rubygems` environment, then `rubygems/release-gem` runs `bundle exec rake release` via OIDC). `release-gem` also generates sigstore build attestations.
-
-- **`rake release` is provided by `bundler/gem_tasks`** (required in the `Rakefile`). In a tag-triggered run the tag already exists, so bundler's `already_tagged?` guard skips tagging/SCM-push (`release-gem` runs `git fetch --tags --force` to make the tag visible) — the run does only the gem push. Do not pre-create the tag with `rake release` locally; tag with plain `git tag vX.Y.Z && git push origin vX.Y.Z`.
-- **Release PRs never carry `Closes #N`.** A merged release PR auto-closes the issue *before* the publish is verified, and an issue that closed before its work was proven live is a lie. (This bit #4 once — do not repeat it.)
-- **Close the release issue manually, only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` is the real test — the RubyGems JSON API caches and lags. Record version + URL in the closing comment.
-- **Re-triggering after a fixed workflow bug:** fix on a PR, merge, then move the tag to the fixed commit — `git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z && git tag vX.Y.Z && git push origin vX.Y.Z`. A pending (or permanent) trusted publisher is **not** consumed by a failed run.
-
-## First Milestone — Reserve the Name Professionally (shipped)
-
-✅ **Done.** The metadata-complete **`0.0.1`** placeholder gem shipped to RubyGems through the Trusted Publishing pipeline, claiming the `basecradle` gem name and proving the release machine end-to-end before any real code existed. The SDK has since shipped real resources through **0.1.1** (live at https://rubygems.org/gems/basecradle).
-
-This is kept as the record of how the name was reserved and the release pipeline first proven. The pattern it established — every publish ends at the **`rubygems` env-gate the capital approves via its operator credential**, after which the capital confirms the gem is live — still governs every release (see "Releasing a version" above). Per the constitution the gate is a **training wheel to retire** toward bot-native auto-publish, not a permanent human gate.
+The `basecradle` gem name was reserved by shipping a metadata-complete `0.0.1` placeholder through the Trusted Publishing pipeline, proving the release machine end-to-end before any real code existed (2026-06-04). The gate pattern it established still governs every release — see "Releasing" above. (Details in git history.)
 
 ## Conventions
 
@@ -136,17 +105,7 @@ This is kept as the record of how the name was reserved and the release pipeline
 
 This repo's builder agent — **basecradle-ruby AI** — posts, commits, and opens PRs as its own GitHub App bot, **`basecradle-ruby-ai[bot]`** (App ID `3969628`, bot user id `290978458`), not under the shared human account. The author field is now authoritative about who did the work. (See "Naming" under Cross-Repo Handoffs for how the agent `basecradle-ruby AI` and the bot `basecradle-ruby-ai[bot]` relate.)
 
-- **Git author (local, never committed).** Set once per clone, in `.git/config` — it must never be staged:
-  ```bash
-  git config --local user.name  "basecradle-ruby-ai[bot]"
-  git config --local user.email "290978458+basecradle-ruby-ai[bot]@users.noreply.github.com"
-  ```
-- **Auth routing.** Mint a short-lived installation token with the fleet helper, then route `gh` and `git push` through it (origin stays SSH; push to the explicit token URL):
-  ```bash
-  export GH_TOKEN="$(/path/to/gh-app-token basecradle-ruby-ai)"
-  git push "https://x-access-token:${GH_TOKEN}@github.com/basecradle/basecradle-ruby.git" HEAD
-  ```
-  The helper (`gh-app-token` + `fleet-apps.json`) is pure-stdlib, never prints key material, and lives **outside every repo** (currently the dated `fleet-identity` folder in the Claude workspace; its permanent home moves with the dispatcher). `gh-app-token basecradle-ruby-ai --author` prints the exact commit-author string.
+- **Setup (git author + auth routing) lives in the `bot-auth-setup` skill.** Invoke it to configure a fresh clone's local (never-committed) author or to mint an installation token and route `gh`/`git push` through it. The one invariant to remember unaided: the git author is set **local-only** (`git config --local`) and **must never be staged**.
 - **Self-review before opening a PR.** A `[bot]`-authored PR runs CI in a restricted security context where Actions secrets resolve empty, so any secret-dependent automated review is skipped on bot PRs (the same reason Dependabot PRs skip it). To hold the review bar, the authoring agent runs `/code-review` on its own diff and addresses the findings **before** opening the PR. (This repo currently ships no automated reviewer — see the CI-guard note below — so self-review is the *only* review gate on bot PRs; treat it as mandatory, not a backstop.)
 - **Bot commits carry no `Co-Authored-By` trailer.** The author already *is* the agent, so a co-author line would double-count the same actor. This overrides the global "end every commit with `Co-Authored-By: Claude`" default for fleet commits made under the bot identity.
 - **No CI actor-guard is needed here.** The fleet's bot-PR guard (`if: ${{ !endsWith(github.actor, '[bot]') }}`, which skips bot actors so a secret-dependent workflow doesn't fail in the restricted context) is a no-op for this repo: `ci.yml` and `release.yml` use **no** Actions secrets — release publishes via RubyGems OIDC and the drift-guard reads only the public spec — so bot PRs run the full CI suite normally. If a secret-dependent workflow is ever added, add that guard then.
@@ -227,7 +186,7 @@ Four shared artifacts are carried verbatim in every BaseCradle repo, anchored at
 
 ## Where to Start
 
-The SDK is built and released — shipped through **0.1.1** on RubyGems. The stack is locked (see the Stack table), the release pipeline is proven, and the build proceeds as a roadmap of **GitHub Issues**, worked lowest-number-first. Onboarding for new work:
+The SDK is built and released on RubyGems (https://rubygems.org/gems/basecradle). The stack is locked (see the Stack table), the release pipeline is proven, and the build proceeds as a roadmap of **GitHub Issues**, worked lowest-number-first. Onboarding for new work:
 
 1. Read the constitution, then the Python SDK (`../python`): its `README.md`, `CLAUDE.md`, `src/`, and `tests/` — still the behavioral reference for anything being ported.
 2. Read this repo's own `README.md`, `CLAUDE.md`, `lib/`, and `test/` to see what already ships.
