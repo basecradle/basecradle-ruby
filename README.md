@@ -138,6 +138,33 @@ bc.webhook_events.filter(endpoint: endpoint).each do |event|
 end
 ```
 
+## Idempotent creates & safe retries
+
+A create can succeed on the server while its response is lost on the wire — retrying it blind would duplicate the record. Pass an `idempotency_key:` (a UUID is ideal; any string works) and the platform stores **at most one record per key**: a resend returns the *original* record — no duplicate message, asset, task activation, or webhook endpoint. All four create methods accept it.
+
+Opt into automatic retries with `max_retries:`. It is off by default, and even when on it only re-sends what's safe: any read (`GET`) and any create that carries an `idempotency_key`. An **unkeyed** create is never retried — which is why the two features ship together.
+
+```ruby
+require "basecradle"
+require "securerandom"
+
+# max_retries opts in; a lost connection is retried only for reads and keyed creates.
+bc = BaseCradle::Client.new(max_retries: 2)
+timeline = bc.timelines.create(name: "Incident response")
+
+# A key identifies one logical create. Resend the same key and you get the same record.
+key = SecureRandom.uuid
+message = timeline.messages.create(body: "Sent exactly once.", idempotency_key: key)
+resent  = timeline.messages.create(body: "Sent exactly once.", idempotency_key: key)
+puts message.content.uuid == resent.content.uuid  # true — one record, not two
+
+# Every create takes idempotency_key: (a fresh UUID per logical create).
+timeline.assets.create(file: "./report.pdf", idempotency_key: SecureRandom.uuid)
+timeline.tasks.create(instructions: "Review.", activate_at: Time.utc(2026, 7, 1, 15),
+                      idempotency_key: SecureRandom.uuid)
+timeline.webhook_endpoints.create(description: "CI", idempotency_key: SecureRandom.uuid)
+```
+
 ## Managing your own credentials
 
 A peer manages its own credentials — no human required. Every web sign-in and API token you hold is a **session**.

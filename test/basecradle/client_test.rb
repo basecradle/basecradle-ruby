@@ -121,6 +121,66 @@ class ClientTest < Minitest::Test
     assert_raises(BaseCradle::APIConnectionError) { @bc.request("GET", "/timelines") }
   end
 
+  def test_request_merges_per_call_headers
+    stub_request(:get, "#{BASE_URL}/x").to_return(status: 200, body: "{}")
+
+    @bc.request("GET", "/x", headers: { "Idempotency-Key" => "k1" })
+
+    assert_requested(:get, "#{BASE_URL}/x") { |req| req.headers["Idempotency-Key"] == "k1" }
+  end
+
+  # --- retries ---------------------------------------------------------------------------
+
+  def test_does_not_retry_by_default
+    stub_request(:get, "#{BASE_URL}/timelines").to_timeout
+
+    assert_raises(BaseCradle::APIConnectionError) { @bc.request("GET", "/timelines") }
+    assert_requested(:get, "#{BASE_URL}/timelines", times: 1)
+  end
+
+  def test_rejects_a_negative_max_retries
+    assert_raises(ArgumentError) { BaseCradle::Client.new(FAKE_TOKEN, max_retries: -1) }
+  end
+
+  def test_retries_a_get_on_a_lost_connection_then_succeeds
+    bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 2)
+    stub_request(:get, "#{BASE_URL}/timelines").to_timeout.then
+                                               .to_return(status: 200, body: "{}")
+
+    bc.stub(:backoff, nil) { assert_equal({}, bc.request("GET", "/timelines")) }
+    assert_requested(:get, "#{BASE_URL}/timelines", times: 2)
+  end
+
+  def test_gives_up_after_max_retries_are_exhausted
+    bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 2)
+    stub_request(:get, "#{BASE_URL}/timelines").to_timeout
+
+    bc.stub(:backoff, nil) do
+      assert_raises(BaseCradle::APIConnectionError) { bc.request("GET", "/timelines") }
+    end
+    assert_requested(:get, "#{BASE_URL}/timelines", times: 3) # the call + 2 retries
+  end
+
+  def test_retries_a_keyed_post
+    bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 1)
+    stub_request(:post, "#{BASE_URL}/x").to_timeout.then.to_return(status: 201, body: "{}")
+
+    bc.stub(:backoff, nil) do
+      bc.request("POST", "/x", json: { "a" => 1 }, headers: { "Idempotency-Key" => "k1" })
+    end
+    assert_requested(:post, "#{BASE_URL}/x", times: 2)
+  end
+
+  def test_never_retries_an_unkeyed_post
+    bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 3)
+    stub_request(:post, "#{BASE_URL}/x").to_timeout
+
+    bc.stub(:backoff, nil) do
+      assert_raises(BaseCradle::APIConnectionError) { bc.request("POST", "/x", json: { "a" => 1 }) }
+    end
+    assert_requested(:post, "#{BASE_URL}/x", times: 1)
+  end
+
   # --- login -----------------------------------------------------------------------------
 
   def test_login_mints_a_token_and_returns_an_authenticated_client
@@ -148,6 +208,16 @@ class ClientTest < Minitest::Test
     assert_requested(:post, "#{BASE_URL}/session") do |req|
       JSON.parse(req.body)["name"] == "ci runner"
     end
+  end
+
+  def test_login_forwards_max_retries_to_the_client
+    stub_request(:post, "#{BASE_URL}/session")
+      .to_return(status: 201, body: { "token" => FAKE_TOKEN }.to_json)
+
+    client = BaseCradle::Client.login(email_address: "nova@example.com", password: "s3cret",
+                                      max_retries: 3)
+
+    assert_equal 3, client.max_retries
   end
 
   def test_login_raises_typed_error_on_bad_credentials

@@ -114,9 +114,14 @@ module BaseCradle
     end
 
     # Create an inbound webhook endpoint on this timeline (viewer; the timeline unlocked).
-    def create(description:)
+    #
+    # +idempotency_key+ (optional, a UUID recommended) makes the create safe to retry: the
+    # platform stores at most one endpoint per key (scoped per timeline — endpoints have no
+    # author), so a resend returns the original endpoint. See +BaseCradle::Client#max_retries+.
+    def create(description:, idempotency_key: nil)
       response = @client.request("POST", "/timelines/#{@timeline_uuid}/webhook_endpoints",
-                                 json: { "webhook_endpoint" => { "description" => description } })
+                                 json: { "webhook_endpoint" => { "description" => description } },
+                                 headers: BaseCradle.idempotency_headers(idempotency_key))
       WebhookEndpoint.new(response.fetch("webhook_endpoint"), client: @client)
     end
 

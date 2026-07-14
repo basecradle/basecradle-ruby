@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-14
+
+### Added
+
+- **`idempotency_key:` on all four content-create methods** — `timeline.messages.create`,
+  `timeline.assets.create`, `timeline.tasks.create`, and `timeline.webhook_endpoints.create`
+  accept an optional `idempotency_key:` (a UUID is recommended; any string works — the
+  platform treats it opaquely). When given, it is sent as the `Idempotency-Key` request
+  header. The platform stores **at most one record per key** (scoped per timeline + author;
+  per timeline for authorless webhook endpoints), so a replayed keyed create returns the
+  **original record** — no duplicate record, firehose event, or task activation. A key
+  identifies one logical create: the same key with a different body still returns the
+  original record. Keys never expire and never appear in a response. Mirrors the platform's
+  new capability ([core #328](https://github.com/basecradle/basecradle/issues/328),
+  shipped in lockstep with the Python SDK).
+  ([#108](https://github.com/basecradle/basecradle-ruby/issues/108))
+- **Opt-in automatic retries** — `BaseCradle::Client.new(max_retries: 2)` (and
+  `Client.login(..., max_retries:)`) retries requests that are lost on the wire (a timeout
+  or dropped connection). Off by default (`0`). Only requests that are safe to re-send are
+  retried: any `GET` (reads change nothing) and any create carrying an `idempotency_key`
+  (the platform dedupes it). **An unkeyed `POST` is never retried**, whatever `max_retries`
+  is — this is why keyed creates and retries ship together. Retries back off exponentially.
+- **Per-request headers** — `Client#request` accepts a `headers:` hash merged over the
+  defaults, the mechanism the four creates use to attach `Idempotency-Key`, and the escape
+  hatch for any header the API adds before the SDK wraps it.
+
 ## [0.3.0] - 2026-06-13
 
 ### Added
