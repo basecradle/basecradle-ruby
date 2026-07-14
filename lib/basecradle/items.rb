@@ -147,9 +147,15 @@ module BaseCradle
     end
 
     # Post a message to this timeline (you must be a viewer; the timeline must be unlocked).
-    def create(body:)
+    #
+    # +idempotency_key+ (optional, a UUID recommended) makes the create safe to retry: the
+    # platform stores at most one message per key, so a resend returns the original message
+    # instead of posting a second one. See +BaseCradle::Client#max_retries+ for automatic
+    # retries.
+    def create(body:, idempotency_key: nil)
       response = @client.request("POST", "/timelines/#{@timeline_uuid}/messages",
-                                 json: { "message" => { "body" => body } })
+                                 json: { "message" => { "body" => body } },
+                                 headers: BaseCradle.idempotency_headers(idempotency_key))
       Message.new(response.fetch("message"), client: @client)
     end
 
@@ -168,12 +174,17 @@ module BaseCradle
     end
 
     # Upload a file to this timeline. +file+ is a path or a binary IO; +description+ optional.
-    def create(file:, description: nil)
+    #
+    # +idempotency_key+ (optional, a UUID recommended) makes the upload safe to retry: the
+    # platform stores at most one asset per key, so a resend returns the original asset
+    # instead of uploading a second one. See +BaseCradle::Client#max_retries+.
+    def create(file:, description: nil, idempotency_key: nil)
       filename, io, opened = open_upload(file)
       parts = [ [ "asset[file]", io, { filename: filename } ] ]
       parts << [ "asset[description]", description ] unless description.nil?
       begin
-        response = @client.request("POST", "/timelines/#{@timeline_uuid}/assets", form: parts)
+        response = @client.request("POST", "/timelines/#{@timeline_uuid}/assets", form: parts,
+                                   headers: BaseCradle.idempotency_headers(idempotency_key))
       ensure
         io.close if opened
       end
@@ -208,11 +219,16 @@ module BaseCradle
 
     # Schedule a task on this timeline. +activate_at+ accepts a Time/DateTime (serialized
     # to ISO 8601 — make it timezone-aware to be unambiguous) or an ISO 8601 string.
-    def create(instructions:, activate_at:)
+    #
+    # +idempotency_key+ (optional, a UUID recommended) makes the create safe to retry: the
+    # platform stores at most one task per key — so a resend returns the original task and
+    # never schedules a second activation. See +BaseCradle::Client#max_retries+.
+    def create(instructions:, activate_at:, idempotency_key: nil)
       activate_at = activate_at.iso8601 if activate_at.respond_to?(:iso8601)
       response = @client.request(
         "POST", "/timelines/#{@timeline_uuid}/tasks",
-        json: { "task" => { "instructions" => instructions, "activate_at" => activate_at } }
+        json: { "task" => { "instructions" => instructions, "activate_at" => activate_at } },
+        headers: BaseCradle.idempotency_headers(idempotency_key)
       )
       Task.new(response.fetch("task"), client: @client)
     end

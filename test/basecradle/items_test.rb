@@ -172,6 +172,90 @@ class ItemsTest < Minitest::Test
     assert_equal [ "Hello from a peer." ], timeline.messages.map { |m| m.content.body }
   end
 
+  # --- idempotency keys on creates --------------------------------------------------------
+
+  KEY = "019f5e48-87c6-7d1e-9a48-7a701e8bd5bb"
+
+  def test_message_create_sends_the_idempotency_key_header_when_given
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages")
+      .to_return(status: 201, body: { "message" => message_payload }.to_json)
+
+    timeline.messages.create(body: "hi", idempotency_key: KEY)
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages") do |req|
+      req.headers["Idempotency-Key"] == KEY
+    end
+  end
+
+  def test_create_without_a_key_sends_no_idempotency_header
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages")
+      .to_return(status: 201, body: { "message" => message_payload }.to_json)
+
+    timeline.messages.create(body: "hi")
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages") do |req|
+      !req.headers.key?("Idempotency-Key")
+    end
+  end
+
+  def test_asset_create_sends_the_idempotency_key_header
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets")
+      .to_return(status: 201, body: { "asset" => asset_payload }.to_json)
+
+    timeline.assets.create(file: StringIO.new("%PDF fabricated"), idempotency_key: KEY)
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets") do |req|
+      req.headers["Idempotency-Key"] == KEY
+    end
+  end
+
+  def test_task_create_sends_the_idempotency_key_header
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/tasks")
+      .to_return(status: 201, body: { "task" => task_payload }.to_json)
+
+    timeline.tasks.create(instructions: "Review", activate_at: "2026-07-01T15:00:00Z",
+                          idempotency_key: KEY)
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/tasks") do |req|
+      req.headers["Idempotency-Key"] == KEY
+    end
+  end
+
+  def test_replaying_a_key_returns_the_same_record
+    timeline = fetch_timeline
+    # The platform dedupes by key: the caller sees the original record on every replay.
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages")
+      .to_return(status: 201, body: { "message" => message_payload }.to_json)
+
+    first = timeline.messages.create(body: "once", idempotency_key: KEY)
+    second = timeline.messages.create(body: "once", idempotency_key: KEY)
+
+    assert_equal first.content.uuid, second.content.uuid
+  end
+
+  def test_keyed_asset_upload_is_retried_and_resends_the_whole_body
+    bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 1)
+    stub_request(:get, "#{BASE_URL}/timelines/#{TIMELINE_UUID}")
+      .to_return(status: 200, body: { "timeline" => timeline_payload, "items" => [] }.to_json)
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets")
+      .to_timeout.then.to_return(status: 201, body: { "asset" => asset_payload }.to_json)
+
+    io = StringIO.new("%PDF fabricated")
+    asset = bc.stub(:backoff, nil) do
+      bc.timelines.get(TIMELINE_UUID).assets.create(file: io, idempotency_key: KEY)
+    end
+
+    assert_instance_of BaseCradle::Asset, asset
+    # The upload survived a lost connection because the key made the resend safe; the IO
+    # is rewound between attempts (see Client#rewind_form) so the resend carries the whole
+    # file rather than the tail left after the first attempt read it.
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets", times: 2)
+  end
+
   private
 
   def fetch_timeline

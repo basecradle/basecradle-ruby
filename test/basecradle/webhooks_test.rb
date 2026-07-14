@@ -53,6 +53,19 @@ class WebhooksTest < Minitest::Test
     end
   end
 
+  def test_create_sends_the_idempotency_key_header_when_given
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/webhook_endpoints")
+      .to_return(status: 201, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+
+    timeline.webhook_endpoints.create(description: "CI notifications",
+                                      idempotency_key: "019f5e48-87c6-7d1e-9a48-7a701e8bd5bb")
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/webhook_endpoints") do |req|
+      req.headers["Idempotency-Key"] == "019f5e48-87c6-7d1e-9a48-7a701e8bd5bb"
+    end
+  end
+
   def test_disable_hits_enablement_and_adopts_the_returned_endpoint
     endpoint = an_endpoint
     stub_request(:delete, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/enablement")
