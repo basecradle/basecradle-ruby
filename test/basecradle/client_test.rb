@@ -228,4 +228,26 @@ class ClientTest < Minitest::Test
       BaseCradle::Client.login(email_address: "nova@example.com", password: "wrong")
     end
   end
+
+  # --- sign out --------------------------------------------------------------------------
+
+  def test_sign_out_deletes_the_current_session_and_returns_nil
+    stub_request(:delete, "#{BASE_URL}/session").to_return(status: 204)
+
+    assert_nil @bc.sign_out
+    assert_requested(:delete, "#{BASE_URL}/session") do |req|
+      req.headers["Authorization"] == "Bearer #{FAKE_TOKEN}"
+    end
+  end
+
+  def test_sign_out_revokes_the_calling_clients_own_token_by_design
+    # Sharp by design: after sign_out the token is dead, so the client's next call 401s.
+    stub_request(:delete, "#{BASE_URL}/session").to_return(status: 204)
+    stub_request(:get, "#{BASE_URL}/users/dashboard")
+      .to_return(status: 401, body: problem("unauthorized", 401).to_json)
+
+    @bc.sign_out # never blocked — a peer manages its own keys
+
+    assert_raises(BaseCradle::AuthenticationError) { @bc.me }
+  end
 end

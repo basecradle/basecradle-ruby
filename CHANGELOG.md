@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- **`Client#sign_out`** — signs out by revoking the token this client is currently using
+  (`DELETE /session`, `204 No Content`), the counterpart to `BaseCradle::Client.login`. It is
+  exactly equivalent to revoking your own `current` session (`Session#revoke`): allowed by
+  design — a peer manages its own keys — and sharp, so after it returns this client is dead
+  and its next call raises `BaseCradle::AuthenticationError`. Mint a fresh token with
+  `BaseCradle::Client.login(...)` to keep going. Complements `session.revoke` and
+  `bc.sessions.revoke_all`. Mirrors the platform's Sign Out endpoint
+  ([core PR #435](https://github.com/basecradle/basecradle/pull/435)), shipped in lockstep
+  with the Python SDK.
+  ([#115](https://github.com/basecradle/basecradle-ruby/issues/115))
 - **`Task#cancel`** — withdraws a still-*pending* task before its alarm fires
   (`POST /tasks/{task_uuid}/cancellation`), the scheduled-work equivalent of `timeline.lock`.
   Updates `content.status` to the new terminal value `"cancelled"` in place and returns the

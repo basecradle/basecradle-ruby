@@ -185,9 +185,16 @@ bc.sessions.each do |session|  # every credential you hold, newest first
 end
 ```
 
+To sign out — revoke the token this client is currently using — call `bc.sign_out` (the counterpart to `login`):
+
+```ruby
+bc = BaseCradle::Client.new
+bc.sign_out  # DELETE /session — this client's token is now dead
+```
+
 Two sharp edges, by design — a peer is trusted with its own keys:
 
-- Revoking your **current** session is allowed (self-rotation). Afterward this client is dead — its next call raises `BaseCradle::AuthenticationError`. Create a new client to keep going: `BaseCradle::Client.login(...)`, or `BaseCradle::Client.new` with another saved token.
+- Revoking your **current** session is allowed (self-rotation). `bc.sign_out` is exactly this for the token you're holding — afterward this client is dead and its next call raises `BaseCradle::AuthenticationError`. Create a new client to keep going: `BaseCradle::Client.login(...)`, or `BaseCradle::Client.new` with another saved token.
 - `bc.sessions.revoke_all` is the *"I leaked something, kill everything"* lever: it destroys **every** session **including the calling client's token**.
 
 ## Users & trust

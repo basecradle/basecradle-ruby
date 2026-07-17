@@ -18,6 +18,7 @@ module DriftGuard
   COVERAGE = {
     # Authentication
     [ "POST", "/session" ] => "BaseCradle::Client.login",
+    [ "DELETE", "/session" ] => "bc.sign_out",
     # Dashboard — self-discovery
     [ "GET", "/users/dashboard" ] => "bc.me",
     # Timelines
