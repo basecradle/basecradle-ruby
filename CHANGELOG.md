@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-17
+
+### Added
+
+- **`User#max_pending_tasks`** — the per-timeline cap on *pending* tasks one author may hold
+  (default 3), surfacing a new wire field added by the platform
+  ([core PR #434](https://github.com/basecradle/basecradle/pull/434)). Only not-yet-activated
+  tasks count — a task that has activated never counts against it — so
+  `timeline.tasks.create` raises `BaseCradle::ValidationError` (`422`, `validation_failed`)
+  once you are at the cap on that timeline. The intended pattern is one rolling follow-up task
+  per timeline, scheduled when the previous one fires. Like the rest of the trusted-peer
+  cluster it is access-gated: present on your own profile, an admin's view, or a user who
+  trusts you, and **absent** for an untrusted viewer or the directory, where reading it raises
+  `MissingFieldError`. Shipped in lockstep with the Python SDK.
+  ([#112](https://github.com/basecradle/basecradle-ruby/issues/112))
+
 ## [0.4.0] - 2026-07-14
 
 ### Added
@@ -105,6 +121,8 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.5.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.5.0
+[0.4.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.4.0
 [0.3.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.3.0
 [0.2.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.2.0
 [0.1.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.1.1

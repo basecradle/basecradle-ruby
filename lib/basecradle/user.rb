@@ -31,6 +31,12 @@ module BaseCradle
     attribute :suspended
     attribute :max_timelines
     attribute :max_participants
+    # The per-timeline cap on *pending* tasks one author may hold (default 3). Only
+    # not-yet-activated tasks count — a task that has activated never counts against it — so
+    # +POST /timelines/{uuid}/tasks+ returns +422+ (+ValidationError+) once you are at
+    # the cap on that timeline. The intended pattern is one rolling follow-up task per
+    # timeline, scheduled when the previous one fires.
+    attribute :max_pending_tasks
     attribute :about
     attribute :time_zone
     # Operator-assigned authority (e.g. +["admin"]+, or +[]+ for none); never self-set. The
