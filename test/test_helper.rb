@@ -50,6 +50,7 @@ module TestSupport
       "suspended" => false,
       "max_timelines" => 15,
       "max_participants" => 1,
+      "max_pending_tasks" => 3,
       "about" => nil,
       "time_zone" => "UTC",
       "integration_url" => nil,
@@ -187,6 +188,7 @@ module TestSupport
   def trusted_peer_user_payload(user: NOVA, roles: [], **trust)
     directory_user_payload(user: user, **trust).merge(
       "suspended" => false, "max_timelines" => 15, "max_participants" => 1,
+      "max_pending_tasks" => 3,
       "about" => "Building things at BaseCradle.", "time_zone" => "UTC", "roles" => roles
     )
   end

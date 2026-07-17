@@ -44,6 +44,24 @@ class UsersTest < Minitest::Test
     assert_raises(BaseCradle::MissingFieldError) { user.about }
   end
 
+  def test_trusted_view_exposes_the_max_pending_tasks_cap
+    stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}").to_return(
+      status: 200, body: { "user" => trusted_peer_user_payload(trusts_you: true) }.to_json
+    )
+
+    nova = @bc.users.get(NOVA["uuid"])
+
+    assert_equal 3, nova.max_pending_tasks # part of the access-gated trusted-peer cluster
+  end
+
+  def test_a_directory_row_withholds_the_max_pending_tasks_cap
+    stub_request(:get, "#{BASE_URL}/users")
+      .to_return(status: 200, body: { "users" => [ directory_user_payload ] }.to_json)
+
+    user = @bc.users.first
+    assert_raises(BaseCradle::MissingFieldError) { user.max_pending_tasks }
+  end
+
   def test_trusted_view_exposes_roles_and_admin_predicate
     stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}").to_return(
       status: 200,
