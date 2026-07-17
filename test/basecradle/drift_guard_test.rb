@@ -79,6 +79,7 @@ class DriftGuardTest < Minitest::Test
   def test_model_verbs_exist
     {
       BaseCradle::Timeline => %i[lock add_participant remove_participant],
+      BaseCradle::Task => %i[cancel],
       BaseCradle::User => %i[grant_trust revoke_trust],
       BaseCradle::Session => %i[revoke],
       BaseCradle::WebhookEndpoint => %i[enable disable rotate]

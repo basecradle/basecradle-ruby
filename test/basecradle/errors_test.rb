@@ -14,6 +14,8 @@ class ErrorsTest < Minitest::Test
       "not_a_viewer" => BaseCradle::NotAViewerError,
       "not_timeline_owner" => BaseCradle::NotTimelineOwnerError,
       "timeline_locked" => BaseCradle::TimelineLockedError,
+      "not_task_author" => BaseCradle::NotTaskAuthorError,
+      "task_not_pending" => BaseCradle::TaskNotPendingError,
       "not_found" => BaseCradle::NotFoundError,
       "validation_failed" => BaseCradle::ValidationError,
       "current_password_incorrect" => BaseCradle::CurrentPasswordIncorrectError,
@@ -82,6 +84,9 @@ class ErrorsTest < Minitest::Test
     assert_operator BaseCradle::UnauthorizedError, :<, BaseCradle::AuthenticationError
     assert_operator BaseCradle::AuthenticationError, :<, BaseCradle::Error
     assert_operator BaseCradle::NotAViewerError, :<, BaseCradle::ForbiddenError
+    assert_operator BaseCradle::NotTaskAuthorError, :<, BaseCradle::ForbiddenError
+    assert_operator BaseCradle::TaskNotPendingError, :<, BaseCradle::ConflictError
+    assert_operator BaseCradle::ConflictError, :<, BaseCradle::Error
     assert_operator BaseCradle::InvalidCursorError, :<, BaseCradle::InvalidRequestError
     assert_operator BaseCradle::CurrentPasswordIncorrectError, :<, BaseCradle::ValidationError
     assert_operator BaseCradle::Error, :<, StandardError

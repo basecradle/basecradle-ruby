@@ -56,12 +56,29 @@ module BaseCradle
     attribute :uuid
     attribute :instructions
     attribute :activate_at
-    attribute :status # "pending" | "activated" | "blocked_timeline_locked"
+    # "pending" | "activated" | "cancelled" | "blocked_timeline_locked" — the status set is
+    # open; treat an unrecognized value as forward-compatible, never an error.
+    attribute :status
   end
 
   # An instruction with a scheduled activation time.
   class Task < Item
     attribute :content, wrap: TaskContent
+
+    # Cancel this task before it fires — the scheduled-work equivalent of the emergency stop.
+    # Withdraws a still-*pending* task: its alarm never fires and the slot it held under the
+    # author's per-timeline pending cap is freed immediately. Author-only (an admin may cancel
+    # any task); a locked timeline does not block cancellation (this is cleanup, not new
+    # content).
+    #
+    # Updates +content.status+ to +"cancelled"+ in place and returns +self+. Raises
+    # NotTaskAuthorError (403) if you did not author the task, or TaskNotPendingError (409)
+    # if it is no longer pending (already activated, blocked, or cancelled).
+    def cancel
+      response = require_client.request("POST", "/tasks/#{content.uuid}/cancellation")
+      to_h["content"]["status"] = response.fetch("task").fetch("content")["status"]
+      self
+    end
   end
 
   # --- cross-timeline list + get + filter -----------------------------------------------
@@ -127,7 +144,8 @@ module BaseCradle
     SINGULAR = "task"
     MODEL = Task
 
-    # Narrow by timeline and/or status ("pending" | "activated" | "blocked_timeline_locked").
+    # Narrow by timeline and/or status ("pending" | "activated" | "cancelled" |
+    # "blocked_timeline_locked").
     def filter(timeline: nil, status: nil)
       filters = merge_filters(timeline: timeline)
       filters["status"] = status unless status.nil?

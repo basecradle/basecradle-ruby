@@ -65,10 +65,23 @@ module BaseCradle
   # +timeline_locked+ — the timeline is locked and not accepting new content.
   class TimelineLockedError < ForbiddenError; end
 
+  # +not_task_author+ — the action (e.g. cancelling a task) requires being the task's
+  # author (an admin may act on any task).
+  class NotTaskAuthorError < ForbiddenError; end
+
   # --- 404 --------------------------------------------------------------------------------
 
   # +not_found+ — no record exists for the given UUID (or it is hidden from you).
   class NotFoundError < Error; end
+
+  # --- 409: conflict with the resource's current state -----------------------------------
+
+  # The request conflicts with the resource's current state (HTTP 409).
+  class ConflictError < Error; end
+
+  # +task_not_pending+ — the task cannot be cancelled because it is no longer pending: it
+  # has already activated, was blocked, or was already cancelled.
+  class TaskNotPendingError < ConflictError; end
 
   # --- 422: validation --------------------------------------------------------------------
 
@@ -133,7 +146,9 @@ module BaseCradle
     "not_a_viewer" => NotAViewerError,
     "not_timeline_owner" => NotTimelineOwnerError,
     "timeline_locked" => TimelineLockedError,
+    "not_task_author" => NotTaskAuthorError,
     "not_found" => NotFoundError,
+    "task_not_pending" => TaskNotPendingError,
     "validation_failed" => ValidationError,
     "current_password_incorrect" => CurrentPasswordIncorrectError,
     "password_confirmation_mismatch" => PasswordConfirmationMismatchError,

@@ -77,6 +77,49 @@ class ItemsTest < Minitest::Test
     assert_instance_of BaseCradle::TasksResource, filtered
   end
 
+  # --- task verbs -------------------------------------------------------------------------
+
+  TASK_UUID = "019e7750-66ee-7f8e-a8c5-2c2cf95e2c0b"
+
+  def test_cancel_posts_to_the_task_and_updates_status_in_place
+    task = fetch_task
+    stub_request(:post, "#{BASE_URL}/tasks/#{TASK_UUID}/cancellation")
+      .to_return(status: 200, body: { "task" => task_payload(status: "cancelled") }.to_json)
+
+    assert_equal "pending", task.content.status
+    assert_same task, task.cancel
+    assert_equal "cancelled", task.content.status
+    assert_requested(:post, "#{BASE_URL}/tasks/#{TASK_UUID}/cancellation")
+  end
+
+  def test_cancel_by_a_non_author_raises_not_task_author
+    task = fetch_task
+    stub_request(:post, "#{BASE_URL}/tasks/#{TASK_UUID}/cancellation").to_return(
+      status: 403,
+      headers: { "Content-Type" => "application/problem+json" },
+      body: { "code" => "not_task_author", "status" => 403, "title" => "Forbidden",
+              "detail" => "You did not author this task." }.to_json
+    )
+
+    error = assert_raises(BaseCradle::NotTaskAuthorError) { task.cancel }
+    assert_equal "not_task_author", error.code
+    assert_equal 403, error.status
+  end
+
+  def test_cancel_of_a_non_pending_task_raises_task_not_pending
+    task = fetch_task
+    stub_request(:post, "#{BASE_URL}/tasks/#{TASK_UUID}/cancellation").to_return(
+      status: 409,
+      headers: { "Content-Type" => "application/problem+json" },
+      body: { "code" => "task_not_pending", "status" => 409, "title" => "Conflict",
+              "detail" => "This task is no longer pending." }.to_json
+    )
+
+    error = assert_raises(BaseCradle::TaskNotPendingError) { task.cancel }
+    assert_equal "task_not_pending", error.code
+    assert_equal 409, error.status
+  end
+
   # --- nested creators --------------------------------------------------------------------
 
   def test_timeline_messages_create_posts_the_body_and_returns_a_message
@@ -257,6 +300,12 @@ class ItemsTest < Minitest::Test
   end
 
   private
+
+  def fetch_task
+    stub_request(:get, "#{BASE_URL}/tasks/#{TASK_UUID}")
+      .to_return(status: 200, body: { "task" => task_payload }.to_json)
+    @bc.tasks.get(TASK_UUID)
+  end
 
   def fetch_timeline
     stub_request(:get, "#{BASE_URL}/timelines/#{TIMELINE_UUID}")
