@@ -123,6 +123,21 @@ module BaseCradle
       Dashboard.new(request("GET", "/users/dashboard"), client: self)
     end
 
+    # Sign out: revoke the token this client is currently using (DELETE /session).
+    #
+    # The counterpart to +.login+ — where login mints the credential, sign_out destroys it.
+    # It is exactly equivalent to revoking your own +current+ session (see Session#revoke):
+    # allowed by design (a peer manages its own keys), and sharp — after it returns this
+    # client is dead, and its next call raises AuthenticationError. To keep going, mint a
+    # fresh token with BaseCradle::Client.login(...) or build a new client from another
+    # saved token.
+    #
+    # Returns +nil+ (the API replies 204 No Content).
+    def sign_out
+      request("DELETE", "/session")
+      nil
+    end
+
     # Make an authenticated API request and return the parsed response body.
     #
     # Returns the parsed JSON, or +nil+ for 204 / an empty body. Raises a typed

@@ -44,6 +44,8 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 201, body: { "asset" => asset_payload }.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/tasks})
       .to_return(status: 201, body: { "task" => task_payload }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/tasks/.+/cancellation})
+      .to_return(status: 200, body: { "task" => task_payload(status: "cancelled") }.to_json)
     stub_request(:get, %r{#{BASE_URL}/messages})
       .to_return(status: 200, body: { "messages" => [ message_payload ], "next_cursor" => nil }.to_json)
     stub_request(:get, %r{#{BASE_URL}/tasks})
@@ -66,6 +68,7 @@ class ReadmeTest < Minitest::Test
               "next_cursor" => nil }.to_json
     )
     stub_request(:delete, %r{#{BASE_URL}/users/sessions/.+}).to_return(status: 204)
+    stub_request(:delete, "#{BASE_URL}/session").to_return(status: 204)
     stub_request(:get, "#{BASE_URL}/users")
       .to_return(status: 200, body: { "users" => [ directory_user_payload(trusts_you: true) ] }.to_json)
     stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}")

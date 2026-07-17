@@ -18,6 +18,7 @@ module DriftGuard
   COVERAGE = {
     # Authentication
     [ "POST", "/session" ] => "BaseCradle::Client.login",
+    [ "DELETE", "/session" ] => "bc.sign_out",
     # Dashboard — self-discovery
     [ "GET", "/users/dashboard" ] => "bc.me",
     # Timelines
@@ -41,6 +42,7 @@ module DriftGuard
     [ "GET", "/tasks" ] => "bc.tasks (iteration) / .filter",
     [ "GET", "/tasks/{id}" ] => "bc.tasks.get",
     [ "POST", "/timelines/{timeline_id}/tasks" ] => "timeline.tasks.create",
+    [ "POST", "/tasks/{task_id}/cancellation" ] => "task.cancel",
     # Webhook endpoints
     [ "GET", "/webhook_endpoints" ] => "bc.webhook_endpoints (iteration) / .filter",
     [ "GET", "/webhook_endpoints/{id}" ] => "bc.webhook_endpoints.get",

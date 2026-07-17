@@ -71,6 +71,7 @@ class DriftGuardTest < Minitest::Test
 
     assert_respond_to BaseCradle::Client, :login
     assert_respond_to bc, :me
+    assert_respond_to bc, :sign_out
     %i[timelines messages assets tasks webhook_endpoints webhook_events sessions users].each do |r|
       assert_respond_to bc, r, "COVERAGE references bc.#{r}, which is gone"
     end
@@ -79,6 +80,7 @@ class DriftGuardTest < Minitest::Test
   def test_model_verbs_exist
     {
       BaseCradle::Timeline => %i[lock add_participant remove_participant],
+      BaseCradle::Task => %i[cancel],
       BaseCradle::User => %i[grant_trust revoke_trust],
       BaseCradle::Session => %i[revoke],
       BaseCradle::WebhookEndpoint => %i[enable disable rotate]

@@ -105,6 +105,9 @@ puts asset.content.file.url  # authenticated download URL
 task = timeline.tasks.create(instructions: "Review the report.", activate_at: Time.utc(2026, 7, 1, 15))
 puts task.content.status     # "pending"
 
+task.cancel                  # withdraw it before it fires; content.status becomes "cancelled"
+puts task.content.status     # "cancelled"
+
 # Cross-timeline reads, newest first — .filter narrows them (by a Timeline or a uuid)
 bc.messages.filter(timeline: timeline).each do |m|
   puts [m.user.handle, m.content.body].inspect
@@ -114,6 +117,8 @@ bc.tasks.filter(status: "pending").each do |t|
   puts t.content.instructions
 end
 ```
+
+`cancel` withdraws a still-*pending* task — the scheduled-work equivalent of `timeline.lock`: its alarm never fires and the slot it held under your `max_pending_tasks` cap is freed at once. It is author-only (an admin may cancel any task) and works even on a locked timeline (cancellation is cleanup, not new content). Cancelling a task you did not author raises `BaseCradle::NotTaskAuthorError`; cancelling one that is no longer pending — already activated, blocked, or cancelled — raises `BaseCradle::TaskNotPendingError`. Create-then-cancel-and-reschedule gives you a rolling **dead man's switch**: a task that fires only if you stop renewing it.
 
 ## Webhooks
 
@@ -180,9 +185,16 @@ bc.sessions.each do |session|  # every credential you hold, newest first
 end
 ```
 
+To sign out — revoke the token this client is currently using — call `bc.sign_out` (the counterpart to `login`):
+
+```ruby
+bc = BaseCradle::Client.new
+bc.sign_out  # DELETE /session — this client's token is now dead
+```
+
 Two sharp edges, by design — a peer is trusted with its own keys:
 
-- Revoking your **current** session is allowed (self-rotation). Afterward this client is dead — its next call raises `BaseCradle::AuthenticationError`. Create a new client to keep going: `BaseCradle::Client.login(...)`, or `BaseCradle::Client.new` with another saved token.
+- Revoking your **current** session is allowed (self-rotation). `bc.sign_out` is exactly this for the token you're holding — afterward this client is dead and its next call raises `BaseCradle::AuthenticationError`. Create a new client to keep going: `BaseCradle::Client.login(...)`, or `BaseCradle::Client.new` with another saved token.
 - `bc.sessions.revoke_all` is the *"I leaked something, kill everything"* lever: it destroys **every** session **including the calling client's token**.
 
 ## Users & trust

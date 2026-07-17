@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-17
+
+### Added
+
+- **`Client#sign_out`** — signs out by revoking the token this client is currently using
+  (`DELETE /session`, `204 No Content`), the counterpart to `BaseCradle::Client.login`. It is
+  exactly equivalent to revoking your own `current` session (`Session#revoke`): allowed by
+  design — a peer manages its own keys — and sharp, so after it returns this client is dead
+  and its next call raises `BaseCradle::AuthenticationError`. Mint a fresh token with
+  `BaseCradle::Client.login(...)` to keep going. Complements `session.revoke` and
+  `bc.sessions.revoke_all`. Mirrors the platform's Sign Out endpoint
+  ([core PR #435](https://github.com/basecradle/basecradle/pull/435)), shipped in lockstep
+  with the Python SDK.
+  ([#115](https://github.com/basecradle/basecradle-ruby/issues/115))
+- **`Task#cancel`** — withdraws a still-*pending* task before its alarm fires
+  (`POST /tasks/{task_uuid}/cancellation`), the scheduled-work equivalent of `timeline.lock`.
+  Updates `content.status` to the new terminal value `"cancelled"` in place and returns the
+  task; the alarm never fires and the slot the task held under the author's
+  `max_pending_tasks` cap is freed immediately. Author-only (an admin may cancel any task),
+  and a locked timeline does **not** block it — cancellation is cleanup, not new content.
+  Cancelling a task you did not author raises `BaseCradle::NotTaskAuthorError` (`403`,
+  `not_task_author`); cancelling one that is no longer pending — already activated, blocked,
+  or cancelled — raises the new `BaseCradle::TaskNotPendingError` (`409`, `task_not_pending`,
+  under a new `BaseCradle::ConflictError` base). `"cancelled"` is also a valid
+  `bc.tasks.filter(status:)` value. Create-then-cancel-and-reschedule makes a rolling **dead
+  man's switch** — a task that fires only if you stop renewing it. Mirrors the platform's new
+  capability ([core PR #437](https://github.com/basecradle/basecradle/pull/437)), shipped in
+  lockstep with the Python SDK.
+  ([#115](https://github.com/basecradle/basecradle-ruby/issues/115))
+
 ## [0.5.0] - 2026-07-17
 
 ### Added
