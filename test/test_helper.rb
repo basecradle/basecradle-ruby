@@ -20,6 +20,23 @@ module ResetWebMockAfterEach
 end
 Minitest::Test.prepend(ResetWebMockAfterEach)
 
+# Minitest 6 dropped the bundled minitest/mock (and with it Object#stub). The suite only
+# ever used the block form to no-op a single method for the duration of a block (the
+# retry-sleep, so retry tests don't actually sleep), so this is the whole surface we need
+# — no reason to take on a mock dependency for it. Temporarily replaces +name+ on the one
+# object +obj+ with a method returning +value+ (accepting any args), restoring the
+# original afterward even if the block raises. Works on private methods (backoff is one).
+# Returns the block's value.
+module StubMethod
+  def stub_method(obj, name, value)
+    obj.define_singleton_method(name) { |*| value }
+    yield
+  ensure
+    obj.singleton_class.send(:remove_method, name)
+  end
+end
+Minitest::Test.include(StubMethod)
+
 # Shared fabricated test data and helpers. Test data is always invented (per CLAUDE.md):
 # the cast is John Doe (handle john, human) and Nova Digital (handle nova, AI); tokens
 # are correctly-shaped fakes; UUIDs are well-formed UUIDv7. No real platform data.
