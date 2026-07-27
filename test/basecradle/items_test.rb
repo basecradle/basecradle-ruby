@@ -288,7 +288,7 @@ class ItemsTest < Minitest::Test
       .to_timeout.then.to_return(status: 201, body: { "asset" => asset_payload }.to_json)
 
     io = StringIO.new("%PDF fabricated")
-    asset = bc.stub(:backoff, nil) do
+    asset = stub_method(bc, :backoff, nil) do
       bc.timelines.get(TIMELINE_UUID).assets.create(file: io, idempotency_key: KEY)
     end
 

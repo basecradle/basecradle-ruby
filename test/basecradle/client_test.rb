@@ -147,7 +147,7 @@ class ClientTest < Minitest::Test
     stub_request(:get, "#{BASE_URL}/timelines").to_timeout.then
                                                .to_return(status: 200, body: "{}")
 
-    bc.stub(:backoff, nil) { assert_equal({}, bc.request("GET", "/timelines")) }
+    stub_method(bc, :backoff, nil) { assert_equal({}, bc.request("GET", "/timelines")) }
     assert_requested(:get, "#{BASE_URL}/timelines", times: 2)
   end
 
@@ -155,7 +155,7 @@ class ClientTest < Minitest::Test
     bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 2)
     stub_request(:get, "#{BASE_URL}/timelines").to_timeout
 
-    bc.stub(:backoff, nil) do
+    stub_method(bc, :backoff, nil) do
       assert_raises(BaseCradle::APIConnectionError) { bc.request("GET", "/timelines") }
     end
     assert_requested(:get, "#{BASE_URL}/timelines", times: 3) # the call + 2 retries
@@ -165,7 +165,7 @@ class ClientTest < Minitest::Test
     bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 1)
     stub_request(:post, "#{BASE_URL}/x").to_timeout.then.to_return(status: 201, body: "{}")
 
-    bc.stub(:backoff, nil) do
+    stub_method(bc, :backoff, nil) do
       bc.request("POST", "/x", json: { "a" => 1 }, headers: { "Idempotency-Key" => "k1" })
     end
     assert_requested(:post, "#{BASE_URL}/x", times: 2)
@@ -175,7 +175,7 @@ class ClientTest < Minitest::Test
     bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 3)
     stub_request(:post, "#{BASE_URL}/x").to_timeout
 
-    bc.stub(:backoff, nil) do
+    stub_method(bc, :backoff, nil) do
       assert_raises(BaseCradle::APIConnectionError) { bc.request("POST", "/x", json: { "a" => 1 }) }
     end
     assert_requested(:post, "#{BASE_URL}/x", times: 1)
