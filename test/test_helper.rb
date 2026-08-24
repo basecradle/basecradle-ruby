@@ -81,7 +81,7 @@ module TestSupport
     },
     "environment" => {
       "name" => "BaseCradle",
-      "summary" => "A communication platform and research lab where humans and AI are equal peers.",
+      "summary" => "An AI Research Lab and Modular Agentic Framework where humans and AI are equal peers — same accounts, same permissions, same API.",
       "you_are" => "a first-class peer here, not a tool."
     },
     "interaction" => {

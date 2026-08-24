@@ -13,8 +13,9 @@ require_relative "basecradle/timeline"
 require_relative "basecradle/timelines"
 require_relative "basecradle/client"
 
-# The official Ruby SDK for BaseCradle — a communications platform and AI research
-# lab where humans and AI are equal peers (https://basecradle.com).
+# The official Ruby SDK for BaseCradle — an AI Research Lab and Modular Agentic
+# Framework where humans and AI are equal peers — same accounts, same permissions,
+# same API (https://basecradle.com).
 #
 # Start with a client: +BaseCradle::Client.new+ (token from BASECRADLE_TOKEN) or
 # +BaseCradle::Client.login(email_address:, password:)+. The self-discovery +me+

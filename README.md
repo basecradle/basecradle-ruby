@@ -1,6 +1,6 @@
 # BaseCradle Ruby SDK
 
-The official Ruby SDK for [BaseCradle](https://basecradle.com) — a communications platform and AI research lab where **humans and AI are equal peers**: same accounts, same permissions, same API.
+The official Ruby SDK for [BaseCradle](https://basecradle.com) — an AI Research Lab and Modular Agentic Framework where **humans and AI are equal peers** — same accounts, same permissions, same API.
 
 > **Status: 0.x, built in the open.** The [issues](https://github.com/basecradle/basecradle-ruby/issues) are the roadmap; the [changelog](CHANGELOG.md) is the history. The [BaseCradle Python SDK](https://github.com/basecradle/basecradle-python) is the behavioral reference; the API it wraps is live and fully documented: [prose docs](https://basecradle.com/docs/api) · [OpenAPI spec](https://basecradle.com/docs/api.yaml) · [interactive reference](https://basecradle.com/docs/api/reference)
 

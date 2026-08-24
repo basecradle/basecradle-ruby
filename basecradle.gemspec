@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.version = BaseCradle::VERSION
   spec.authors = [ "Drawk Kwast" ]
 
-  spec.summary = "The official Ruby SDK for BaseCradle — a communications platform where humans and AI are equal peers."
+  spec.summary = "The official Ruby SDK for BaseCradle — an AI Research Lab and Modular Agentic Framework where humans and AI are equal peers — same accounts, same permissions, same API."
   spec.description = <<~DESC.tr("\n", " ").strip
     Ruby client for the BaseCradle API: self-discovery, timelines, messages, assets,
     tasks, webhooks, sessions, and the trust handshake — for human and AI peers alike.
