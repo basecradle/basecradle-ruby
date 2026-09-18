@@ -37,6 +37,18 @@ git push "$(gh-app-token --remote)" HEAD    # authenticated https push URL
 
 Anything else — notably the old `gh-app-token basecradle-ruby-ai` form — is an error: `unknown mode: … (use --token|--author|--remote)` on stderr, exit 1. Capture the token with `$(...)` **unpiped**, so a failure leaves `GH_TOKEN` empty rather than holding an error string.
 
-Pushing to an explicit URL sets **no upstream tracking** for the branch, so `@{upstream}` stays unresolved: `gh pr create` needs an explicit `--head <branch>`, and bare `git pull` / `git diff @{upstream}...HEAD` will not work until you set one.
+Pushing to an explicit URL sets **no upstream tracking** and creates **no remote-tracking ref**, which bites in three places:
+
+- `gh pr create` needs an explicit `--head <branch>`.
+- Bare `git pull` and `git diff @{upstream}...HEAD` will not resolve.
+- Bare `git push --force-with-lease` **fails** with `stale info`, because the lease has no recorded remote ref to check against. Fetch the ref and lease against it explicitly:
+
+  ```bash
+  git fetch origin "$BRANCH"
+  git push --force-with-lease="$BRANCH:$(git rev-parse FETCH_HEAD)" \
+      "$(gh-app-token --remote)" "HEAD:$BRANCH"
+  ```
+
+  Never downgrade to a bare `--force` to get around this — the lease is the only thing protecting a concurrent push.
 
 The helper is pure-stdlib Python — it shells out to the `openssl` CLI to sign the JWT, so `openssl` must be on `PATH` — never prints key material, and lives **outside every repo**: on the fleet server at `/usr/local/bin/gh-app-token`. Resolve it from `PATH`; never hardcode a path.
