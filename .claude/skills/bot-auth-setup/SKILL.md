@@ -18,11 +18,37 @@ git config --local user.email "290978458+basecradle-ruby-ai[bot]@users.noreply.g
 
 ## Auth routing
 
-Mint a short-lived installation token with the fleet helper, then route `gh` and `git push` through it (origin stays SSH; push to the explicit token URL):
+Mint a short-lived (~1h) installation token with the fleet helper, then route `gh` and `git push` through it. `origin` is a plain unauthenticated HTTPS remote, so pushes go to the explicit token URL rather than to `origin`:
 
 ```bash
-export GH_TOKEN="$(/path/to/gh-app-token basecradle-ruby-ai)"
-git push "https://x-access-token:${GH_TOKEN}@github.com/basecradle/basecradle-ruby.git" HEAD
+export GH_TOKEN="$(gh-app-token --token)"   # or just `gh-app-token` — --token is the default
+git push "$(gh-app-token --remote)" HEAD    # authenticated https push URL
 ```
 
-The helper (`gh-app-token` + `fleet-apps.json`) is pure-stdlib, never prints key material, and lives **outside every repo** (currently the dated `fleet-identity` folder in the Claude workspace; its permanent home moves with the dispatcher). `gh-app-token basecradle-ruby-ai --author` prints the exact commit-author string.
+**The helper takes a mode, never a slug.** It reads *this* agent's own credentials from the environment (`GH_APP_SLUG`, `GH_APP_ID`, `GH_APP_BOT_USER_ID`, `GH_APP_PEM_B64` — sourced from the agent's `agent.env` by the wake-runner after the privilege drop), so there is no identity argument to pass. The three modes:
+
+| Mode | Prints |
+|---|---|
+| `--token` (default) | the installation token |
+| `--author` | the exact commit-author string, `basecradle-ruby-ai[bot] <290978458+basecradle-ruby-ai[bot]@users.noreply.github.com>` |
+| `--remote` | the authenticated push URL, `https://x-access-token:<token>@github.com/basecradle/basecradle-ruby.git` |
+
+`--remote` builds that URL from `GH_APP_SLUG` with the org hardcoded to `basecradle` — it does **not** look at the working directory, so it always names this repo even if you run it inside another checkout.
+
+Anything else — notably the old `gh-app-token basecradle-ruby-ai` form — is an error: `unknown mode: … (use --token|--author|--remote)` on stderr, exit 1. Capture the token with `$(...)` **unpiped**, so a failure leaves `GH_TOKEN` empty rather than holding an error string.
+
+Pushing to an explicit URL sets **no upstream tracking** and creates **no remote-tracking ref**, which bites in three places:
+
+- `gh pr create` needs an explicit `--head <branch>`.
+- Bare `git pull` and `git diff @{upstream}...HEAD` will not resolve.
+- Bare `git push --force-with-lease` **fails** with `stale info`, because the lease has no recorded remote ref to check against. Fetch the ref and lease against it explicitly:
+
+  ```bash
+  git fetch origin "$BRANCH"
+  git push --force-with-lease="$BRANCH:$(git rev-parse FETCH_HEAD)" \
+      "$(gh-app-token --remote)" "HEAD:$BRANCH"
+  ```
+
+  Never downgrade to a bare `--force` to get around this — the lease is the only thing protecting a concurrent push.
+
+The helper is pure-stdlib Python — it shells out to the `openssl` CLI to sign the JWT, so `openssl` must be on `PATH` — never prints key material, and lives **outside every repo**: on the fleet server at `/usr/local/bin/gh-app-token`. Resolve it from `PATH`; never hardcode a path.
