@@ -6,7 +6,17 @@ class ClientTest < Minitest::Test
   include TestSupport
 
   def setup
+    # The token-resolution tests set and clear BASECRADLE_TOKEN. Remember whatever the
+    # developer had exported so the suite restores it rather than deleting a variable it
+    # never created (assigning nil unsets). Captured first: teardown runs even when the
+    # rest of setup raises.
+    @original_token = ENV["BASECRADLE_TOKEN"]
     @bc = BaseCradle::Client.new(FAKE_TOKEN)
+  end
+
+  def teardown
+    ENV["BASECRADLE_TOKEN"] = @original_token
+    super
   end
 
   # --- construction & token resolution ---------------------------------------------------
@@ -18,8 +28,6 @@ class ClientTest < Minitest::Test
   def test_falls_back_to_the_environment_variable
     ENV["BASECRADLE_TOKEN"] = FAKE_TOKEN
     assert_equal FAKE_TOKEN, BaseCradle::Client.new.token
-  ensure
-    ENV.delete("BASECRADLE_TOKEN")
   end
 
   def test_raises_when_no_token_is_available

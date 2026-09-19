@@ -17,6 +17,8 @@ class ReadmeTest < Minitest::Test
   end
 
   def setup
+    # Restored in teardown, so a run never clobbers a token the developer had exported.
+    @original_token = ENV["BASECRADLE_TOKEN"]
     ENV["BASECRADLE_TOKEN"] = FAKE_TOKEN
     # Examples that reference ./report.pdf run in a temp dir where that file exists.
     @workdir = Dir.mktmpdir
@@ -79,7 +81,7 @@ class ReadmeTest < Minitest::Test
   end
 
   def teardown
-    ENV.delete("BASECRADLE_TOKEN")
+    ENV["BASECRADLE_TOKEN"] = @original_token
     Dir.chdir(@original_dir)
     FileUtils.remove_entry(@workdir)
     super
