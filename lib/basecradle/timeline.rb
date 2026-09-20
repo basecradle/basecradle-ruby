@@ -47,7 +47,7 @@ module BaseCradle
     # A locked timeline is still deletable: locking freezes content, not governance.
     # Returns nil — the timeline is gone, so there is nothing left to return. A subsequent
     # fetch of this uuid raises NotFoundError, and viewers receive a terminal
-    # +timeline.deleted+ firehose event whose resource pointer now 404s.
+    # +timeline.deleted+ Event Delivery event whose resource pointer now 404s.
     def delete
       require_client.request("DELETE", "/timelines/#{uuid}")
       nil
