@@ -60,11 +60,14 @@ All notable changes to this project are documented here. The format is based on
   platform treats it opaquely). When given, it is sent as the `Idempotency-Key` request
   header. The platform stores **at most one record per key** (scoped per timeline + author;
   per timeline for authorless webhook endpoints), so a replayed keyed create returns the
-  **original record** — no duplicate record, firehose event, or task activation. A key
-  identifies one logical create: the same key with a different body still returns the
-  original record. Keys never expire and never appear in a response. Mirrors the platform's
-  new capability ([core #328](https://github.com/basecradle/basecradle/issues/328),
-  shipped in lockstep with the Python SDK).
+  **original record** — no duplicate record, no second **Event Delivery** event, no task
+  activation. (Event Delivery is the platform's *outbound* push through your integration;
+  the webhook endpoints named above are the *inbound* feature the SDK models — opposite
+  directions, different features.) A key identifies one logical create: the same key with a
+  different body still returns the original record. Keys never expire and never appear in a
+  response. Mirrors the platform's new capability
+  ([core #328](https://github.com/basecradle/basecradle/issues/328), shipped in lockstep
+  with the Python SDK).
   ([#108](https://github.com/basecradle/basecradle-ruby/issues/108))
 - **Opt-in automatic retries** — `BaseCradle::Client.new(max_retries: 2)` (and
   `Client.login(..., max_retries:)`) retries requests that are lost on the wire (a timeout
@@ -89,10 +92,11 @@ All notable changes to this project are documented here. The format is based on
   (`404`). Mirrors the platform's new capability
   ([core PR #315](https://github.com/basecradle/basecradle/pull/315)), shipped in lockstep
   with the Python SDK. ([#73](https://github.com/basecradle/basecradle-ruby/issues/73))
-- The platform's new terminal **`timeline.deleted`** firehose event — fired to everyone
-  who was a viewer at deletion, with a `resource` pointer that then `404`s — is documented
-  alongside `timeline.delete`. The SDK exposes no firehose event-name enum to extend, so
-  there is no new type or constant; the semantics are captured in the docs.
+- The platform's new terminal **`timeline.deleted`** event — the outbound **Event
+  Delivery** fired to everyone who was a viewer at deletion, with a `resource` pointer that
+  then `404`s — is documented alongside `timeline.delete`. The SDK exposes no Event Delivery
+  event-name enum to extend, so there is no new type or constant; the semantics are captured
+  in the docs.
 
 ## [0.2.0] - 2026-06-10
 
@@ -139,7 +143,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
   with the lazy composable `.filter`. Asset upload is multipart (a path or an IO); tasks
   accept a `Time`/`DateTime` or an ISO 8601 string.
 - **Webhooks** — endpoints (`create`, `enable`, `disable`, `rotate`) handing out an
-  ingest URL, and read-only delivery events.
+  ingest URL, and read-only inbound Webhook Events.
 - **Sessions** — self-credential management: list, `revoke`, and `revoke_all` (sharp by
   design, never blocked).
 - **Users & trust** — the directory, access-tiered profiles, and the `grant_trust` /

@@ -65,6 +65,8 @@ puts me.documentation.openapi        # the API's machine contract, if you want i
 
 Every attribute mirrors the API's JSON exactly — what you read in the [API docs](https://basecradle.com/docs/api) is what you type here.
 
+Your own identity also carries three read-only fields — `integration_url`, `integration_enabled`, and `integration_failure_count`. They report the status of your **integration**: the outbound connection the platform sends **Event Delivery** through. Like the rest of the self/admin cluster they are present on `bc.me.identity` (or an admin's view) and withheld elsewhere, where reading one raises `BaseCradle::MissingFieldError`. Configuring an integration is not an SDK surface — the SDK reports its status; it never sets the URL or flips the switch.
+
 ## Timelines
 
 Timelines are the platform's container. Iteration paginates automatically — cursors never appear in your code.
@@ -84,7 +86,7 @@ timeline.lock    # the emergency stop: one-way, any viewer can pull it
 timeline.delete  # owner-only, permanent: removes the timeline and all its contents
 ```
 
-`delete` is owner-only (an admin may delete any timeline; a participant gets `BaseCradle::NotTimelineOwnerError`, a `ForbiddenError`), permanent, and cascades to every message, asset, task, and webhook on the timeline. A locked timeline is still deletable. Viewers receive a terminal `timeline.deleted` firehose event whose resource pointer then 404s.
+`delete` is owner-only (an admin may delete any timeline; a participant gets `BaseCradle::NotTimelineOwnerError`, a `ForbiddenError`), permanent, and cascades to every message, asset, task, and webhook on the timeline. A locked timeline is still deletable. Viewers receive a terminal `timeline.deleted` Event Delivery event whose resource pointer then 404s.
 
 ## Messages, assets, tasks
 
@@ -122,7 +124,7 @@ end
 
 ## Webhooks
 
-External services deliver into a timeline by POSTing to an endpoint's secret ingest URL. Each delivery becomes a readable event.
+External services deliver into a timeline by POSTing to an endpoint's secret ingest URL. Each delivery becomes a readable event. This is the **inbound** direction — data arriving at BaseCradle. Its outbound counterpart is Event Delivery, the platform's push through your integration, which the SDK does not model.
 
 ```ruby
 require "basecradle"
