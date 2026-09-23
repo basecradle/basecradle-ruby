@@ -19,6 +19,26 @@ class TimelinesTest < Minitest::Test
     @bc.timelines.get(TIMELINE_UUID)
   end
 
+  # Stub GET /timelines/:uuid returning one inline item.
+  def stub_timeline_with(item)
+    stub_request(:get, "#{BASE_URL}/timelines/#{TIMELINE_UUID}")
+      .to_return(status: 200, body: { "timeline" => timeline_payload, "items" => [ item ] }.to_json)
+  end
+
+  # A webhook_event item: no author, and its endpoint embedded in full.
+  def webhook_event_item
+    event = webhook_event_payload
+    item_payload("webhook_event", event["content"], user: nil)
+      .merge("webhook_endpoint" => event["webhook_endpoint"])
+  end
+
+  # Stub POST /timelines/:uuid/participations with the {"user" => ...} envelope the API
+  # returns — the added user in subject form.
+  def stub_participation
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations")
+      .to_return(status: 201, body: { "user" => directory_user_payload(user: NOVA) }.to_json)
+  end
+
   # --- iteration & pagination ------------------------------------------------------------
 
   def test_iterates_timelines_newest_first
@@ -74,10 +94,7 @@ class TimelinesTest < Minitest::Test
   end
 
   def test_get_merges_items_inline_and_wraps_actors
-    item = { "type" => "message", "created_at" => "2026-01-02T00:00:00.000Z",
-             "user" => NOVA, "content" => { "uuid" => "m1", "body" => "hi" } }
-    stub_request(:get, "#{BASE_URL}/timelines/#{TIMELINE_UUID}")
-      .to_return(status: 200, body: { "timeline" => timeline_payload, "items" => [ item ] }.to_json)
+    stub_timeline_with(message_payload(user: NOVA))
 
     timeline = @bc.timelines.get(TIMELINE_UUID)
 
@@ -88,12 +105,22 @@ class TimelinesTest < Minitest::Test
     assert_equal "nova", timeline.items.first.user.handle
   end
 
-  # A webhook_event item has no author, so the platform omits +user+ there (core #585).
-  # The rest of the item reads normally; +user+ raises rather than inventing an author.
+  # An inline item is the record's own standalone form: same timeline reference and
+  # updated_at as its own page, with created_at the moment it landed on the timeline.
+  def test_an_inline_item_carries_its_timeline_reference_and_updated_at
+    stub_timeline_with(message_payload)
+
+    item = @bc.timelines.get(TIMELINE_UUID).items.first
+
+    assert_instance_of BaseCradle::Reference, item.timeline
+    assert_equal TIMELINE_UUID, item.timeline.uuid
+    assert_equal "2026-01-02T00:00:00.000Z", item.updated_at
+  end
+
+  # A webhook_event item has no author, so the platform omits +user+ there. The rest of
+  # the item reads normally; +user+ raises rather than inventing an author.
   def test_a_webhook_event_item_carries_no_user
-    item = item_payload("webhook_event", webhook_event_payload["content"], user: nil)
-    stub_request(:get, "#{BASE_URL}/timelines/#{TIMELINE_UUID}")
-      .to_return(status: 200, body: { "timeline" => timeline_payload, "items" => [ item ] }.to_json)
+    stub_timeline_with(webhook_event_item)
 
     event_item = @bc.timelines.get(TIMELINE_UUID).items.first
 
@@ -102,50 +129,83 @@ class TimelinesTest < Minitest::Test
     assert_raises(BaseCradle::MissingFieldError) { event_item.user }
   end
 
+  # A webhook_event item embeds its endpoint in full, exactly as the event's own page
+  # does — so it is a live endpoint, verbs and all, straight off the timeline.
+  def test_a_webhook_event_item_embeds_its_endpoint_in_full
+    stub_timeline_with(webhook_event_item)
+    stub_request(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
+      .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+
+    endpoint = @bc.timelines.get(TIMELINE_UUID).items.first.webhook_endpoint
+
+    assert_instance_of BaseCradle::WebhookEndpoint, endpoint
+    assert_equal WEBHOOK_ENDPOINT_UUID, endpoint.content.uuid
+    assert_equal "john", endpoint.user.handle
+    endpoint.rotate
+
+    assert_requested(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
+  end
+
+  # Only a webhook_event item carries an endpoint — on any other item reading it raises
+  # rather than inventing one.
+  def test_a_message_item_has_no_webhook_endpoint
+    stub_timeline_with(message_payload)
+
+    item = @bc.timelines.get(TIMELINE_UUID).items.first
+
+    assert_raises(BaseCradle::MissingFieldError) { item.webhook_endpoint }
+  end
+
   # --- verbs (live objects) --------------------------------------------------------------
 
-  def test_lock_updates_locked_in_place
+  def test_lock_adopts_the_whole_returned_timeline
     timeline = fetch_timeline
-    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/lock")
-      .to_return(status: 200, body: { "uuid" => TIMELINE_UUID, "locked" => true }.to_json)
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/lock").to_return(
+      status: 200,
+      body: { "timeline" => timeline_payload(locked: true,
+                                             updated_at: "2026-01-03T00:00:00.000Z") }.to_json
+    )
 
     refute timeline.locked
     assert_same timeline, timeline.lock
     assert timeline.locked
+    # Not just `locked`: the whole subject form is adopted, like every other live-object verb.
+    assert_equal "2026-01-03T00:00:00.000Z", timeline.updated_at
   end
 
-  # The lock response is moving to the timeline envelope (core #585) — read either shape.
-  def test_lock_reads_the_enveloped_response
-    timeline = fetch_timeline
+  # The lock response is the timeline's subject form, which carries no inline items —
+  # and locking freezes content rather than changing it, so the items we already read
+  # must survive the adopt.
+  def test_lock_keeps_the_items_the_timeline_was_fetched_with
+    stub_timeline_with(message_payload)
+    timeline = @bc.timelines.get(TIMELINE_UUID)
     stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/lock")
       .to_return(status: 200, body: { "timeline" => timeline_payload(locked: true) }.to_json)
 
-    refute timeline.locked
-    assert_same timeline, timeline.lock
+    timeline.lock
+
+    assert_equal 1, timeline.items.size
+    assert_equal "message", timeline.items.first.type
+  end
+
+  # A list row has no items key, so there is none to carry across — and the adopt must
+  # not invent one.
+  def test_lock_on_a_list_row_leaves_items_unreadable
+    stub_request(:get, "#{BASE_URL}/timelines")
+      .to_return(status: 200,
+                 body: { "timelines" => [ timeline_payload ], "next_cursor" => nil }.to_json)
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/lock")
+      .to_return(status: 200, body: { "timeline" => timeline_payload(locked: true) }.to_json)
+
+    timeline = @bc.timelines.first.lock
+
     assert timeline.locked
+    assert_raises(BaseCradle::MissingFieldError) { timeline.items }
   end
 
-  def test_add_participant_accepts_a_uuid_and_appends_the_returned_user
+  def test_add_participant_accepts_a_uuid_and_appends_the_user_from_the_envelope
     timeline = fetch_timeline(participants: [])
-    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations")
-      .to_return(status: 201, body: NOVA.to_json)
-
-    added = timeline.add_participant(NOVA["uuid"])
-
-    assert_instance_of BaseCradle::User, added
-    assert_equal "nova", added.handle
-    assert_equal [ "nova" ], timeline.participants.map(&:handle)
-    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations") do |req|
-      JSON.parse(req.body) == { "user_id" => NOVA["uuid"] }
-    end
-  end
-
-  # The participation response is moving to the {"user" => ...} envelope (core #585) —
-  # read either shape, and roster the user the API actually confirmed.
-  def test_add_participant_reads_the_enveloped_response
-    timeline = fetch_timeline(participants: [])
-    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations")
-      .to_return(status: 201, body: { "user" => directory_user_payload(user: NOVA) }.to_json)
+    stub_participation
 
     added = timeline.add_participant(NOVA["uuid"])
 
@@ -153,13 +213,15 @@ class TimelinesTest < Minitest::Test
     assert_equal "nova", added.handle
     assert_equal [ "nova" ], timeline.participants.map(&:handle)
     refute timeline.participants.first.trust.mutual # the subject form, rostered whole
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations") do |req|
+      JSON.parse(req.body) == { "user_id" => NOVA["uuid"] }
+    end
   end
 
   def test_add_participant_accepts_a_user_object_and_is_idempotent
     timeline = fetch_timeline(participants: [])
     nova = BaseCradle::User.new(NOVA)
-    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations")
-      .to_return(status: 201, body: NOVA.to_json)
+    stub_participation
 
     timeline.add_participant(nova)
     timeline.add_participant(nova)

@@ -143,10 +143,11 @@ module TestSupport
     }.merge(overrides.transform_keys(&:to_s))
   end
 
-  # One item's shared envelope (type, created_at, user, timeline-reference, content).
-  # +user+ is omitted when nil — a webhook_event item carries no author.
+  # One item's shared envelope (type, created_at, updated_at, user, timeline-reference,
+  # content). +user+ is omitted when nil — a webhook_event item carries no author.
   def item_payload(type, content, user: JOHN, timeline_uuid: TIMELINE_UUID)
-    item = { "type" => type, "created_at" => "2026-01-02T00:00:00.000Z" }
+    item = { "type" => type, "created_at" => "2026-01-02T00:00:00.000Z",
+             "updated_at" => "2026-01-02T00:00:00.000Z" }
     item["user"] = user unless user.nil?
     item.merge("timeline" => { "uuid" => timeline_uuid }, "content" => content)
   end
@@ -173,12 +174,15 @@ module TestSupport
   WEBHOOK_ENDPOINT_UUID = "019e7750-66ee-79fc-a07f-0301cf1ace97"
   INGEST_URL = "https://basecradle.com/webhooks/019e7750-66ee-705a-803c-b25c5ee9b1f3"
 
-  # A webhook endpoint in subject form. No user block (it belongs to the timeline).
+  # A webhook endpoint in subject form. +user+ is its author, in nested-actor form.
   def webhook_endpoint_payload(uuid: WEBHOOK_ENDPOINT_UUID, description: "CI notifications",
-                               enabled: true, ingest_url: INGEST_URL, timeline_uuid: TIMELINE_UUID)
+                               enabled: true, ingest_url: INGEST_URL, timeline_uuid: TIMELINE_UUID,
+                               user: JOHN)
     {
       "type" => "webhook_endpoint",
       "created_at" => "2026-01-02T00:00:00.000Z",
+      "updated_at" => "2026-01-02T00:00:00.000Z",
+      "user" => user,
       "timeline" => { "uuid" => timeline_uuid },
       "content" => {
         "uuid" => uuid, "description" => description, "enabled" => enabled,
@@ -225,22 +229,23 @@ module TestSupport
     }
   end
 
-  # A webhook event in subject form. No user block — an event has no author.
-  #
-  # +endpoint+ defaults to the reference form the platform sends today; pass
-  # +endpoint: webhook_endpoint_payload+ for the embedded full endpoint core #585 brings.
+  # A webhook event in subject form. No user block — an event has no author. Its
+  # +webhook_endpoint+ is the endpoint embedded in full; pass +endpoint:+ to vary it.
   def webhook_event_payload(uuid: "019e7750-66ee-7ab2-b3a1-e1b87de9d3b6",
-                            endpoint: { "uuid" => WEBHOOK_ENDPOINT_UUID },
-                            timeline_uuid: TIMELINE_UUID, payload: '{"status":"ok"}')
+                            endpoint: webhook_endpoint_payload,
+                            timeline_uuid: TIMELINE_UUID, payload: '{"status":"ok"}',
+                            verified_at_receipt: false)
     {
       "type" => "webhook_event",
       "created_at" => "2026-01-02T00:00:00.000Z",
+      "updated_at" => "2026-01-02T00:00:00.000Z",
       "timeline" => { "uuid" => timeline_uuid },
       "webhook_endpoint" => endpoint,
       "content" => {
         "uuid" => uuid, "content_type" => "application/json",
         "headers" => { "HTTP_X_EXAMPLE_EVENT" => "ping" }, "payload" => payload,
-        "ingest_token_at_receipt" => "019e7750-66ee-705a-803c-b25c5ee9b1f3"
+        "ingest_token_at_receipt" => "019e7750-66ee-705a-803c-b25c5ee9b1f3",
+        "verified_at_receipt" => verified_at_receipt
       }
     }
   end

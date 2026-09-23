@@ -39,12 +39,18 @@ bc = BaseCradle::Client.login(
   name:          "Test from Ruby"    # optional label, to tell your tokens apart later
 )
 
-bc.token   # the minted token — shown once, never retrievable again. Save it.
+bc.token         # the minted token — shown once, never retrievable again. Save it.
+bc.session.uuid  # the credential you just minted — what revokes it later
 ```
 
 Tokens never expire. Mint once, save it (a secrets manager, your shell profile,
 `BASECRADLE_TOKEN`) and reuse it — don't mint a fresh one every run. Lost it? Mint
 another; the old one works until you revoke it (see [Managing your own credentials](#managing-your-own-credentials)).
+
+`bc.session` is that credential as a full session — the same shape `bc.sessions` lists,
+with `current` true — so a peer can find and revoke what it just minted without listing
+everything first. It is `nil` on a client built from a saved token: only the mint
+response carries it.
 
 ## Who am I?
 
@@ -133,7 +139,9 @@ bc = BaseCradle::Client.new
 timeline = bc.timelines.create(name: "Incident response")
 
 endpoint = timeline.webhook_endpoints.create(description: "CI notifications")
+puts endpoint.content.uuid        # the endpoint's identity — addressed by this
 puts endpoint.content.ingest_url  # give this to the external sender
+puts endpoint.user.handle         # its author — the peer who created it
 
 endpoint.disable  # pause deliveries (410 to senders) without losing history
 endpoint.enable   # resume
@@ -142,12 +150,28 @@ endpoint.rotate   # leaked URL? new ingest_url, old one dies, uuid unchanged
 # Read what came in — across all timelines, or narrowed
 bc.webhook_events.filter(endpoint: endpoint).each do |event|
   puts [event.content.content_type, event.content.payload].inspect
+  puts event.content.verified_at_receipt              # was this delivery's signature verified?
+  puts event.webhook_endpoint.content.ingest_url      # the endpoint's URL *now*
 end
 ```
+
+An endpoint's identity is `endpoint.content.uuid` — the wire carries no top-level `uuid`
+and the SDK invents none. `BaseCradle.uuid_of(endpoint)` reads it too, and is what
+`.filter(endpoint:)` uses, so you can pass either an endpoint or a uuid.
+
+Each event embeds its endpoint **in full**, so `event.webhook_endpoint` is a live
+`BaseCradle::WebhookEndpoint` — its *current* state reads without a second request, and
+`disable` / `enable` / `rotate` work straight off the event. Two fields are the event's
+**historical** facts, fixed when the delivery arrived, and they are the only ones:
+`content.ingest_token_at_receipt` (which — possibly since-rotated — URL it came in on) and
+`content.verified_at_receipt` (whether its signature was verified). Everything inside the
+embedded endpoint is current.
 
 ## Idempotent creates & safe retries
 
 A create can succeed on the server while its response is lost on the wire — retrying it blind would duplicate the record. Pass an `idempotency_key:` (a UUID is ideal; any string works) and the platform stores **at most one record per key**: a resend returns the *original* record — no duplicate message, asset, task activation, or webhook endpoint. All four create methods accept it.
+
+Keys are scoped **per timeline and per author** for all four resources — yours never collide with another peer's, and the same key on two timelines creates two records.
 
 Opt into automatic retries with `max_retries:`. It is off by default, and even when on it only re-sends what's safe: any read (`GET`) and any create that carries an `idempotency_key`. An **unkeyed** create is never retried — which is why the two features ship together.
 

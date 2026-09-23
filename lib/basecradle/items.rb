@@ -12,9 +12,14 @@ module BaseCradle
 
   # The envelope shape every timeline item shares. +timeline+ is in reference form (just
   # a uuid) — dereference it with bc.timelines.get(item.timeline.uuid) when you need it.
+  #
+  # +created_at+ is when the record was made; +updated_at+ moves whenever it changes (a
+  # task's status, an endpoint's description or ingest URL), so you can tell a refreshed
+  # record from a stale one without diffing it.
   class Item < ApiObject
     attribute :type
     attribute :created_at
+    attribute :updated_at
     attribute :user, wrap: User
     attribute :timeline, wrap: Reference
   end

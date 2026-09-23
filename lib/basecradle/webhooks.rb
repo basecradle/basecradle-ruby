@@ -2,6 +2,7 @@
 
 require_relative "api_object"
 require_relative "items"
+require_relative "user"
 
 module BaseCradle
   # --- models ---------------------------------------------------------------------------
@@ -22,12 +23,18 @@ module BaseCradle
     attribute :verification, wrap: WebhookVerification
   end
 
-  # An inbound webhook URL on a timeline. Endpoints belong to the timeline, not a user,
-  # so there is no +user+ block. Verbs update this object from the full endpoint the API
-  # returns (live objects).
+  # An inbound webhook URL on a timeline. An endpoint is authored: +user+ is the peer who
+  # created it (nested-actor form), and every event delivered to it inherits that author.
+  # Verbs update this object from the full endpoint the API returns (live objects).
+  #
+  # The endpoint's identity is +content.uuid+ — the wire carries no top-level +uuid+, and
+  # the SDK does not invent one. +BaseCradle.uuid_of(endpoint)+ yields it too, which is
+  # what +bc.webhook_events.filter(endpoint:)+ uses.
   class WebhookEndpoint < ApiObject
     attribute :type
     attribute :created_at
+    attribute :updated_at
+    attribute :user, wrap: User # the endpoint's author
     attribute :timeline, wrap: Reference
     attribute :content, wrap: WebhookEndpointContent
 
@@ -65,28 +72,35 @@ module BaseCradle
     end
   end
 
-  # One inbound delivery: what was sent, and on which (possibly retired) ingest URL.
+  # One inbound delivery: what was sent, and the two facts about the endpoint as it was at
+  # the moment of receipt. Everything in the event's embedded endpoint is *current*; these
+  # two are historical, and they are the only ones.
   class WebhookEventContent < ApiObject
     attribute :uuid
     attribute :content_type
     attribute :headers
     attribute :payload # the raw request body, exactly as delivered
+    # The ingest token this delivery arrived on. Because the token rotates, comparing it
+    # to the end of the embedded endpoint's current +ingest_url+ tells you whether the
+    # endpoint has rotated since.
     attribute :ingest_token_at_receipt
+    # Whether this delivery's signature was verified when it arrived — false on an
+    # endpoint that had no signing secret at the time.
+    attribute :verified_at_receipt
   end
 
-  # One inbound delivery to a webhook endpoint. Read-only — produced by external senders.
+  # One inbound delivery to a webhook endpoint. Read-only — produced by external senders,
+  # so an event has no author.
   class WebhookEvent < ApiObject
     attribute :type
     attribute :created_at
+    attribute :updated_at
     attribute :timeline, wrap: Reference
-    # The event's direct container. The platform is moving this key from a bare reference
-    # to the endpoint's full subject form (core #585), so the wrapper is chosen from the
-    # payload: a full endpoint (it carries +content+) wraps as a WebhookEndpoint — its
-    # uuid is +webhook_endpoint.content.uuid+, and its verbs (disable / enable / rotate)
-    # are reachable — while a reference still wraps as a Reference, whose +uuid+ is the
-    # endpoint's. Read the uuid off whichever you got with +BaseCradle.uuid_of+.
-    attribute :webhook_endpoint,
-              wrap: ->(data) { data.key?("content") ? WebhookEndpoint : Reference }
+    # The endpoint this arrived on, embedded in full (its own subject form) rather than by
+    # reference — so its current state reads without a second request, and its verbs
+    # (disable / enable / rotate) are reachable straight off the event. Its uuid is
+    # +event.webhook_endpoint.content.uuid+, or +BaseCradle.uuid_of(...)+.
+    attribute :webhook_endpoint, wrap: WebhookEndpoint
     attribute :content, wrap: WebhookEventContent
   end
 
@@ -127,8 +141,9 @@ module BaseCradle
     # Create an inbound webhook endpoint on this timeline (viewer; the timeline unlocked).
     #
     # +idempotency_key+ (optional, a UUID recommended) makes the create safe to retry: the
-    # platform stores at most one endpoint per key (scoped per timeline — endpoints have no
-    # author), so a resend returns the original endpoint. See +BaseCradle::Client#max_retries+.
+    # platform stores at most one endpoint per key — scoped per timeline and author, like
+    # the other three creates — so a resend returns the original endpoint. See
+    # +BaseCradle::Client#max_retries+.
     def create(description:, idempotency_key: nil)
       response = @client.request("POST", "/timelines/#{@timeline_uuid}/webhook_endpoints",
                                  json: { "webhook_endpoint" => { "description" => description } },

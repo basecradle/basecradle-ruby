@@ -192,9 +192,7 @@ class ClientTest < Minitest::Test
   # --- login -----------------------------------------------------------------------------
 
   def test_login_mints_a_token_and_returns_an_authenticated_client
-    stub_request(:post, "#{BASE_URL}/session")
-      .to_return(status: 201,
-                 body: { "token" => FAKE_TOKEN, "start_here" => "#{BASE_URL}/docs/api.md" }.to_json)
+    stub_login
 
     client = BaseCradle::Client.login(email_address: "nova@example.com", password: "s3cret")
 
@@ -204,6 +202,37 @@ class ClientTest < Minitest::Test
       body = JSON.parse(req.body)
       body["email_address"] == "nova@example.com" && body["password"] == "s3cret"
     end
+  end
+
+  # The mint response carries the credential it just issued, in the same shape
+  # bc.sessions lists — so the caller can find and revoke what it minted.
+  def test_login_exposes_the_minted_session
+    stub_login
+
+    session = BaseCradle::Client.login(email_address: "nova@example.com", password: "s3cret").session
+
+    assert_instance_of BaseCradle::Session, session
+    assert_equal API_SESSION_UUID, session.uuid
+    assert_equal "api", session.kind
+    assert(session.current)
+  end
+
+  # It is the client's own token, so revoking it is self-rotation — the sharp edge the
+  # SDK allows by design. The session is attached to the client that minted it.
+  def test_the_minted_session_can_revoke_itself
+    stub_login
+    stub_request(:delete, "#{BASE_URL}/users/sessions/#{API_SESSION_UUID}").to_return(status: 204)
+
+    client = BaseCradle::Client.login(email_address: "nova@example.com", password: "s3cret")
+
+    assert_nil client.session.revoke
+    assert_requested(:delete, "#{BASE_URL}/users/sessions/#{API_SESSION_UUID}")
+  end
+
+  # A client built from a saved token never saw a mint response, so it has no session to
+  # report — and the SDK reports nothing rather than inventing one.
+  def test_a_client_built_from_a_token_has_no_minted_session
+    assert_nil BaseCradle::Client.new(FAKE_TOKEN).session
   end
 
   def test_login_sends_optional_name
@@ -235,6 +264,15 @@ class ClientTest < Minitest::Test
     assert_raises(BaseCradle::InvalidCredentialsError) do
       BaseCradle::Client.login(email_address: "nova@example.com", password: "wrong")
     end
+  end
+
+  # The documented POST /session response: the token, the minted session, start_here.
+  def stub_login
+    stub_request(:post, "#{BASE_URL}/session").to_return(
+      status: 201,
+      body: { "token" => FAKE_TOKEN, "session" => session_payload,
+              "start_here" => "#{BASE_URL}/docs/api.md" }.to_json
+    )
   end
 
   # --- sign out --------------------------------------------------------------------------

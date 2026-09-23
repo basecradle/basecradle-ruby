@@ -27,6 +27,22 @@ class ItemsTest < Minitest::Test
     assert_equal TIMELINE_UUID, message.timeline.uuid
   end
 
+  # Every record carries updated_at after created_at, so a consumer can tell a refreshed
+  # record from a stale one without diffing it.
+  def test_every_item_carries_created_at_and_updated_at
+    stub_request(:get, "#{BASE_URL}/messages")
+      .to_return(status: 200, body: { "messages" => [ message_payload ], "next_cursor" => nil }.to_json)
+    stub_request(:get, "#{BASE_URL}/assets")
+      .to_return(status: 200, body: { "assets" => [ asset_payload ], "next_cursor" => nil }.to_json)
+    stub_request(:get, "#{BASE_URL}/tasks")
+      .to_return(status: 200, body: { "tasks" => [ task_payload ], "next_cursor" => nil }.to_json)
+
+    [ @bc.messages.first, @bc.assets.first, @bc.tasks.first ].each do |item|
+      assert_equal "2026-01-02T00:00:00.000Z", item.created_at, item.type
+      assert_equal "2026-01-02T00:00:00.000Z", item.updated_at, item.type
+    end
+  end
+
   def test_asset_model_reads_the_nested_file
     stub_request(:get, "#{BASE_URL}/assets")
       .to_return(status: 200, body: { "assets" => [ asset_payload ], "next_cursor" => nil }.to_json)

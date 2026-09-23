@@ -9,13 +9,22 @@ module BaseCradle
   # One item on a timeline — a message, asset, webhook event, or task. +type+ says which;
   # +content+ is the item itself, wire-exact; +user+ is the author.
   #
-  # A +webhook_event+ item has no author — it was posted by an external sender, not a peer
-  # — so the platform omits +user+ there (core #585) and reading it raises
-  # +MissingFieldError+. Branch on +type+ when you walk a mixed page of items.
+  # An inline item is the record's own standalone form, with one difference: +created_at+
+  # is the *item's* — when the record landed on the timeline (for a task, its activation;
+  # its own page reports when it was scheduled) — while +updated_at+ is the record's.
+  #
+  # Two fields are type-specific, so branch on +type+ when you walk a mixed page: a
+  # +webhook_event+ item has no author — it was posted by an external sender, not a peer —
+  # and it alone carries +webhook_endpoint+, the endpoint it arrived on, embedded in full.
+  # Reading either where it does not belong raises +MissingFieldError+ rather than
+  # inventing a value.
   class TimelineItem < ApiObject
     attribute :type
     attribute :created_at
+    attribute :updated_at
     attribute :user, wrap: User
+    attribute :timeline, wrap: Reference
+    attribute :webhook_endpoint, wrap: WebhookEndpoint # webhook_event items only
     attribute :content # shape depends on type — read it wire-exact
   end
 
@@ -37,12 +46,11 @@ module BaseCradle
 
     # The emergency stop: freeze the timeline's content, permanently. Any viewer can lock;
     # it is idempotent and one-way (unlocking is an out-of-band admin action).
+    #
+    # Live object: the API returns the whole locked timeline and this object adopts it, so
+    # every field — +locked+, +updated_at+, the roster — is the platform's current answer.
     def lock
-      response = require_client.request("POST", "/timelines/#{uuid}/lock")
-      # The response is moving from a bare {uuid, locked} to the timeline envelope
-      # (core #585); read the confirmed state off whichever shape arrived.
-      to_h["locked"] = (response["timeline"] || response)["locked"]
-      self
+      adopt(require_client.request("POST", "/timelines/#{uuid}/lock"))
     end
 
     # Permanently delete this timeline and everything on it — messages, assets, tasks,
@@ -66,9 +74,7 @@ module BaseCradle
       response = conn.request(
         "POST", "/timelines/#{uuid}/participations", json: { "user_id" => BaseCradle.uuid_of(user) }
       )
-      # The response is moving from a bare nested-actor user to the {"user" => ...}
-      # envelope (core #585); take the added user from whichever shape arrived.
-      data = response["user"] || response
+      data = response.fetch("user")
       added = User.new(data, client: conn)
       roster = (to_h["participants"] ||= [])
       roster << data unless roster.any? { |p| p["uuid"] == added.uuid }
@@ -108,6 +114,19 @@ module BaseCradle
     # This timeline's webhook events (read-only) — iterate, newest first.
     def webhook_events
       TimelineWebhookEvents.new(require_client, uuid)
+    end
+
+    private
+
+    # Live-object update: the API returned the complete timeline, so this object points at
+    # it from here on. Inline +items+ we already hold are carried across as a *fallback*,
+    # never an override: only the two-key timeline envelope carries items, so the subject
+    # form a verb returns has none — and a verb that freezes content has not changed them.
+    def adopt(response)
+      updated = response.fetch("timeline")
+      updated = { "items" => to_h["items"] }.merge(updated) if to_h.key?("items")
+      @data = updated
+      self
     end
   end
 end

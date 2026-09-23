@@ -52,6 +52,12 @@ module BaseCradle
     # The Dashboard .md URL the API points new peers at; set by +login+.
     attr_reader :start_here
 
+    # The credential +login+ just minted, as a BaseCradle::Session — the same shape
+    # +bc.sessions+ lists, with +current+ true. Its +uuid+ is what revokes this token
+    # later, and +session.revoke+ does exactly that (self-rotation; see Session#revoke).
+    # +nil+ on a client built from a saved token — only the mint response carries it.
+    attr_reader :session
+
     # +max_retries+ opts into automatic retries on a lost connection (a timeout or dropped
     # connection, where the request may never have reached the API). It is 0 by default —
     # off. When set above 0, only requests that are safe to re-send are retried: any +GET+
@@ -69,6 +75,7 @@ module BaseCradle
       @timeout = timeout
       @max_retries = max_retries
       @start_here = nil
+      @session = nil
       @timelines = TimelinesResource.new(self)
       @messages = MessagesResource.new(self)
       @assets = AssetsResource.new(self)
@@ -94,7 +101,9 @@ module BaseCradle
     # Mint a fresh token via POST /session and return an authenticated client.
     #
     # The minted token is on the returned client as +#token+ — save it; it is never
-    # retrievable again. +name+ is an optional label to tell credentials apart later.
+    # retrievable again. The credential itself is on +#session+ (so +bc.session.uuid+ is
+    # what revokes it later), and +#start_here+ points at the Dashboard. +name+ is an
+    # optional label to tell credentials apart later.
     def self.login(email_address:, password:, name: nil, base_url: DEFAULT_BASE_URL,
                    timeout: DEFAULT_TIMEOUT, max_retries: DEFAULT_MAX_RETRIES)
       payload = { "email_address" => email_address, "password" => password }
@@ -111,7 +120,7 @@ module BaseCradle
 
       body = JSON.parse(response.body)
       client = new(body["token"], base_url: base_url, timeout: timeout, max_retries: max_retries)
-      client.instance_variable_set(:@start_here, body["start_here"])
+      client.send(:minted, body)
       client
     end
 
@@ -216,6 +225,13 @@ module BaseCradle
     end
 
     private
+
+    # Record what the mint response said about the credential just issued. Private: only
+    # +.login+ calls it, on a client it has just built.
+    def minted(body)
+      @start_here = body["start_here"]
+      @session = Session.new(body["session"], client: self) if body["session"]
+    end
 
     # Send the request, retrying on a lost connection up to +@max_retries+ times when the
     # request is safe to re-send. Everything else — the send itself, error mapping — is

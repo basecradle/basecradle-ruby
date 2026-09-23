@@ -11,7 +11,7 @@ class WebhooksTest < Minitest::Test
 
   # --- models -----------------------------------------------------------------------------
 
-  def test_endpoint_model_reads_content_and_verification
+  def test_endpoint_model_reads_its_author_content_and_verification
     stub_request(:get, "#{BASE_URL}/webhook_endpoints").to_return(
       status: 200,
       body: { "webhook_endpoints" => [ webhook_endpoint_payload ], "next_cursor" => nil }.to_json
@@ -23,9 +23,23 @@ class WebhooksTest < Minitest::Test
     assert_equal INGEST_URL, endpoint.content.ingest_url
     assert_equal "hmac_sha256_hex", endpoint.content.verification.verifier
     assert_instance_of BaseCradle::Reference, endpoint.timeline
+    # An endpoint is authored: user is the peer who created it, in nested-actor form.
+    assert_instance_of BaseCradle::User, endpoint.user
+    assert_equal "john", endpoint.user.handle
+    assert_equal "2026-01-02T00:00:00.000Z", endpoint.updated_at
   end
 
-  def test_event_model_is_read_only_content_and_reads_a_referenced_endpoint
+  # An endpoint has no top-level uuid on the wire, and the SDK invents none: its identity
+  # is content.uuid, which BaseCradle.uuid_of reads (that is what .filter uses).
+  def test_endpoint_identity_is_content_uuid
+    endpoint = an_endpoint
+
+    assert_equal WEBHOOK_ENDPOINT_UUID, endpoint.content.uuid
+    assert_equal WEBHOOK_ENDPOINT_UUID, BaseCradle.uuid_of(endpoint)
+    refute_respond_to endpoint, :uuid
+  end
+
+  def test_event_model_is_read_only_content_with_the_two_receipt_facts
     stub_request(:get, "#{BASE_URL}/webhook_events").to_return(
       status: 200,
       body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json
@@ -35,18 +49,29 @@ class WebhooksTest < Minitest::Test
 
     assert_instance_of BaseCradle::WebhookEvent, event
     assert_equal '{"status":"ok"}', event.content.payload
-    assert_instance_of BaseCradle::Reference, event.webhook_endpoint
-    assert_equal WEBHOOK_ENDPOINT_UUID, event.webhook_endpoint.uuid
-    assert_equal WEBHOOK_ENDPOINT_UUID, BaseCradle.uuid_of(event.webhook_endpoint)
+    assert_equal "2026-01-02T00:00:00.000Z", event.updated_at
+    assert_instance_of BaseCradle::Reference, event.timeline
+    # The event's two historical facts about the delivery, fixed at receipt.
+    assert_equal "019e7750-66ee-705a-803c-b25c5ee9b1f3", event.content.ingest_token_at_receipt
+    refute event.content.verified_at_receipt
   end
 
-  # The platform is moving webhook_endpoint from a reference to the full endpoint (core
-  # #585). Both shapes read, and the embedded one is a live endpoint, not a dead reference.
-  def test_event_reads_an_embedded_endpoint_and_keeps_its_verbs_reachable
+  def test_event_verified_at_receipt_reads_a_signed_delivery
     stub_request(:get, "#{BASE_URL}/webhook_events").to_return(
       status: 200,
-      body: { "webhook_events" => [ webhook_event_payload(endpoint: webhook_endpoint_payload) ],
+      body: { "webhook_events" => [ webhook_event_payload(verified_at_receipt: true) ],
               "next_cursor" => nil }.to_json
+    )
+
+    assert @bc.webhook_events.first.content.verified_at_receipt
+  end
+
+  # An event embeds its endpoint in full, so the endpoint's *current* state reads without
+  # a second request — and it is a live endpoint, not a dead reference.
+  def test_event_reads_its_embedded_endpoint_and_keeps_its_verbs_reachable
+    stub_request(:get, "#{BASE_URL}/webhook_events").to_return(
+      status: 200,
+      body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json
     )
     stub_request(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
       .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
@@ -56,6 +81,7 @@ class WebhooksTest < Minitest::Test
     assert_instance_of BaseCradle::WebhookEndpoint, endpoint
     assert_equal WEBHOOK_ENDPOINT_UUID, endpoint.content.uuid
     assert_equal INGEST_URL, endpoint.content.ingest_url
+    assert_equal "john", endpoint.user.handle # the author rides along
     assert_equal WEBHOOK_ENDPOINT_UUID, BaseCradle.uuid_of(endpoint) # so .filter still works
 
     endpoint.rotate # a verb, reachable because the event's client came with it
@@ -69,8 +95,7 @@ class WebhooksTest < Minitest::Test
     rotated_url = "#{BASE_URL}/webhooks/019e7750-66ee-7bd1-9cf4-0b2a6b5b0f4a"
     stub_request(:get, "#{BASE_URL}/webhook_events").to_return(
       status: 200,
-      body: { "webhook_events" => [ webhook_event_payload(endpoint: webhook_endpoint_payload) ],
-              "next_cursor" => nil }.to_json
+      body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json
     )
     stub_request(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
       .to_return(status: 200,
