@@ -40,7 +40,9 @@ module BaseCradle
     end
 
     # Declare a wire field. +wrap:+ names a model class to wrap the value in (a Hash
-    # becomes that model; an Array of Hashes becomes an Array of that model).
+    # becomes that model; an Array of Hashes becomes an Array of that model), or a
+    # callable that picks the class from the payload — how a field whose wire shape is
+    # mid-migration reads both forms.
     def self.attribute(name, wrap: nil)
       key = name.to_s
       define_method(name) do
@@ -85,15 +87,21 @@ module BaseCradle
                    "automatically."
     end
 
-    def wrap_value(value, klass)
+    def wrap_value(value, wrap)
       case value
       when Hash
-        klass.new(value, client: @client)
+        wrap_one(value, wrap)
       when Array
-        value.map { |item| item.is_a?(Hash) ? klass.new(item, client: @client) : item }
+        value.map { |item| item.is_a?(Hash) ? wrap_one(item, wrap) : item }
       else
         value
       end
+    end
+
+    # +wrap+ is a model class, or a callable returning the class for this payload.
+    def wrap_one(data, wrap)
+      klass = wrap.respond_to?(:call) ? wrap.call(data) : wrap
+      klass.new(data, client: @client)
     end
 
     def raise_missing(key)

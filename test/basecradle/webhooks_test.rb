@@ -25,7 +25,7 @@ class WebhooksTest < Minitest::Test
     assert_instance_of BaseCradle::Reference, endpoint.timeline
   end
 
-  def test_event_model_is_read_only_content
+  def test_event_model_is_read_only_content_and_reads_a_referenced_endpoint
     stub_request(:get, "#{BASE_URL}/webhook_events").to_return(
       status: 200,
       body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json
@@ -35,7 +35,54 @@ class WebhooksTest < Minitest::Test
 
     assert_instance_of BaseCradle::WebhookEvent, event
     assert_equal '{"status":"ok"}', event.content.payload
+    assert_instance_of BaseCradle::Reference, event.webhook_endpoint
     assert_equal WEBHOOK_ENDPOINT_UUID, event.webhook_endpoint.uuid
+    assert_equal WEBHOOK_ENDPOINT_UUID, BaseCradle.uuid_of(event.webhook_endpoint)
+  end
+
+  # The platform is moving webhook_endpoint from a reference to the full endpoint (core
+  # #585). Both shapes read, and the embedded one is a live endpoint, not a dead reference.
+  def test_event_reads_an_embedded_endpoint_and_keeps_its_verbs_reachable
+    stub_request(:get, "#{BASE_URL}/webhook_events").to_return(
+      status: 200,
+      body: { "webhook_events" => [ webhook_event_payload(endpoint: webhook_endpoint_payload) ],
+              "next_cursor" => nil }.to_json
+    )
+    stub_request(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
+      .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+
+    endpoint = @bc.webhook_events.first.webhook_endpoint
+
+    assert_instance_of BaseCradle::WebhookEndpoint, endpoint
+    assert_equal WEBHOOK_ENDPOINT_UUID, endpoint.content.uuid
+    assert_equal INGEST_URL, endpoint.content.ingest_url
+    assert_equal WEBHOOK_ENDPOINT_UUID, BaseCradle.uuid_of(endpoint) # so .filter still works
+
+    endpoint.rotate # a verb, reachable because the event's client came with it
+
+    assert_requested(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
+  end
+
+  # An event is a permanent record of one delivery, so acting on the endpoint it embeds
+  # must not rewrite it — the event still says which (now retired) ingest URL was live.
+  def test_rotating_an_endpoint_read_off_an_event_leaves_the_event_untouched
+    rotated_url = "#{BASE_URL}/webhooks/019e7750-66ee-7bd1-9cf4-0b2a6b5b0f4a"
+    stub_request(:get, "#{BASE_URL}/webhook_events").to_return(
+      status: 200,
+      body: { "webhook_events" => [ webhook_event_payload(endpoint: webhook_endpoint_payload) ],
+              "next_cursor" => nil }.to_json
+    )
+    stub_request(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
+      .to_return(status: 200,
+                 body: { "webhook_endpoint" =>
+                         webhook_endpoint_payload(ingest_url: rotated_url) }.to_json)
+
+    event = @bc.webhook_events.first
+    endpoint = event.webhook_endpoint
+    endpoint.rotate
+
+    assert_equal rotated_url, endpoint.content.ingest_url # the endpoint is live
+    assert_equal INGEST_URL, event.webhook_endpoint.content.ingest_url # the record is not
   end
 
   # --- verbs (live objects, addressed by content.uuid) ------------------------------------

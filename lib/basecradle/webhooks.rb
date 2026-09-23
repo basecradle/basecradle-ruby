@@ -54,9 +54,13 @@ module BaseCradle
       "/webhook_endpoints/#{content.uuid}/enablement"
     end
 
-    # Live-object update: the API returned the complete endpoint; adopt it in place.
+    # Live-object update: the API returned the complete endpoint, so this object points at
+    # it from here on. It re-points rather than overwriting the hash it was built from,
+    # because that hash may belong to something else: an endpoint read off a WebhookEvent
+    # is the event's own payload, and rewriting it would falsify the event's record of the
+    # (possibly since-retired) ingest URL that delivery arrived on.
     def adopt(response)
-      to_h.replace(response.fetch("webhook_endpoint"))
+      @data = response.fetch("webhook_endpoint")
       self
     end
   end
@@ -75,7 +79,14 @@ module BaseCradle
     attribute :type
     attribute :created_at
     attribute :timeline, wrap: Reference
-    attribute :webhook_endpoint, wrap: Reference # the event's direct container
+    # The event's direct container. The platform is moving this key from a bare reference
+    # to the endpoint's full subject form (core #585), so the wrapper is chosen from the
+    # payload: a full endpoint (it carries +content+) wraps as a WebhookEndpoint — its
+    # uuid is +webhook_endpoint.content.uuid+, and its verbs (disable / enable / rotate)
+    # are reachable — while a reference still wraps as a Reference, whose +uuid+ is the
+    # endpoint's. Read the uuid off whichever you got with +BaseCradle.uuid_of+.
+    attribute :webhook_endpoint,
+              wrap: ->(data) { data.key?("content") ? WebhookEndpoint : Reference }
     attribute :content, wrap: WebhookEventContent
   end
 

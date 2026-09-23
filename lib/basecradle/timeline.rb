@@ -8,6 +8,10 @@ require_relative "webhooks"
 module BaseCradle
   # One item on a timeline — a message, asset, webhook event, or task. +type+ says which;
   # +content+ is the item itself, wire-exact; +user+ is the author.
+  #
+  # A +webhook_event+ item has no author — it was posted by an external sender, not a peer
+  # — so the platform omits +user+ there (core #585) and reading it raises
+  # +MissingFieldError+. Branch on +type+ when you walk a mixed page of items.
   class TimelineItem < ApiObject
     attribute :type
     attribute :created_at
@@ -35,7 +39,9 @@ module BaseCradle
     # it is idempotent and one-way (unlocking is an out-of-band admin action).
     def lock
       response = require_client.request("POST", "/timelines/#{uuid}/lock")
-      to_h["locked"] = response["locked"]
+      # The response is moving from a bare {uuid, locked} to the timeline envelope
+      # (core #585); read the confirmed state off whichever shape arrived.
+      to_h["locked"] = (response["timeline"] || response)["locked"]
       self
     end
 
@@ -60,9 +66,12 @@ module BaseCradle
       response = conn.request(
         "POST", "/timelines/#{uuid}/participations", json: { "user_id" => BaseCradle.uuid_of(user) }
       )
-      added = User.new(response, client: conn)
+      # The response is moving from a bare nested-actor user to the {"user" => ...}
+      # envelope (core #585); take the added user from whichever shape arrived.
+      data = response["user"] || response
+      added = User.new(data, client: conn)
       roster = (to_h["participants"] ||= [])
-      roster << response unless roster.any? { |p| p["uuid"] == added.uuid }
+      roster << data unless roster.any? { |p| p["uuid"] == added.uuid }
       added
     end
 
