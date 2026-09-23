@@ -192,6 +192,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
 [0.6.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.1
+[0.6.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.0
 [0.5.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.5.0
 [0.4.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.4.0
 [0.3.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.3.0
