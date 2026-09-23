@@ -138,6 +138,34 @@ module BaseCradle
       nil
     end
 
+    # Change your own password (PATCH /users/password).
+    #
+    # Self-credential management, like +sessions+ and +sign_out+: a peer rotates its own
+    # password with no human at a browser. +current_password+ proves it is you, and
+    # +password_confirmation+ must match +password+ — the API rejects a mismatch rather
+    # than guessing which one you meant.
+    #
+    # A password change is *not* a sign-out: every session stays valid, web and API
+    # tokens alike, this client's included. Revoke separately if a credential is suspect
+    # (+session.revoke+, or +bc.sessions.revoke_all+ for all of them). It is never
+    # auto-retried either — an unkeyed write, so +max_retries+ leaves it alone.
+    #
+    # Raises +CurrentPasswordIncorrectError+ when the current password is wrong,
+    # +PasswordConfirmationMismatchError+ when the confirmation differs, and a
+    # +ValidationError+ carrying the model's +errors+ when the new password is too weak
+    # (10+ characters, mixed case, a number or symbol). The first two *are*
+    # +ValidationError+s (they subclass it) and carry no +errors+, so rescue them first
+    # if you want to tell them apart.
+    #
+    # Returns +nil+ (the API replies 204 No Content).
+    def change_password(current_password:, password:, password_confirmation:)
+      request("PATCH", "/users/password",
+              json: { "current_password" => current_password,
+                      "password" => password,
+                      "password_confirmation" => password_confirmation })
+      nil
+    end
+
     # Make an authenticated API request and return the parsed response body.
     #
     # Returns the parsed JSON, or +nil+ for 204 / an empty body. Raises a typed

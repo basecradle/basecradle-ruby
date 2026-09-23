@@ -62,6 +62,8 @@ module DriftGuard
     [ "GET", "/users/sessions" ] => "bc.sessions (iteration)",
     [ "DELETE", "/users/sessions" ] => "bc.sessions.revoke_all",
     [ "DELETE", "/users/sessions/{id}" ] => "session.revoke",
+    # Password — self-credential management
+    [ "PATCH", "/users/password" ] => "bc.change_password",
     # Webhook ingest — intentionally not covered: the ingest URL is for *external senders*,
     # not authenticated peers. The SDK's job is handing it out (endpoint.content.ingest_url),
     # not POSTing to it.

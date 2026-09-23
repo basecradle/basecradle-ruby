@@ -72,6 +72,7 @@ class DriftGuardTest < Minitest::Test
     assert_respond_to BaseCradle::Client, :login
     assert_respond_to bc, :me
     assert_respond_to bc, :sign_out
+    assert_respond_to bc, :change_password
     %i[timelines messages assets tasks webhook_endpoints webhook_events sessions users].each do |r|
       assert_respond_to bc, r, "COVERAGE references bc.#{r}, which is gone"
     end

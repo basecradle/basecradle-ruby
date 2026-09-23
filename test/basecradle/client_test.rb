@@ -258,4 +258,86 @@ class ClientTest < Minitest::Test
 
     assert_raises(BaseCradle::AuthenticationError) { @bc.me }
   end
+
+  # --- change password -------------------------------------------------------------------
+
+  # Fabricated passwords, from the docs' own worked example.
+  OLD_PASSWORD = "correct-horse-battery-staple"
+  NEW_PASSWORD = "Tr0ub4dor&3-new"
+
+  # The happy-path call, so each test below names only what it varies.
+  def change_password(new_password: NEW_PASSWORD)
+    @bc.change_password(current_password: OLD_PASSWORD, password: new_password,
+                        password_confirmation: new_password)
+  end
+
+  def test_change_password_sends_the_three_fields_and_returns_nil
+    stub_request(:patch, "#{BASE_URL}/users/password").to_return(status: 204)
+
+    assert_nil change_password
+
+    assert_requested(:patch, "#{BASE_URL}/users/password") do |req|
+      req.headers["Authorization"] == "Bearer #{FAKE_TOKEN}" &&
+        req.headers["Content-Type"] == "application/json" &&
+        JSON.parse(req.body) == { "current_password" => OLD_PASSWORD,
+                                  "password" => NEW_PASSWORD,
+                                  "password_confirmation" => NEW_PASSWORD }
+    end
+  end
+
+  def test_change_password_raises_when_the_current_password_is_wrong
+    stub_request(:patch, "#{BASE_URL}/users/password")
+      .to_return(status: 422, body: problem("current_password_incorrect", 422).to_json)
+
+    assert_raises(BaseCradle::CurrentPasswordIncorrectError) { change_password }
+  end
+
+  def test_change_password_raises_when_the_confirmation_differs
+    stub_request(:patch, "#{BASE_URL}/users/password")
+      .to_return(status: 422, body: problem("password_confirmation_mismatch", 422).to_json)
+
+    assert_raises(BaseCradle::PasswordConfirmationMismatchError) do
+      @bc.change_password(current_password: OLD_PASSWORD, password: NEW_PASSWORD,
+                          password_confirmation: "Tr0ub4dor&3-typo")
+    end
+  end
+
+  def test_change_password_surfaces_the_models_errors_when_the_new_password_is_too_weak
+    weak = problem("validation_failed", 422,
+                   errors: { "password" => [ "is too short (minimum is 10 characters)" ] })
+    stub_request(:patch, "#{BASE_URL}/users/password").to_return(status: 422, body: weak.to_json)
+
+    error = assert_raises(BaseCradle::ValidationError) { change_password(new_password: "short") }
+
+    assert_equal [ "is too short (minimum is 10 characters)" ], error.errors["password"]
+  end
+
+  def test_change_password_is_not_a_sign_out
+    # Documented: every session stays valid, this client's token included.
+    stub_request(:patch, "#{BASE_URL}/users/password").to_return(status: 204)
+    # Matched on the token, so a change_password that quietly invalidated it (the way
+    # sign_out does) would leave this request unstubbed rather than passing.
+    stub_request(:get, "#{BASE_URL}/users/dashboard")
+      .with(headers: { "Authorization" => "Bearer #{FAKE_TOKEN}" })
+      .to_return(status: 200, body: DASHBOARD_RESPONSE.to_json)
+
+    change_password
+
+    assert_equal "nova", @bc.me.identity.handle
+  end
+
+  def test_change_password_is_never_auto_retried
+    # An unkeyed write: even with retries on, a lost connection raises rather than
+    # re-sending a password change whose first attempt may have landed.
+    bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 3)
+    stub_request(:patch, "#{BASE_URL}/users/password").to_timeout
+
+    stub_method(bc, :backoff, nil) do
+      assert_raises(BaseCradle::APIConnectionError) do
+        bc.change_password(current_password: OLD_PASSWORD, password: NEW_PASSWORD,
+                           password_confirmation: NEW_PASSWORD)
+      end
+    end
+    assert_requested(:patch, "#{BASE_URL}/users/password", times: 1)
+  end
 end
