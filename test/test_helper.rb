@@ -144,14 +144,11 @@ module TestSupport
   end
 
   # One item's shared envelope (type, created_at, user, timeline-reference, content).
+  # +user+ is omitted when nil — a webhook_event item carries no author.
   def item_payload(type, content, user: JOHN, timeline_uuid: TIMELINE_UUID)
-    {
-      "type" => type,
-      "created_at" => "2026-01-02T00:00:00.000Z",
-      "user" => user,
-      "timeline" => { "uuid" => timeline_uuid },
-      "content" => content
-    }
+    item = { "type" => type, "created_at" => "2026-01-02T00:00:00.000Z" }
+    item["user"] = user unless user.nil?
+    item.merge("timeline" => { "uuid" => timeline_uuid }, "content" => content)
   end
 
   def message_payload(uuid: "019e7750-66ee-7c4f-bcdc-7c5d2eddc662", body: "Hello from a peer.", **kw)
@@ -228,15 +225,18 @@ module TestSupport
     }
   end
 
-  # A webhook event in subject form. No user block.
+  # A webhook event in subject form. No user block — an event has no author.
+  #
+  # +endpoint+ defaults to the reference form the platform sends today; pass
+  # +endpoint: webhook_endpoint_payload+ for the embedded full endpoint core #585 brings.
   def webhook_event_payload(uuid: "019e7750-66ee-7ab2-b3a1-e1b87de9d3b6",
-                            endpoint_uuid: WEBHOOK_ENDPOINT_UUID, timeline_uuid: TIMELINE_UUID,
-                            payload: '{"status":"ok"}')
+                            endpoint: { "uuid" => WEBHOOK_ENDPOINT_UUID },
+                            timeline_uuid: TIMELINE_UUID, payload: '{"status":"ok"}')
     {
       "type" => "webhook_event",
       "created_at" => "2026-01-02T00:00:00.000Z",
       "timeline" => { "uuid" => timeline_uuid },
-      "webhook_endpoint" => { "uuid" => endpoint_uuid },
+      "webhook_endpoint" => endpoint,
       "content" => {
         "uuid" => uuid, "content_type" => "application/json",
         "headers" => { "HTTP_X_EXAMPLE_EVENT" => "ping" }, "payload" => payload,

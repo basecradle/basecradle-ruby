@@ -88,12 +88,37 @@ class TimelinesTest < Minitest::Test
     assert_equal "nova", timeline.items.first.user.handle
   end
 
+  # A webhook_event item has no author, so the platform omits +user+ there (core #585).
+  # The rest of the item reads normally; +user+ raises rather than inventing an author.
+  def test_a_webhook_event_item_carries_no_user
+    item = item_payload("webhook_event", webhook_event_payload["content"], user: nil)
+    stub_request(:get, "#{BASE_URL}/timelines/#{TIMELINE_UUID}")
+      .to_return(status: 200, body: { "timeline" => timeline_payload, "items" => [ item ] }.to_json)
+
+    event_item = @bc.timelines.get(TIMELINE_UUID).items.first
+
+    assert_equal "webhook_event", event_item.type
+    assert_equal '{"status":"ok"}', event_item.content["payload"]
+    assert_raises(BaseCradle::MissingFieldError) { event_item.user }
+  end
+
   # --- verbs (live objects) --------------------------------------------------------------
 
   def test_lock_updates_locked_in_place
     timeline = fetch_timeline
     stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/lock")
       .to_return(status: 200, body: { "uuid" => TIMELINE_UUID, "locked" => true }.to_json)
+
+    refute timeline.locked
+    assert_same timeline, timeline.lock
+    assert timeline.locked
+  end
+
+  # The lock response is moving to the timeline envelope (core #585) — read either shape.
+  def test_lock_reads_the_enveloped_response
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/lock")
+      .to_return(status: 200, body: { "timeline" => timeline_payload(locked: true) }.to_json)
 
     refute timeline.locked
     assert_same timeline, timeline.lock
@@ -113,6 +138,21 @@ class TimelinesTest < Minitest::Test
     assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations") do |req|
       JSON.parse(req.body) == { "user_id" => NOVA["uuid"] }
     end
+  end
+
+  # The participation response is moving to the {"user" => ...} envelope (core #585) —
+  # read either shape, and roster the user the API actually confirmed.
+  def test_add_participant_reads_the_enveloped_response
+    timeline = fetch_timeline(participants: [])
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/participations")
+      .to_return(status: 201, body: { "user" => directory_user_payload(user: NOVA) }.to_json)
+
+    added = timeline.add_participant(NOVA["uuid"])
+
+    assert_instance_of BaseCradle::User, added
+    assert_equal "nova", added.handle
+    assert_equal [ "nova" ], timeline.participants.map(&:handle)
+    refute timeline.participants.first.trust.mutual # the subject form, rostered whole
   end
 
   def test_add_participant_accepts_a_user_object_and_is_idempotent

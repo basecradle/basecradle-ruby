@@ -4,6 +4,42 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-09-23
+
+### Changed
+
+- **Reads both wire shapes across the platform's coming breaking release** — the SDK now
+  accepts today's shapes *and* the ones
+  [core #585](https://github.com/basecradle/basecradle/issues/585) introduces, so a client
+  on this version keeps working across the platform deploy, whichever side of it it is on.
+  Every call site reads as before but one, called out below.
+  - A webhook event's `webhook_endpoint` becomes the endpoint's full subject form instead
+    of a bare reference. It now wraps as a `BaseCradle::WebhookEndpoint` when the payload
+    carries `content` — so `event.webhook_endpoint.content.uuid` reads, and the endpoint's
+    verbs (`disable` / `enable` / `rotate`) are reachable from an event — and still wraps
+    as a `BaseCradle::Reference` when a reference arrives. **The one caller-visible
+    change:** `event.webhook_endpoint.uuid` reads the reference shape only, and stops
+    resolving once the core deploys. Take the endpoint uuid with
+    `BaseCradle.uuid_of(event.webhook_endpoint)`, which yields it from either shape — it is
+    what `bc.webhook_events.filter(endpoint:)` uses, so filtering is unaffected.
+  - Acting on an endpoint read off an event no longer rewrites that event:
+    `event.webhook_endpoint.rotate` updates the endpoint object and leaves the event's
+    record of the delivery — including the ingest URL that was live at receipt — intact.
+  - `timeline.lock` reads the confirmed `locked` from the new `{"timeline" => ...}`
+    envelope or from today's bare `{uuid, locked}` body.
+  - `timeline.add_participant` takes the added user from the new `{"user" => ...}`
+    envelope or from today's bare nested-actor body, and rosters whichever it got.
+  - A `webhook_event` item in `timeline.items` no longer carries `user` — a webhook event
+    has no author. Reading `item.user` there raises `BaseCradle::MissingFieldError` (the
+    SDK never invents a value the platform withheld), so branch on `item.type` when you
+    walk a mixed page. Documented on `BaseCradle::TimelineItem`.
+  - `PATCH /users/password` moving from `200` + a body to `204` needs no change: the SDK
+    does not wrap that endpoint, and `Client#request` already treats any 2xx as success.
+  - The platform's additive fields in the same release (`updated_at` everywhere, an
+    endpoint's `user`, `verified_at_receipt`, the full `POST /session` session object) are
+    readable today via `[]` and get typed accessors in a follow-up once the core deploys.
+  ([#164](https://github.com/basecradle/basecradle-ruby/issues/164))
+
 ## [0.6.0] - 2026-07-17
 
 ### Added
@@ -155,6 +191,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.6.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.1
 [0.5.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.5.0
 [0.4.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.4.0
 [0.3.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.3.0
