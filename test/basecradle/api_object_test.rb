@@ -8,17 +8,10 @@ class ApiObjectTest < Minitest::Test
     attribute :label
   end
 
-  class Outer < BaseCradle::ApiObject
-    attribute :label
-    attribute :extra
-  end
-
   class Sample < BaseCradle::ApiObject
     attribute :name
     attribute :inner, wrap: Inner
     attribute :items, wrap: Inner
-    # A field whose wire shape is mid-migration: the class is picked per payload.
-    attribute :either, wrap: ->(data) { data.key?("extra") ? Outer : Inner }
   end
 
   def test_attribute_returns_the_wire_value
@@ -52,11 +45,6 @@ class ApiObjectTest < Minitest::Test
 
     assert_equal %w[a b], object.items.map(&:label)
     assert(object.items.all?(Inner))
-  end
-
-  def test_a_callable_wrap_picks_the_class_from_the_payload
-    assert_instance_of Inner, Sample.new({ "either" => { "label" => "old" } }).either
-    assert_instance_of Outer, Sample.new({ "either" => { "label" => "new", "extra" => 1 } }).either
   end
 
   def test_equality_and_hash_are_value_based

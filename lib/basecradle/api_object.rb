@@ -40,9 +40,7 @@ module BaseCradle
     end
 
     # Declare a wire field. +wrap:+ names a model class to wrap the value in (a Hash
-    # becomes that model; an Array of Hashes becomes an Array of that model), or a
-    # callable that picks the class from the payload — how a field whose wire shape is
-    # mid-migration reads both forms.
+    # becomes that model; an Array of Hashes becomes an Array of that model).
     def self.attribute(name, wrap: nil)
       key = name.to_s
       define_method(name) do
@@ -87,21 +85,15 @@ module BaseCradle
                    "automatically."
     end
 
-    def wrap_value(value, wrap)
+    def wrap_value(value, klass)
       case value
       when Hash
-        wrap_one(value, wrap)
+        klass.new(value, client: @client)
       when Array
-        value.map { |item| item.is_a?(Hash) ? wrap_one(item, wrap) : item }
+        value.map { |item| item.is_a?(Hash) ? klass.new(item, client: @client) : item }
       else
         value
       end
-    end
-
-    # +wrap+ is a model class, or a callable returning the class for this payload.
-    def wrap_one(data, wrap)
-      klass = wrap.respond_to?(:call) ? wrap.call(data) : wrap
-      klass.new(data, client: @client)
     end
 
     def raise_missing(key)
@@ -112,8 +104,9 @@ module BaseCradle
     end
   end
 
-  # A record in reference form — just a uuid to dereference (e.g. an item's +timeline+,
-  # or a webhook event's +webhook_endpoint+). Fetch the full record when you need it.
+  # A record in reference form — just a uuid to dereference. Every record that lives on a
+  # timeline points back at it this way (+message.timeline+, +endpoint.timeline+, ...).
+  # Fetch the full record when you need it.
   class Reference < ApiObject
     attribute :uuid
   end

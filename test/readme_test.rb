@@ -26,9 +26,11 @@ class ReadmeTest < Minitest::Test
     @original_dir = Dir.pwd
     Dir.chdir(@workdir)
 
-    stub_request(:post, "#{BASE_URL}/session")
-      .to_return(status: 201,
-                 body: { "token" => FAKE_TOKEN, "start_here" => "#{BASE_URL}/docs/api.md" }.to_json)
+    stub_request(:post, "#{BASE_URL}/session").to_return(
+      status: 201,
+      body: { "token" => FAKE_TOKEN, "session" => session_payload,
+              "start_here" => "#{BASE_URL}/docs/api.md" }.to_json
+    )
     stub_request(:get, "#{BASE_URL}/users/dashboard")
       .to_return(status: 200, body: DASHBOARD_RESPONSE.to_json)
     stub_request(:get, "#{BASE_URL}/timelines")
@@ -36,9 +38,9 @@ class ReadmeTest < Minitest::Test
     stub_request(:post, "#{BASE_URL}/timelines")
       .to_return(status: 201, body: { "timeline" => timeline_payload(participants: []), "items" => [] }.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/participations})
-      .to_return(status: 201, body: NOVA.to_json)
+      .to_return(status: 201, body: { "user" => directory_user_payload(user: NOVA) }.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/lock})
-      .to_return(status: 200, body: { "uuid" => TIMELINE_UUID, "locked" => true }.to_json)
+      .to_return(status: 200, body: { "timeline" => timeline_payload(locked: true) }.to_json)
     stub_request(:delete, %r{#{BASE_URL}/timelines/[^/]+\z}).to_return(status: 204)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/messages})
       .to_return(status: 201, body: { "message" => message_payload }.to_json)

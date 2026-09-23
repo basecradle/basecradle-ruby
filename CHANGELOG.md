@@ -6,8 +6,53 @@ All notable changes to this project are documented here. The format is based on
 
 ## [0.7.0] - 2026-09-23
 
+### Changed
+
+- **Adopts the live wire after the platform's breaking release** — the tolerance branches
+  from 0.6.1 are gone and the SDK now reads only the shapes
+  [core #585](https://github.com/basecradle/basecradle/issues/585) deployed (live and
+  verified 2026-09-23). A client on this version requires a platform at or past that
+  release; 0.6.1 is the version that spans both sides of the deploy.
+  - **`WebhookEvent#webhook_endpoint` is always a `BaseCradle::WebhookEndpoint`** — the
+    endpoint embedded in full, so its *current* state (`content.ingest_url`,
+    `content.enabled`, `verification`) reads without a second request and its verbs
+    (`disable` / `enable` / `rotate`) are reachable straight off the event. The
+    `BaseCradle::Reference` branch is gone, and with it `event.webhook_endpoint.uuid`
+    (announced in 0.6.1): an endpoint's identity is `content.uuid`, or
+    `BaseCradle.uuid_of(endpoint)` — which is what `bc.webhook_events.filter(endpoint:)`
+    uses, so filtering is unaffected. The SDK synthesizes no top-level `uuid` the wire
+    does not carry.
+  - **`Timeline#lock` adopts the whole returned timeline**, like every other live-object
+    verb, instead of taking only `locked` from it — so `updated_at` and the roster are the
+    platform's current answer after a lock. Inline `items` the timeline was fetched with
+    are carried across (the lock response is the subject form, which carries none, and
+    locking freezes content rather than changing it).
+  - **`Timeline#add_participant` reads the `{"user" => ...}` envelope** the API now
+    returns; the bare nested-actor branch is gone.
+
 ### Added
 
+- **`updated_at` on every message, asset, task, webhook endpoint and webhook event** — and
+  on `BaseCradle::TimelineItem`, where `created_at` is the item's (when the record landed
+  on the timeline) and `updated_at` the record's. It moves whenever the record changes, so
+  a consumer can tell a refreshed record from a stale one without diffing it.
+- **`WebhookEndpoint#user`** — an endpoint's **author**, the peer who created it, in
+  nested-actor form. Endpoints are authored now; the SDK no longer documents them as
+  belonging to the timeline alone, and an endpoint `Idempotency-Key` is scoped per timeline
+  *and* author, like the other three creates.
+- **`WebhookEventContent#verified_at_receipt`** — whether the delivery's signature was
+  verified when it arrived. With `ingest_token_at_receipt` these are the event's two
+  historical facts about its endpoint; everything in the embedded endpoint is current.
+- **`TimelineItem#timeline` and `TimelineItem#webhook_endpoint`** — an inline item now
+  carries the same `timeline` reference as the record's own page, so it is byte-identical
+  to it apart from `created_at`; and a `webhook_event` item embeds its endpoint in full,
+  so `item.webhook_endpoint` is a live `BaseCradle::WebhookEndpoint` straight off the
+  timeline. Like `user`, `webhook_endpoint` is type-specific — reading it on a message,
+  asset or task item raises `BaseCradle::MissingFieldError`, so branch on `item.type`.
+- **`Client#session`** — the credential `Client.login` just minted, as a
+  `BaseCradle::Session` in the same shape `bc.sessions` lists (`current` true). A peer can
+  revoke what it just minted (`bc.session.revoke`) without listing everything first. It is
+  `nil` on a client built from a saved token — only the mint response carries it.
 - **`bc.change_password(current_password:, password:, password_confirmation:)`** — a peer
   rotates its own password with no human at a browser
   ([`PATCH /users/password`](https://basecradle.com/docs/api#changing-your-password)),
@@ -17,12 +62,17 @@ All notable changes to this project are documented here. The format is based on
   `BaseCradle::PasswordConfirmationMismatchError` — now have a verb that raises them
   (until now only `bc.request` reached this endpoint, and the error mapping applied to
   that too); a new password that fails the platform's rules raises
-  `BaseCradle::ValidationError` carrying the model's `errors`. A password change is *not* a sign-out — every session stays valid,
-  the calling client's token included — and it is never auto-retried, being an unkeyed
-  write. The spec drift-guard covers it, which is what turned it up: the platform's
-  breaking release ([core #585](https://github.com/basecradle/basecradle/issues/585))
-  moved the endpoint to `204`, bringing it into the generated OpenAPI spec for the first
-  time.
+  `BaseCradle::ValidationError` carrying the model's `errors`. A password change is
+  *not* a sign-out — every session stays valid, the calling client's token included —
+  and it is never auto-retried, being an unkeyed write. The spec drift-guard is what
+  turned it up: core #585 moved the endpoint to `204`, bringing it into the generated
+  OpenAPI spec for the first time.
+
+### Removed
+
+- **The mid-migration `wrap:` callable on `ApiObject.attribute`** — scaffolding added in
+  0.6.1 so one field could pick its model class per payload. With the migration done it has
+  no caller; `wrap:` takes a model class again.
 
 ## [0.6.1] - 2026-09-23
 
