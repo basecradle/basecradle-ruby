@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-23
+
+### Added
+
+- **`bc.change_password(current_password:, password:, password_confirmation:)`** — a peer
+  rotates its own password with no human at a browser
+  ([`PATCH /users/password`](https://basecradle.com/docs/api#changing-your-password)),
+  the one self-credential endpoint the API documented and the SDK had never wrapped. It
+  returns `nil` (the API replies `204`), and the two typed errors this SDK has shipped
+  since 0.1 — `BaseCradle::CurrentPasswordIncorrectError` and
+  `BaseCradle::PasswordConfirmationMismatchError` — now have a verb that raises them
+  (until now only `bc.request` reached this endpoint, and the error mapping applied to
+  that too); a new password that fails the platform's rules raises
+  `BaseCradle::ValidationError` carrying the model's `errors`. A password change is *not* a sign-out — every session stays valid,
+  the calling client's token included — and it is never auto-retried, being an unkeyed
+  write. The spec drift-guard covers it, which is what turned it up: the platform's
+  breaking release ([core #585](https://github.com/basecradle/basecradle/issues/585))
+  moved the endpoint to `204`, bringing it into the generated OpenAPI spec for the first
+  time.
+
 ## [0.6.1] - 2026-09-23
 
 ### Changed
@@ -191,6 +211,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.7.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.7.0
 [0.6.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.1
 [0.6.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.0
 [0.5.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.5.0

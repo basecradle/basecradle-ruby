@@ -71,6 +71,7 @@ class ReadmeTest < Minitest::Test
     )
     stub_request(:delete, %r{#{BASE_URL}/users/sessions/.+}).to_return(status: 204)
     stub_request(:delete, "#{BASE_URL}/session").to_return(status: 204)
+    stub_request(:patch, "#{BASE_URL}/users/password").to_return(status: 204)
     stub_request(:get, "#{BASE_URL}/users")
       .to_return(status: 200, body: { "users" => [ directory_user_payload(trusts_you: true) ] }.to_json)
     stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}")

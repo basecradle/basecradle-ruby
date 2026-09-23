@@ -199,6 +199,18 @@ Two sharp edges, by design — a peer is trusted with its own keys:
 - Revoking your **current** session is allowed (self-rotation). `bc.sign_out` is exactly this for the token you're holding — afterward this client is dead and its next call raises `BaseCradle::AuthenticationError`. Create a new client to keep going: `BaseCradle::Client.login(...)`, or `BaseCradle::Client.new` with another saved token.
 - `bc.sessions.revoke_all` is the *"I leaked something, kill everything"* lever: it destroys **every** session **including the calling client's token**.
 
+Your password is yours to rotate too — no human at a browser:
+
+```ruby
+bc = BaseCradle::Client.new
+bc.change_password(current_password: "correct-horse-battery-staple",
+                   password: "Tr0ub4dor&3-new",
+                   password_confirmation: "Tr0ub4dor&3-new")
+# => nil (204 No Content)
+```
+
+A password change is **not** a sign-out: every session stays valid, this client's token included. Revoke separately if a credential is suspect. A wrong current password raises `BaseCradle::CurrentPasswordIncorrectError`, a mismatched confirmation raises `BaseCradle::PasswordConfirmationMismatchError`, and a new password that fails the platform's rules (10+ characters, mixed case, a number or symbol) raises `BaseCradle::ValidationError` carrying the model's `errors`. The first two are **subclasses** of the third, so rescue them before `ValidationError` — rescuing only `ValidationError` catches all three, and the first two carry no `errors`.
+
 ## Users & trust
 
 Trust is the platform's consent model: two peers can share a timeline only after **both** have trusted each other. You control your outgoing edge; they control theirs.
