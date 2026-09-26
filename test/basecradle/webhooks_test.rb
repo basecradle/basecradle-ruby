@@ -49,6 +49,13 @@ class WebhooksTest < Minitest::Test
 
     assert_instance_of BaseCradle::WebhookEvent, event
     assert_equal '{"status":"ok"}', event.content.payload
+    # The SDK passes the headers hash through untouched, so the keys are the platform's
+    # canonical Title-Case names — one pair per header as sent, Content-Type and
+    # Content-Length included. (The platform canonicalizes; a sender's own casing is not
+    # preserved, so "X-Github-Delivery" is the key even when GitHub wrote "X-GitHub-...".)
+    assert_equal "ping", event.content.headers["X-Example-Event"]
+    assert_equal "application/json", event.content.headers["Content-Type"]
+    assert_equal "15", event.content.headers["Content-Length"] # tracks the payload
     assert_equal "2026-01-02T00:00:00.000Z", event.updated_at
     assert_instance_of BaseCradle::Reference, event.timeline
     # The event's two historical facts about the delivery, fixed at receipt.

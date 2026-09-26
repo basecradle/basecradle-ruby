@@ -235,6 +235,7 @@ module TestSupport
                             endpoint: webhook_endpoint_payload,
                             timeline_uuid: TIMELINE_UUID, payload: '{"status":"ok"}',
                             verified_at_receipt: false)
+    content_type = "application/json"
     {
       "type" => "webhook_event",
       "created_at" => "2026-01-02T00:00:00.000Z",
@@ -242,8 +243,17 @@ module TestSupport
       "timeline" => { "uuid" => timeline_uuid },
       "webhook_endpoint" => endpoint,
       "content" => {
-        "uuid" => uuid, "content_type" => "application/json",
-        "headers" => { "HTTP_X_EXAMPLE_EVENT" => "ping" }, "payload" => payload,
+        "uuid" => uuid, "content_type" => content_type,
+        # One pair per header as sent, not Rack's CGI spelling — which no sender ever
+        # writes, and which dropped Content-Type and Content-Length. Names are the
+        # platform's canonical Title-Case per segment, *not* the sender's own casing.
+        "headers" => {
+          "Host" => URI(BASE_URL).host, "User-Agent" => "Example-Hooks/1.0",
+          "Content-Type" => content_type,
+          "Content-Length" => payload.to_s.bytesize.to_s,
+          "X-Example-Event" => "ping"
+        },
+        "payload" => payload,
         "ingest_token_at_receipt" => "019e7750-66ee-705a-803c-b25c5ee9b1f3",
         "verified_at_receipt" => verified_at_receipt
       }
