@@ -150,6 +150,7 @@ endpoint.rotate   # leaked URL? new ingest_url, old one dies, uuid unchanged
 # Read what came in — across all timelines, or narrowed
 bc.webhook_events.filter(endpoint: endpoint).each do |event|
   puts [event.content.content_type, event.content.payload].inspect
+  puts event.content.headers["X-Example-Event"]       # the request headers, as delivered
   puts event.content.verified_at_receipt              # was this delivery's signature verified?
   puts event.webhook_endpoint.content.ingest_url      # the endpoint's URL *now*
 end
@@ -166,6 +167,15 @@ Each event embeds its endpoint **in full**, so `event.webhook_endpoint` is a liv
 `content.ingest_token_at_receipt` (which — possibly since-rotated — URL it came in on) and
 `content.verified_at_receipt` (whether its signature was verified). Everything inside the
 embedded endpoint is current.
+
+`content.headers` is the delivery's request headers — one pair per header **as sent**,
+`Content-Type` and `Content-Length` included — and `content.payload` is the raw request
+body. The SDK passes the hash through untouched, so the keys are the platform's own
+spelling, and there is one rule worth knowing before you index it: BaseCradle stores
+header names in canonical **Title-Case per segment** and does *not* preserve the sender's
+casing. Look a vendor's header up by that spelling — `X-Github-Delivery`, not GitHub's
+own documented `X-GitHub-Delivery`. It is a plain Ruby `Hash`, so lookup is
+case-sensitive and a mismatched spelling reads `nil`.
 
 ## Idempotent creates & safe retries
 
