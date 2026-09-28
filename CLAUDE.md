@@ -40,10 +40,10 @@ gh api repos/basecradle/basecradle/contents/constitution.md -H "Accept: applicat
 
 ## The Reference Implementation — Build From This
 
-The Python SDK lives in the public repo [`basecradle/basecradle-python`](https://github.com/basecradle/basecradle-python). Read it from GitHub, or from a local sibling checkout (conventionally `../python`) if you have one:
+The Python SDK lives in the public repo [`basecradle/basecradle-python`](https://github.com/basecradle/basecradle-python). Read it from GitHub, or from a local sibling checkout (conventionally `../basecradle-python`) if you have one:
 
 ```bash
-gh repo clone basecradle/basecradle-python   # if you don't already have a checkout
+gh repo clone basecradle/basecradle-python ../basecradle-python   # if you don't already have a checkout
 ```
 
 It is the source of truth for **behavior**: every resource, every method, every typed error, the self-discovery `me` flow, invisible pagination, the `.filter(...)` idiom, the drift-guard, the test cast (John Doe / Nova Digital), and the README-as-tested-doc discipline. Read its `README.md`, `CLAUDE.md`, `src/basecradle/*.py`, and `tests/*.py` first.
@@ -95,7 +95,7 @@ Runtime dependencies: keep the list at zero or one, and argue every addition in 
 
 ## Releasing — RubyGems Trusted Publishing (OIDC)
 
-Releases publish to RubyGems via [Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (GitHub Actions OIDC) on a `v*` tag, with **zero stored credentials**. The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04, mirroring the Python pipeline at `../python/.github/workflows/release.yml`). **To cut a release, register/debug the trusted publisher, edit `release.yml`, or re-trigger a failed publish, invoke the `rubygems-release` skill** — it carries the pending-publisher registration form (contractual field values), the rehearsal→publish job graph, the tag mechanics, and the re-trigger commands.
+Releases publish to RubyGems via [Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (GitHub Actions OIDC) on a `v*` tag, with **zero stored credentials**. The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04, mirroring the Python pipeline at `../basecradle-python/.github/workflows/release.yml`). **To cut a release, register/debug the trusted publisher, edit `release.yml`, or re-trigger a failed publish, invoke the `rubygems-release` skill** — it carries the pending-publisher registration form (contractual field values), the rehearsal→publish job graph, the tag mechanics, and the re-trigger commands.
 
 The invariants that govern at all times:
 
@@ -213,7 +213,7 @@ Seven shared artifacts are carried verbatim across the fleet, anchored at the ca
 
 The SDK is built and released on RubyGems (https://rubygems.org/gems/basecradle). The stack is locked (see the Stack table), the release pipeline is proven, and the build proceeds as a roadmap of **GitHub Issues**, worked lowest-number-first. Onboarding for new work:
 
-1. Read the constitution, then the Python SDK (`../python`): its `README.md`, `CLAUDE.md`, `src/`, and `tests/` — still the behavioral reference for anything being ported.
+1. Read the constitution, then the Python SDK (`../basecradle-python`): its `README.md`, `CLAUDE.md`, `src/`, and `tests/` — still the behavioral reference for anything being ported.
 2. Read this repo's own `README.md`, `CLAUDE.md`, `lib/`, and `test/` to see what already ships.
 3. Pick up the lowest-numbered open issue, plan-first for anything non-trivial, branch → PR → green CI → merge.
 

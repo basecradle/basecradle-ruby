@@ -7,7 +7,7 @@ description: Step-by-step procedure for releasing the basecradle gem via RubyGem
 
 The invariants live in `CLAUDE.md` → "Releasing — RubyGems Trusted Publishing (OIDC)" and govern at all times. This skill is the procedure behind them.
 
-The model mirrors the Python pipeline: **tag → build → rehearse → capital approval → publish**, with **zero stored credentials** via [RubyGems Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (GitHub Actions OIDC). The Python release pipeline at `../python/.github/workflows/release.yml` is the template it was adapted from.
+The model mirrors the Python pipeline: **tag → build → rehearse → capital approval → publish**, with **zero stored credentials** via [RubyGems Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (GitHub Actions OIDC). The Python release pipeline at `../basecradle-python/.github/workflows/release.yml` is the template it was adapted from.
 
 - The trigger is a `v*` git tag.
 - RubyGems has no TestPyPI equivalent; the "rehearsal" is building the `.gem` and verifying a clean local install before the gated push.
