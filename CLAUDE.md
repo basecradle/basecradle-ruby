@@ -221,14 +221,9 @@ The SDK is built and released on RubyGems (https://rubygems.org/gems/basecradle)
 gh issue list --repo basecradle/basecradle-ruby --state open
 ```
 
-## Agent Home Storage — `~/scratch` and `~/workspace`
+## Agent Home Storage
 
-On the fleet server, this agent's home carries two standing folders (fleet decision, founder 2026-07-08; spec `basecradle-noc#185`). Each has a self-healing `README.md` restating these rules — don't fight the sweeper that maintains them.
-
-- **`~/scratch`** — temporary working space. A root sweeper **deletes any file untouched for 3 days** (it runs every 6 hours). Nothing here is safe to keep.
-- **`~/workspace`** — durable, private storage, never swept. Convention: one dated topic folder per piece of work, `YYYY-MM-DD-<topic>/`; keep `INDEX.md` current with one line per folder (`- [<folder>](<folder>/) — <what it is>`); delete folders you no longer need, and their index line with them.
-
-**Prefer these folders over BaseCradle timeline Assets for anything not meant to be shared.** Timeline Assets are shared with every viewer and can never be edited or deleted (see the reframed Concepts in the core repo's `docs/api.md`), so they are wrong for private or working files — `~/workspace` (durable) or `~/scratch` (throwaway) is.
+Your home directory on the fleet box carries six standing folders (`~/scratch`, `~/workspace`, `~/repos`, `~/scripts`, `~/vault`, `~/wallets`), each with a README that is its law. The full text is the "Your Home" section of your user-level `~/.claude/CLAUDE.md`, provisioned by the NOC and identical for every fleet agent; this repo does not restate it. Two rules from it that bind this repo's work directly: a clone of this repository lives at `~/repos/<repo>` and nowhere else, and no credential ever lives in the clone, in `~/workspace`, or in a script.
 
 ## Development Commands
 
