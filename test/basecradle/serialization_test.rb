@@ -3,12 +3,14 @@
 require "test_helper"
 require "pp"
 require "stringio"
+require "yaml"
 
 # A Client and a collection resource are not records, and serializing one used to emit
 # something anyway. Under ActiveSupport a Client emitted its raw bc_uat_ token
 # (Object#as_json is instance_values, walked recursively) and a collection emitted every
 # record it could page (Enumerable#as_json calls to_a). Without ActiveSupport both
-# emitted a heap address. All of it now raises.
+# emitted a heap address. Marshal and Psych walked the ivars whatever was loaded, and so
+# emitted the token from both — a client AND a collection (#205). All of it now raises.
 #
 # This file pins the plain-Ruby half — no ActiveSupport in this process, deliberately, so
 # the default environment most callers run in is what is under test.
@@ -27,6 +29,18 @@ class SerializationTest < Minitest::Test
     sink = StringIO.new
     PP.pp(object, sink)
     sink.string
+  end
+
+  # Every door out of an object and into bytes, written the way a caller writes it.
+  # Keyed so a failure names the one that reopened. JSON.generate and YAML.dump reach
+  # the same hooks as to_json and to_yaml; the nesting cases are tested separately.
+  def serialization_doors
+    {
+      "to_json" => ->(object) { object.to_json },
+      "as_json" => ->(object) { object.as_json },
+      "Marshal.dump" => ->(object) { Marshal.dump(object) },
+      "to_yaml" => ->(object) { object.to_yaml }
+    }
   end
 
   # Every lazy collection the SDK hands out, instantiated the way a caller gets one.
@@ -113,14 +127,98 @@ class SerializationTest < Minitest::Test
   # resource — an unbounded GET loop from inside a view render. No stub is registered
   # here, so a request would also trip WebMock; the registry assertion says it plainly.
   def test_serializing_never_issues_a_request
-    collections.each_value do |collection|
-      assert_raises(BaseCradle::NotSerializableError) { collection.to_json }
-      assert_raises(BaseCradle::NotSerializableError) { collection.as_json }
+    serialization_doors.each do |door, call|
+      collections.each_value do |collection|
+        assert_raises(BaseCradle::NotSerializableError, door) { call.call(collection) }
+      end
+      assert_raises(BaseCradle::NotSerializableError, door) { call.call(@client) }
     end
-    assert_raises(BaseCradle::NotSerializableError) { @client.to_json }
 
     assert_empty WebMock::RequestRegistry.instance.requested_signatures.hash,
                  "serializing must never reach the network"
+  end
+
+  # --- the other two doors: Marshal and YAML ------------------------------------------------
+
+  # #204 shut the JSON door. Marshal and Psych walk instance variables directly, consult
+  # no as_json, and need no ActiveSupport to do it — so they stayed open, and they are the
+  # worse pair: Rails.cache.write, an ActiveJob or Sidekiq argument and a Marshal-backed
+  # session each put the credential *at rest*, in Redis, a queue, or a file on disk.
+  def test_marshalling_or_yamling_a_client_raises_instead_of_emitting_the_token
+    marshal = assert_raises(BaseCradle::NotSerializableError) { Marshal.dump(@client) }
+    yaml = assert_raises(BaseCradle::NotSerializableError) { @client.to_yaml }
+
+    [ marshal, yaml ].each do |error|
+      refute_includes error.message, FAKE_TOKEN
+      assert_includes error.message, "bc_uat_"
+      assert_includes error.message, "BaseCradle::Client"
+    end
+  end
+
+  # The measured asymmetry this issue turned on: Enumerable#as_json shadowed the ivar walk,
+  # so the JSON door never reached a collection's client — Marshal and Psych have no such
+  # shadow and did. A collection is the commoner thing to hand to a cache, which made this
+  # the wider hole of the two, not the narrower one.
+  def test_marshalling_or_yamling_a_collection_raises_where_it_used_to_reach_the_token
+    collections.each do |name, collection|
+      marshal = assert_raises(BaseCradle::NotSerializableError, name) { Marshal.dump(collection) }
+      yaml = assert_raises(BaseCradle::NotSerializableError, name) { collection.to_yaml }
+
+      [ marshal, yaml ].each do |error|
+        assert_includes error.message, ".to_a", name
+        assert_includes error.message, collection.class.name, name
+        refute_includes error.message, FAKE_TOKEN, name
+      end
+    end
+  end
+
+  # Nesting is how it happens in practice — nobody caches a bare client, they cache a
+  # struct that happens to hold one. Both walkers recurse, so both must refuse from depth.
+  def test_a_client_or_collection_nested_in_a_structure_raises_through_both_doors
+    [ @client, @client.messages ].each do |object|
+      assert_raises(BaseCradle::NotSerializableError) { Marshal.dump({ conn: object }) }
+      assert_raises(BaseCradle::NotSerializableError) { Marshal.dump([ object ]) }
+      assert_raises(BaseCradle::NotSerializableError) { YAML.dump({ conn: object }) }
+      assert_raises(BaseCradle::NotSerializableError) { [ object ].to_yaml }
+    end
+  end
+
+  # Marshal.load(Marshal.dump(x)) is the deep-copy idiom, and on a client it was a second
+  # copy of the credential for as long as the process lived. It refuses at the dump, so
+  # the copy is never made.
+  def test_the_marshal_deep_copy_idiom_refuses_at_the_dump
+    assert_raises(BaseCradle::NotSerializableError) { Marshal.load(Marshal.dump(@client)) }
+  end
+
+  # A model holds the client that fetched it, so the walkers reach the token through one
+  # — a live leak the JSON door never had, since a model serializes as its wire record.
+  # Refusing is the right answer and the message names Client as what was reached; the
+  # record itself is still perfectly cacheable, via the to_h that is what to cache.
+  def test_a_model_holding_a_client_refuses_but_its_record_still_marshals
+    message = BaseCradle::Message.new(message_payload, client: @client)
+
+    [ -> { Marshal.dump(message) }, -> { message.to_yaml } ].each do |call|
+      error = assert_raises(BaseCradle::NotSerializableError, &call)
+      assert_includes error.message, "BaseCradle::Client"
+      refute_includes error.message, FAKE_TOKEN
+    end
+
+    assert_equal message_payload, Marshal.load(Marshal.dump(message.to_h))
+    refute_includes Marshal.dump(message.to_h), FAKE_TOKEN
+  end
+
+  # One refusal per resource, reached through four doors — not four texts drifting apart.
+  # Pinned by equality rather than by substring so a message edited for one door and not
+  # the others fails here.
+  def test_all_four_doors_refuse_with_the_identical_message
+    ([ @client ] + collections.values).each do |object|
+      messages = serialization_doors.transform_values do |call|
+        assert_raises(BaseCradle::NotSerializableError, object.class.name) { call.call(object) }.message
+      end
+
+      assert_equal 1, messages.values.uniq.size,
+                   "#{object.class} refuses differently per door: #{messages.inspect}"
+    end
   end
 
   # --- the structural guard ---------------------------------------------------------------

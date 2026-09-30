@@ -375,10 +375,12 @@ something Rails renders comes out right too. Three caveats worth knowing:
 ## What does not serialize: clients and collections
 
 Two things in this SDK are *not* records, and serializing either raises
-`BaseCradle::NotSerializableError` rather than emitting something:
+`BaseCradle::NotSerializableError` rather than emitting something. All four doors out of
+an object and into bytes refuse: `to_json`, `as_json`, `Marshal.dump`, and `to_yaml`.
 
 ```ruby
 require "basecradle"
+require "yaml"
 
 bc = BaseCradle::Client.new
 
@@ -390,6 +392,18 @@ end
 
 begin
   bc.messages.to_json                 # a lazy query, not a record
+rescue BaseCradle::NotSerializableError => e
+  puts e.message.include?(".to_a")    # => true
+end
+
+begin
+  Marshal.dump(bc)                    # and Rails.cache.write("bc", bc), a job argument
+rescue BaseCradle::NotSerializableError => e
+  puts e.message.include?("bc_uat_")  # => true
+end
+
+begin
+  bc.messages.to_yaml                 # YAML walks the ivars, and reaches the client
 rescue BaseCradle::NotSerializableError => e
   puts e.message.include?(".to_a")    # => true
 end
@@ -409,6 +423,30 @@ record it fetched. (It did *not* reach the token — `Enumerable#as_json` shadow
 walk — but a client's instance variables are eight collections, so serializing a *client*
 ran those loops too, on its way to the credential.) Call `.to_a` or `.first(n)` yourself
 and serialize that, so how much you fetch is a visible act in your code.
+
+**`Marshal` and YAML are the same refusal for a different reason.** Both walk instance
+variables directly, so neither needed ActiveSupport to reach the token — and neither is
+shadowed the way `Enumerable#as_json` shadowed the ivar walk, so `Marshal.dump(bc.messages)`
+reached the credential where `bc.messages.to_json` never did. They are also where a leaked
+token stops being a log line and becomes a token *at rest*: `Rails.cache.write("bc", bc)`
+puts it in Redis or a file, a client passed as an ActiveJob or Sidekiq argument puts it in
+the queue backend, a Marshal-backed session puts it in the session. `Marshal.load(Marshal.dump(x))`,
+the deep-copy idiom, refuses at the dump.
+
+**Anything *holding* a client refuses too, models included** — both walkers recurse, so
+`Marshal.dump(message)` reaches the client and raises naming `BaseCradle::Client`. That is
+the fix, not a limitation: before, it emitted the token. Cache the record, which is what
+you wanted anyway:
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+message = bc.messages.first
+
+record = message.to_h                                  # the wire Hash, no client in it
+puts Marshal.load(Marshal.dump(record)) == record      # => true
+```
 
 Both refusals happen before any HTTP — but they are on the SDK's own objects. An
 `Enumerator` you built from one is a plain Ruby object this SDK does not own, so
