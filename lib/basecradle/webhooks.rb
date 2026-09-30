@@ -109,6 +109,11 @@ module BaseCradle
   # +select+, +transform_values+ and +to_h+ hand back a plain +Hash+, whose +inspect+
   # prints pairs.
   class WebhookEventHeaders < Hash
+    # Hash brings its own render, and a header value is another party's credential. The
+    # module puts this class back under the SDK-wide rule; it sits between this class and
+    # Hash in the ancestor chain, so all three doors resolve to it.
+    include RendersNamesOnly
+
     # Hash's own exact-match membership, kept under a private name before the case-folding
     # +key?+ below takes the name: a caller who wrote the wire's own spelling is answered
     # without a scan, and it is the tiebreak if a derived copy holds two casings of one
