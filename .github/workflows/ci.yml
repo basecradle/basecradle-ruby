@@ -175,9 +175,14 @@ jobs:
             # shellcheck disable=SC2086  # deliberate word-splitting: $stubs is a path list
             "$RUNNER_TEMP/actionlint" -color $stubs
           fi
-          # Any absence marks the step failed, even when the other stub linted clean —
-          # otherwise the single-missing case, which is the likely one since a rename hits
-          # one artifact at a time, still ends in a green tick.
+          # Any absence exits non-zero, even when the other stub linted clean. This cannot
+          # turn the step red — it is `continue-on-error`, and GitHub reports the step's
+          # conclusion as `success` however the script exits (measured on the #210 break
+          # run). What it buys is that one missing stub and two read identically: the log
+          # carries `Process completed with exit code 1` either way, rather than the likely
+          # case — a rename, which hits one artifact at a time — looking like a clean run
+          # in the log while the total case does not. The loud half is the ::error::
+          # annotation above, which GitHub surfaces on the run regardless of step outcome.
           if [ -n "$missing" ]; then
             echo "Missing shared stubs:$missing"
             exit 1

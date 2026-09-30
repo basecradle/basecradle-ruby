@@ -110,9 +110,11 @@ class ActionlintJobTest < Minitest::Test
                  "the stub that IS present must still be linted; the whole defect was one " \
                  "missing path taking the other down with it"
     refute_equal 0, run.status,
-                 "a missing stub must mark the step failed even when the other linted " \
-                 "clean, or the likely case — a rename, which hits one artifact at a " \
-                 "time — still ends in a green tick"
+                 "the script must exit non-zero when a stub is missing, even though the " \
+                 "other linted clean. The step is `continue-on-error`, so GitHub calls it " \
+                 "a success either way — what this pins is that one missing stub reads " \
+                 "the same as two in the log, rather than the likely case (a rename hits " \
+                 "one artifact at a time) looking like a clean run"
   end
 
   def test_the_advisory_step_never_runs_actionlint_with_no_paths_either
