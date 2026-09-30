@@ -93,11 +93,25 @@ jobs:
       - name: Lint the workflows this repo owns
         # No file list: every workflow under .github/workflows is linted except the
         # two named below, so one added later is covered without touching this job.
+        #
+        # Both extensions, because GitHub honours .yaml as well as .yml: a workflow
+        # added under the one this glob missed was silently unlinted while the line
+        # above promised otherwise. The exclusion is matched on the name *without* its
+        # extension for the same reason, and that half is load-bearing — widening the
+        # glob while still excluding two literal .yml filenames would pull a stub
+        # arriving as .yaml into this step, which is blocking, on a file this repo may
+        # not edit (see the advisory step below).
+        #
+        # An unmatched glob stays literal in POSIX sh, so each candidate is tested for
+        # being a real file before it is passed on — which also keeps a directory named
+        # `*.yaml` from reaching actionlint as though it were a workflow.
         run: |
           files=""
-          for f in .github/workflows/*.yml; do
-            case "$(basename "$f")" in
-              needs-human-alert.yml|dependabot-auto-merge.yml) continue ;;
+          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -f "$f" ] || continue
+            name="${f##*/}"
+            case "${name%.*}" in
+              needs-human-alert|dependabot-auto-merge) continue ;;
             esac
             files="$files $f"
           done
