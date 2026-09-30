@@ -29,6 +29,10 @@ class ActiveSupportTest < Minitest::Test
   # happens in an app with ActiveSupport loaded, so they are observed here as well.
   SERIALIZATIONS = %w[as_json to_json nested encode held marshal yaml marshal_held].freeze
 
+  # The three doors a render arrives through (#212). `pretty_print` is the one `inspect`
+  # does not cover for a Hash descendant, which is the shape that leaked.
+  RENDER_DOORS = %w[inspect to_s pretty_print].freeze
+
   def self.report
     @report ||= begin
       out, err, status = Open3.capture3(RbConfig.ruby, "-I#{LIB}", PROBE, TestSupport::FAKE_TOKEN)
@@ -45,6 +49,11 @@ class ActiveSupportTest < Minitest::Test
 
   def subjects
     self.class.report.fetch("subjects")
+  end
+
+  # The records: objects that render by the names-only rule and legitimately serialize.
+  def records
+    self.class.report.fetch("records")
   end
 
   # Without this the whole file could pass vacuously: if ActiveSupport were not really
@@ -119,5 +128,71 @@ class ActiveSupportTest < Minitest::Test
 
     assert_includes subjects.dig("Client", "inspect"), "token=[REDACTED]"
     assert_includes subjects.dig("Client", "to_s"), "token=[REDACTED]"
+  end
+
+  # --- the records --------------------------------------------------------------------
+
+  # The hole #212 closed. This harness excluded Hash descendants — reasonably, as a fact
+  # about *serialization*, since a delivery's headers are a record and serialize — and
+  # that exclusion silently answered a render question it had no bearing on. The result
+  # was that the one class 0.10.2's security fix was written for was never rendered under
+  # real ActiveSupport by the harness that exists for exactly that. Reflective, so a
+  # second Hash descendant cannot repeat it.
+  def test_the_probe_covers_every_hash_descendant_the_sdk_defines
+    declared = self.class.report.fetch("hash_descendant_classes")
+
+    refute_empty declared,
+                 "the reflective sweep found no Hash descendant at all, so this " \
+                 "assertion would pass without checking anything"
+
+    missing = declared - records.keys
+
+    assert_empty missing,
+                 "test/support/active_support_probe.rb does not render " \
+                 "#{missing.join(', ')}. A Hash descendant brings Hash's own render, " \
+                 "which prints every value — that is how an inbound sender's credential " \
+                 "reached a log in 0.10.2, and this environment is where a Rails app " \
+                 "meets it."
+  end
+
+  # All three doors, under loaded ActiveSupport. `pretty_print` is here because `pp` is the
+  # door `inspect` does not cover for a Hash descendant, and because #212 gave records
+  # their to_s and pretty_print for the first time.
+  def test_a_record_renders_its_names_and_never_its_values
+    secrets = [ self.class.report.fetch("sender_secret"), self.class.report.fetch("record_secret") ]
+
+    records.each do |name, observations|
+      RENDER_DOORS.each do |door|
+        rendered = observations.fetch(door)
+
+        secrets.each { |secret| refute_includes rendered, secret, "#{name}##{door}" }
+        refute_includes rendered, FAKE_TOKEN, "#{name}##{door}"
+        assert_match(/\A#<BaseCradle::#{name} /, rendered,
+                     "#{name}##{door} must name the class and its fields")
+      end
+    end
+
+    assert_includes records.dig("WebhookEventHeaders", "inspect"), "Authorization"
+    assert_includes records.dig("Message", "inspect"), "body"
+  end
+
+  # The other half, and the reason the records are their own bucket rather than added to
+  # the list above: a record is *supposed* to serialize. The render rule must not have been
+  # bought by breaking what these objects are for.
+  def test_a_record_still_serializes_under_activesupport
+    records.each do |name, observations|
+      %w[as_json to_json].each do |route|
+        observation = observations.fetch(route)
+
+        assert_equal "returned", observation["outcome"],
+                     "#{name}##{route} raised #{observation['outcome']}: " \
+                     "#{observation['message']}. A record is not a connection — refusing " \
+                     "here would break rendering a delivery in an app."
+      end
+    end
+
+    assert_includes JSON.parse(records.dig("WebhookEventHeaders", "to_json", "value")),
+                    "Authorization",
+                    "the headers serialize as the delivery, verbatim — only the render is redacted"
   end
 end

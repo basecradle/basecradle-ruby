@@ -2,6 +2,7 @@
 
 require_relative "api_object"
 require_relative "items"
+require_relative "rendering"
 require_relative "serialization"
 require_relative "user"
 
@@ -108,6 +109,11 @@ module BaseCradle
   # +select+, +transform_values+ and +to_h+ hand back a plain +Hash+, whose +inspect+
   # prints pairs.
   class WebhookEventHeaders < Hash
+    # Hash brings its own render, and a header value is another party's credential. The
+    # module puts this class back under the SDK-wide rule; it sits between this class and
+    # Hash in the ancestor chain, so all three doors resolve to it.
+    include RendersNamesOnly
+
     # Hash's own exact-match membership, kept under a private name before the case-folding
     # +key?+ below takes the name: a caller who wrote the wire's own spelling is answered
     # without a scan, and it is the tiebreak if a derived copy holds two casings of one
@@ -175,44 +181,30 @@ module BaseCradle
       ->(name) { dig(name) }
     end
 
+    private
+
     # The header *names* this delivery carried, and none of their values.
     #
     # +Hash+'s own +inspect+ prints every pair, and these headers are the *sender's*,
     # stored verbatim by the platform: a sender that authenticates its POST to an ingest
     # URL puts its credential in one of them, so +logger.debug(event.content.headers)+
-    # would write another party's secret into our logs. Every other renderable object in
-    # this SDK is already safe by one rule — +ApiObject#inspect+ prints field names, never
-    # values — and this is the one class that sat outside it, because +Hash+ brought its
-    # own render.
+    # would write another party's secret into our logs.
     #
     # Only the human-facing render changes. Every *read* is untouched and still
     # wire-exact: lookups, +fetch+, +each+, +keys+, +to_h+, +to_json+, +==+.
     #
-    # Names are sorted, as +ApiObject#inspect+ sorts its fields and as the +KeyError+ a
-    # missing header raises already lists the ones that did arrive.
-    def inspect
-      return "#<#{self.class}>" if empty?
+    # Names are sorted by their string form — a derived copy can hold a key that never
+    # came off the wire, and a mixed-type +keys+ has no natural order otherwise.
+    #
+    # +nil+ for a delivery the platform recorded with no headers at all, so it renders as
+    # the bare class. That is asked of the hash, not of the joined string: a delivery
+    # carrying a single header whose *name* is the empty string joins to "" and must stay
+    # distinguishable from one carrying nothing.
+    def render_body
+      return nil if empty?
 
-      "#<#{self.class} #{keys.sort_by(&:to_s).join(', ')}>"
+      keys.sort_by(&:to_s).join(", ")
     end
-
-    # +Hash+ aliases +to_s+ to its *own* +inspect+ — one shared method entry — so
-    # overriding +inspect+ alone would leave <tt>"#{headers}"</tt> and +puts headers+
-    # printing every value. Late-bound rather than +alias to_s inspect+, so a subclass
-    # that redacts more is not bypassed by interpolation (as +Client#to_s+ is).
-    def to_s
-      inspect
-    end
-
-    # +pp+ reaches for +pretty_print+, and +Hash+ brings one that prints the pairs — the
-    # same leak through the one door +inspect+ does not cover. Delegating puts +pp+ back
-    # on the SDK-wide rule: +pp+ uses an object's own +inspect+ when it defines one, which
-    # is why every +ApiObject+ is already safe here and only a +Hash+ descendant was not.
-    def pretty_print(printer)
-      printer.text(inspect)
-    end
-
-    private
 
     # The wire's own spelling of +name+, or nil if no casing of it was delivered. Anything
     # but a String is not a header name, so it is never matched rather than being coerced

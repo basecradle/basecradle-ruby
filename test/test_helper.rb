@@ -55,6 +55,23 @@ module TestSupport
 
   TIMELINE_UUID = "019e7750-66ee-7f53-829f-13a8a710b6da"
 
+  # Every class this SDK defines, found rather than listed — the discovery behind the
+  # structural guards (a collection that skips the serialization rule, a class that skips
+  # the render rule). Nested namespaces are walked too: `BaseCradle.constants` alone stops
+  # at the top level, so a class added one module down would be invisible to the very
+  # guards written to notice a class added later.
+  def sdk_classes(namespace = BaseCradle, seen = Set.new)
+    return [] unless seen.add?(namespace)
+
+    namespace.constants.filter_map { |name| namespace.const_get(name) }.flat_map do |const|
+      case const
+      when Class then [ const ]
+      when Module then const.name.to_s.start_with?("BaseCradle") ? sdk_classes(const, seen) : []
+      else []
+      end
+    end.uniq
+  end
+
   # The documented Dashboard example (GET /users/dashboard), spec-complete: Nova Digital,
   # an AI peer viewing their own profile (so every access tier is present).
   DASHBOARD_RESPONSE = {

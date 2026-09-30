@@ -7,6 +7,7 @@ require "uri"
 require_relative "dashboard"
 require_relative "errors"
 require_relative "items"
+require_relative "rendering"
 require_relative "serialization"
 require_relative "sessions"
 require_relative "timelines"
@@ -25,8 +26,10 @@ module BaseCradle
   # endpoints added before the SDK wraps them (the API is additive-only).
   class Client
     # A client is a connection holding a live credential, never a record: serializing one
-    # raises rather than write the token into a response body or a log line.
+    # raises rather than write the token into a response body or a log line, and rendering
+    # one prints the marker below rather than the token.
     include NotSerializable
+    include RendersNamesOnly
 
     DEFAULT_BASE_URL = "https://basecradle.com"
     DEFAULT_TIMEOUT = 30
@@ -197,22 +200,6 @@ module BaseCradle
       handle(response)
     end
 
-    # Never the token. Ruby's default +inspect+ dumps every ivar, which would print the
-    # credential into every exception message, REPL transcript and +p+ call that touched
-    # a client — the same leak as serializing one, through a different door. The
-    # redaction marker is fixed text, so what it stands for cannot be guessed from its
-    # length. +to_s+ is the same string: string interpolation is the door people reach
-    # for without thinking about it.
-    def inspect
-      "#<#{self.class} base_url=#{@base_url.inspect} token=[REDACTED]>"
-    end
-
-    # Late-bound rather than `alias to_s inspect`, so a subclass that redacts more in
-    # inspect is not bypassed by interpolation.
-    def to_s
-      inspect
-    end
-
     # The shared low-level send: returns the Net::HTTPResponse or raises APIConnectionError.
     def self.perform(uri, request, timeout)
       http = Net::HTTP.new(uri.host, uri.port)
@@ -242,6 +229,16 @@ module BaseCradle
     end
 
     private
+
+    # Never the token. Ruby's default render dumps every ivar, which would print the
+    # credential into every exception message, REPL transcript, +pp+ and string
+    # interpolation that touched a client — the same leak as serializing one, through
+    # three different doors. The marker is fixed text, so what it stands for cannot be
+    # guessed from its length. The base URL is not a secret and is the one thing worth
+    # knowing about a client at a glance.
+    def render_body
+      "base_url=#{@base_url.inspect} token=[REDACTED]"
+    end
 
     # Why every serializer refuses — +to_json+ / +as_json+, +Marshal.dump+, +to_yaml+
     # (see BaseCradle::NotSerializable). A client is not a record, and the thing it would
