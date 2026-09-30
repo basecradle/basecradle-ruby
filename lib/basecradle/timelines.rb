@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "pagination"
+require_relative "serialization"
 require_relative "timeline"
 
 module BaseCradle
@@ -10,6 +11,7 @@ module BaseCradle
   # method (+map+, +find+, +first+ — which stop early without fetching every page).
   class TimelinesResource
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client)
       @client = client

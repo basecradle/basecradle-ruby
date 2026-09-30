@@ -2,6 +2,7 @@
 
 require_relative "api_object"
 require_relative "items"
+require_relative "serialization"
 require_relative "user"
 
 module BaseCradle
@@ -260,6 +261,7 @@ module BaseCradle
   # One timeline's webhook endpoints: create here, or iterate (newest first).
   class TimelineWebhookEndpoints
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client, timeline_uuid)
       @client = client
@@ -287,6 +289,7 @@ module BaseCradle
   # One timeline's webhook events — read-only, so iterate is all there is.
   class TimelineWebhookEvents
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client, timeline_uuid)
       @client = client

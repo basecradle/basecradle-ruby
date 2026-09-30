@@ -7,6 +7,7 @@ require "uri"
 require_relative "dashboard"
 require_relative "errors"
 require_relative "items"
+require_relative "serialization"
 require_relative "sessions"
 require_relative "timelines"
 require_relative "user"
@@ -23,6 +24,10 @@ module BaseCradle
   # Every resource is built on +#request+, which is also the escape hatch for API
   # endpoints added before the SDK wraps them (the API is additive-only).
   class Client
+    # A client is a connection holding a live credential, never a record: serializing one
+    # raises rather than write the token into a response body or a log line.
+    include NotSerializable
+
     DEFAULT_BASE_URL = "https://basecradle.com"
     DEFAULT_TIMEOUT = 30
 
@@ -192,8 +197,20 @@ module BaseCradle
       handle(response)
     end
 
+    # Never the token. Ruby's default +inspect+ dumps every ivar, which would print the
+    # credential into every exception message, REPL transcript and +p+ call that touched
+    # a client — the same leak as serializing one, through a different door. The
+    # redaction marker is fixed text, so what it stands for cannot be guessed from its
+    # length. +to_s+ is the same string: string interpolation is the door people reach
+    # for without thinking about it.
     def inspect
-      "#<#{self.class} base_url=#{@base_url.inspect}>"
+      "#<#{self.class} base_url=#{@base_url.inspect} token=[REDACTED]>"
+    end
+
+    # Late-bound rather than `alias to_s inspect`, so a subclass that redacts more in
+    # inspect is not bypassed by interpolation.
+    def to_s
+      inspect
     end
 
     # The shared low-level send: returns the Net::HTTPResponse or raises APIConnectionError.
@@ -225,6 +242,16 @@ module BaseCradle
     end
 
     private
+
+    # Why +to_json+ / +as_json+ refuse (see BaseCradle::NotSerializable). A client is not
+    # a record, and the thing it would emit is a live credential.
+    def serialization_refusal
+      "#{self.class} is a connection holding your bc_uat_ token, not a record. " \
+      "Serializing it writes the raw credential into whatever you were rendering or " \
+      "logging, and a token in a log is a token to rotate. Serialize the record you " \
+      "meant instead (bc.me, a timeline, a message), or bc.base_url to name the " \
+      "connection itself."
+    end
 
     # Record what the mint response said about the credential just issued. Private: only
     # +.login+ calls it, on a client it has just built.

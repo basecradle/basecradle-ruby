@@ -5,6 +5,7 @@ require "time"
 
 require_relative "api_object"
 require_relative "pagination"
+require_relative "serialization"
 require_relative "user"
 
 module BaseCradle
@@ -93,6 +94,7 @@ module BaseCradle
   # PLURAL / SINGULAR / MODEL.
   class ItemsResource
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client, filters: {})
       @client = client
@@ -163,6 +165,7 @@ module BaseCradle
   # One timeline's messages: create here, or iterate (newest first).
   class TimelineMessages
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client, timeline_uuid)
       @client = client
@@ -190,6 +193,7 @@ module BaseCradle
   # One timeline's assets: upload here (multipart), or iterate (newest first).
   class TimelineAssets
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client, timeline_uuid)
       @client = client
@@ -234,6 +238,7 @@ module BaseCradle
   # One timeline's tasks: create here, or iterate (newest first).
   class TimelineTasks
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client, timeline_uuid)
       @client = client

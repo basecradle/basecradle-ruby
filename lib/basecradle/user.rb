@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "api_object"
+require_relative "serialization"
 
 module BaseCradle
   # The trust relationship between you and another user, from your point of view.
@@ -98,6 +99,7 @@ module BaseCradle
   #   bc.users.each { |user| puts [user.handle, user.kind, user.trust.mutual].inspect }
   class UsersResource
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client)
       @client = client

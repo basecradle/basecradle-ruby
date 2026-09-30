@@ -2,6 +2,7 @@
 
 require_relative "api_object"
 require_relative "pagination"
+require_relative "serialization"
 
 module BaseCradle
   # One credential you hold — a web sign-in or a bc_uat_ API token.
@@ -39,6 +40,7 @@ module BaseCradle
   #   end
   class SessionsResource
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client)
       @client = client
