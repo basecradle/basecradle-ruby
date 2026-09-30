@@ -141,12 +141,18 @@ class ActiveSupportTest < Minitest::Test
   def test_the_probe_covers_every_hash_descendant_the_sdk_defines
     declared = self.class.report.fetch("hash_descendant_classes")
 
-    refute_empty declared, "the reflective sweep found no Hash descendant at all, so this "                            "assertion would pass without checking anything"
+    refute_empty declared,
+                 "the reflective sweep found no Hash descendant at all, so this " \
+                 "assertion would pass without checking anything"
 
     missing = declared - records.keys
 
     assert_empty missing,
-                 "test/support/active_support_probe.rb does not render #{missing.join(', ')}. "                  "A Hash descendant brings Hash's own render, which prints every value — "                  "that is how an inbound sender's credential reached a log in 0.10.2, and "                  "this environment is where a Rails app meets it."
+                 "test/support/active_support_probe.rb does not render " \
+                 "#{missing.join(', ')}. A Hash descendant brings Hash's own render, " \
+                 "which prints every value — that is how an inbound sender's credential " \
+                 "reached a log in 0.10.2, and this environment is where a Rails app " \
+                 "meets it."
   end
 
   # All three doors, under loaded ActiveSupport. `pretty_print` is here because `pp` is the
@@ -161,7 +167,8 @@ class ActiveSupportTest < Minitest::Test
 
         secrets.each { |secret| refute_includes rendered, secret, "#{name}##{door}" }
         refute_includes rendered, FAKE_TOKEN, "#{name}##{door}"
-        assert_match(/\A#<BaseCradle::#{name} /, rendered, "#{name}##{door} must name the class and its fields")
+        assert_match(/\A#<BaseCradle::#{name} /, rendered,
+                     "#{name}##{door} must name the class and its fields")
       end
     end
 

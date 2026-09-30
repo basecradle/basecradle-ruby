@@ -181,6 +181,8 @@ module BaseCradle
       ->(name) { dig(name) }
     end
 
+    private
+
     # The header *names* this delivery carried, and none of their values.
     #
     # +Hash+'s own +inspect+ prints every pair, and these headers are the *sender's*,
@@ -203,8 +205,6 @@ module BaseCradle
 
       keys.sort_by(&:to_s).join(", ")
     end
-
-    private
 
     # The wire's own spelling of +name+, or nil if no casing of it was delivered. Anything
     # but a String is not a header name, so it is never matched rather than being coerced

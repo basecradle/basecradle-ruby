@@ -33,6 +33,18 @@ fails CI if the two ever disagree.
   `#<BaseCradle::Message body, uuid>`, the same string `inspect` and `pp` already gave.
   Nothing was leaking — a heap address is not a value — but two of the three doors on the
   SDK's most common object belonged to `Kernel` rather than to the rule.
+### Fixed
+
+- **A record with mixed-type keys no longer raises from its own render.** `ApiObject`
+  sorted its field names with `sort`, which refuses `comparison of Symbol with String
+  failed` — reachable because the README documents rebuilding a model from a cached
+  record, and a cache layer that symbolizes some keys hands back exactly that. It was one
+  raising door before and would have been three after the change above, so it now sorts
+  by the names' string form, as `WebhookEventHeaders` always has.
+- **A record with no fields renders as `#<BaseCradle::Message>`**, not
+  `#<BaseCradle::Message >` with a dangling space. Reachable whenever the API sends a
+  nested content object as `{}`.
+
 - **The ActiveSupport harness renders the class 0.10.2 secured.** The child-process probe
   excluded `Hash` descendants, which was a true statement about *serialization* (a
   delivery's headers are a record and serialize) applied to a render question it does not

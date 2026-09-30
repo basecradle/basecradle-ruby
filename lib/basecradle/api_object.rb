@@ -121,8 +121,20 @@ module BaseCradle
 
     # The record's wire field names, sorted — never their values. A record holds whatever
     # the API sent, which for a webhook endpoint includes its ingest_url.
+    #
+    # Sorted by their string form, not by `sort`: a record can be rebuilt from a cached
+    # hash (the README says so), and a caller whose cache layer symbolized some keys hands
+    # us mixed types, which `sort` refuses with `comparison of Symbol with String failed`.
+    # That used to raise from `inspect` alone and now would raise from interpolation and
+    # `pp` too — a render that blows up a log line is worse than the disorder it avoids.
+    # WebhookEventHeaders#render_body has always done this, for the same reason.
+    #
+    # nil, not "", for a record with no fields: the module renders nil as the bare class,
+    # and `"#<BaseCradle::Message >"` with its dangling space was never intended output.
     def render_body
-      @data.keys.sort.join(", ")
+      return nil if @data.empty?
+
+      @data.keys.sort_by(&:to_s).join(", ")
     end
 
     # The client this object came from — required by verbs that call the API (later releases).

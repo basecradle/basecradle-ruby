@@ -20,12 +20,16 @@ require "pp"
 # `test_the_only_enumerable_that_still_serializes_is_the_headers_hash` takes for the sibling
 # serialization rule — and the reason a collection added later cannot skip that one.
 class RenderingTest < Minitest::Test
-  FAKE_TOKEN = "bc_uat_KqI8zFxkQ0OZ8vYwT7mWcVtR3nSdLpEa"
-  BASE_URL = "https://basecradle.com"
+  include TestSupport
 
   # The three doors a render arrives through. `inspect` is `p` and a REPL echo; `to_s` is
   # string interpolation and `puts`; `pretty_print` is `pp`.
   RENDER_METHODS = %i[inspect to_s pretty_print].freeze
+
+  # A field name and a field value, for the value guard below. The name must appear in a
+  # render and the value must never.
+  SENTINEL_FIELD = "a_wire_field"
+  SENTINEL_VALUE = "the-field-value-that-must-never-be-rendered"
 
   def setup
     @client = BaseCradle::Client.new(FAKE_TOKEN, base_url: BASE_URL)
@@ -49,6 +53,52 @@ class RenderingTest < Minitest::Test
                  "reaches a log with this suite green (0.10.2). If a class genuinely needs " \
                  "a different render, decide that in the PR that adds it and teach this " \
                  "test which class and why; do not hand-roll a fourth copy."
+  end
+
+  # The guard above pins the *mechanism* — which module owns the three doors. This pins
+  # the *invariant* the mechanism exists for, on every renderable class the SDK defines:
+  # build one holding a value nobody may see, and read all three doors. A class could
+  # include the module, satisfy every ownership check, and still write
+  # `render_body = @data.inspect` — a plausible copy-paste from the `to_h` next door — and
+  # only this test would notice.
+  def test_no_renderable_class_renders_a_value_it_was_given
+    renderable_classes.each do |klass|
+      subject, secret = build_holding_a_secret(klass)
+
+      each_door(subject) do |door, rendered|
+        refute_includes rendered, secret,
+                        "#{klass}##{door} printed a value it was handed. A render shows " \
+                        "field names; the values are a record's contents, a sender's " \
+                        "header, or this SDK's own credential."
+        assert_match(/\A#<#{Regexp.escape(klass.name)}\b/, rendered,
+                     "#{klass}##{door} must render as the class and its field names")
+      end
+    end
+  end
+
+  # A class can include the module, pass every ownership check above, and still have no
+  # #render_body — the module's default then raises NotImplementedError on the first
+  # render. That is a ScriptError, not a StandardError, so the `rescue => e` a caller
+  # wraps a log line in does not catch it and the process dies inside the logging.
+  #
+  # Private, too: the hook shares a namespace with `ApiObject.attribute`, which defines a
+  # public reader named after an arbitrary wire field. A field called `render_body` would
+  # shadow the hook with one that returns that field's raw value, leaving all three door
+  # owners untouched and the guard above green.
+  def test_every_renderable_class_supplies_its_own_render_body_privately
+    offenders = renderable_classes.filter_map do |klass|
+      owner = render_body_owner(klass)
+      next "#{klass}: no #render_body at all" if owner.nil?
+      next "#{klass}: only the module's raising default" if owner == BaseCradle::RendersNamesOnly
+      next "#{klass}: #render_body is public" unless klass.private_method_defined?(:render_body)
+    end
+
+    assert_empty offenders,
+                 "every class including BaseCradle::RendersNamesOnly must supply its own " \
+                 "private #render_body. Without one the module's default raises " \
+                 "NotImplementedError — a ScriptError, which a caller's `rescue => e` " \
+                 "around a log line does not catch. A public one can be shadowed by an " \
+                 "`attribute` of the same name, which would render that field's value."
   end
 
   # The guard's own deliberate break, run in-process: the exact shape of the 0.10.2 bug — a
@@ -87,12 +137,15 @@ class RenderingTest < Minitest::Test
     refute_empty collection_classes
     assert_empty collection_classes & renderable_classes
 
-    rendered = @client.messages.inspect
-
-    refute_includes rendered, FAKE_TOKEN,
-                    "a collection's default render walks its ivars, and one of them is the " \
-                    "client — so the rule still has to hold one hop down, through " \
-                    "Client#inspect"
+    # All three doors, because they are three different code paths for a collection and
+    # only one of them is `inspect`: `pp` sees an object whose inspect owner is Kernel and
+    # walks the ivars itself, reaching Client#pretty_print rather than Client#inspect.
+    each_door(@client.messages) do |door, rendered|
+      refute_includes rendered, FAKE_TOKEN,
+                      "MessagesResource##{door} reached the token. A collection's default " \
+                      "render walks its ivars and one of them is the client, so the rule " \
+                      "still has to hold one hop down."
+    end
   end
 
   # --- the rule itself, through all three doors -------------------------------------------
@@ -188,8 +241,26 @@ class RenderingTest < Minitest::Test
       sdk_classes.select { |klass| klass.include?(BaseCradle::NotSerializableCollection) }
     end
 
-    def sdk_classes
-      BaseCradle.constants.map { |name| BaseCradle.const_get(name) }.grep(Class)
+    # Deliberately TestSupport's sweep, shared with the serialization guard: two structural
+    # guards disagreeing about which classes the SDK defines is how one of them ends up
+    # looking at a class the other does not.
+    def render_body_owner(klass)
+      klass.instance_method(:render_body).owner
+    rescue NameError
+      nil
+    end
+
+    # An instance holding something that must not be rendered, and that secret. Every
+    # renderable class but the client takes (data, client:) — a class that does not is a
+    # shape this guard has never seen, and it says so rather than skipping quietly.
+    def build_holding_a_secret(klass)
+      return [ BaseCradle::Client.new(FAKE_TOKEN, base_url: BASE_URL), FAKE_TOKEN ] if klass <= BaseCradle::Client
+
+      [ klass.new({ SENTINEL_FIELD => SENTINEL_VALUE }, client: @client), SENTINEL_VALUE ]
+    rescue StandardError => e
+      flunk "#{klass} could not be built as (data, client:) — #{e.class}: #{e.message}. " \
+            "Every renderable class in this SDK has taken that shape; teach this guard " \
+            "how to build the new one rather than letting it go unrendered."
     end
 
     def renders_by_the_rule?(klass)

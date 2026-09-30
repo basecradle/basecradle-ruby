@@ -472,13 +472,44 @@ spent, and no document comes out. (`Marshal` is the exception: Ruby itself refus
 dump an `Enumerator` at all.) No token is exposed through any of them. Call `.first(n)`
 or `.to_a` before handing a query to a renderer, and `.map(&:to_h)` too before a dumper.
 
-`bc.inspect` and `"#{bc}"` are redacted for the same reason — Ruby's default `inspect`
-dumps every instance variable, which would print the token into every exception message
-and REPL transcript that touched a client:
+### Renders show names, never values
 
+Every object in this SDK prints its **field names** and none of its field values, through
+all three doors a render arrives by — `inspect` (`p`, a REPL echo), `to_s` (string
+interpolation, `puts`) and `pretty_print` (`pp`). That is what keeps your `bc_uat_` token,
+an inbound sender's `Authorization` header and an endpoint's `ingest_url` out of logs,
+exception messages and transcripts:
+
+```ruby
+bc = BaseCradle::Client.new
+
+bc.inspect   # => "#<BaseCradle::Client base_url=\"https://basecradle.com\" token=[REDACTED]>"
+"#{bc}"      # => "#<BaseCradle::Client base_url=\"https://basecradle.com\" token=[REDACTED]>"
+
+# A record, built here from a wire hash the way a cache round-trip hands one back.
+message = BaseCradle::Message.new(
+  { "uuid" => "019e7750-66ee-7c31-9a7f-2b6d5e8a9c04",
+    "actor" => { "handle" => "nova" },
+    "content" => { "body" => "the body text" } },
+  client: bc
+)
+
+message.inspect              # => "#<BaseCradle::Message actor, content, uuid>"
+"#{message}"                 # => "#<BaseCradle::Message actor, content, uuid>"
+message["content"]["body"]   # => "the body text" — reads are untouched
+
+headers = BaseCradle::WebhookEventHeaders.new(
+  { "Content-Type" => "application/json", "Authorization" => "Bearer the-senders-secret" }
+)
+
+headers.inspect          # => "#<BaseCradle::WebhookEventHeaders Authorization, Content-Type>"
+headers["authorization"] # => "Bearer the-senders-secret" — still readable, and case-folded
 ```
-#<BaseCradle::Client base_url="https://basecradle.com" token=[REDACTED]>
-```
+
+The values are always there to *read* — `message["body"]`, `message.to_h`,
+`event.content.headers["Authorization"]`, `to_json` — they are simply never what a render
+prints. If you want a record's contents in a log, log `message.to_h` and decide that
+deliberately.
 
 ## Development
 

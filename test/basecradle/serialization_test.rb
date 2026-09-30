@@ -71,8 +71,7 @@ class SerializationTest < Minitest::Test
   # *is* a record (the delivery's headers), so it serializes as one; everything else is a
   # lazy, client-holding query that must refuse.
   def enumerable_classes
-    BaseCradle.constants.map { |name| BaseCradle.const_get(name) }
-              .select { |const| const.is_a?(Class) && const.include?(Enumerable) }
+    sdk_classes.select { |klass| klass.include?(Enumerable) }
   end
 
   def lazy_collection_classes
