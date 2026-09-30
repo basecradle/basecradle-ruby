@@ -241,10 +241,10 @@ class ReleaseWorkflowTest < Minitest::Test
             YAML.safe_load(File.read(workflow_path))
           rescue Psych::Exception, SystemCallError => e
             flunk ".github/workflows/#{FILENAME} could not be read: #{e.class} — " \
-                  "#{e.message}. Psych's safe mode also refuses YAML that GitHub accepts " \
-                  "(an anchor, an unquoted date), so this may be a workflow that publishes " \
-                  "fine and that this reader cannot see into; either way nothing below is " \
-                  "checking it."
+                  "#{e.message}. Psych's safe mode refuses some YAML that is otherwise " \
+                  "legal — an alias (`*ref`), an unquoted date — so this may be a workflow " \
+                  "that publishes fine and that this reader cannot see into; either way " \
+                  "nothing below is checking it."
           end
 
         unless document.is_a?(Hash)
@@ -281,7 +281,10 @@ class ReleaseWorkflowTest < Minitest::Test
     end
 
     # A workflow's triggers, or `{}` when the file cannot be read as a workflow at all — an
-    # empty file, or YAML that Psych's safe mode refuses (an anchor, an unquoted date).
+    # empty file, or YAML that Psych's safe mode refuses: an **alias** (`*ref`) or an
+    # unquoted date. Not an anchor — a bare `&anchor` parses fine; it is the reference to
+    # one that raises `Psych::AliasesNotEnabled`, and naming the wrong half sends whoever
+    # hits it grepping for a construct that was never the problem.
     # Deliberately soft, because this directory holds two files this repo may not fix: the
     # capital's verbatim shared stubs (CLAUDE.md → Repo sovereignty). ci.yml already takes
     # that stance explicitly, linting them `continue-on-error: true` so that a finding in a
