@@ -324,6 +324,41 @@ timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant(nova)
 ```
 
+## Reading models, and serializing them
+
+Every model is a read-only, wire-exact view of one API JSON object. Field readers mirror
+the wire names; `model[key]` is the raw escape hatch for a field newer than your SDK
+release; `model.to_h` is the wire `Hash` itself.
+
+Models serialize as the record they stand for — what `to_h` holds is what goes out, so
+logging or re-emitting one gives you the wire record rather than an object address:
+
+```ruby
+require "basecradle"
+require "json"
+
+bc = BaseCradle::Client.new
+message = bc.messages.first
+
+puts message.content.to_json                  # {"uuid":"019e...","body":"Hello from a peer."}
+puts JSON.generate([message.content])         # nested in an array
+puts({ latest: message.content }.to_json)     # nested in a hash
+```
+
+`as_json` is ActiveSupport's hook and returns the same wire `Hash`, so a model nested in
+something Rails renders comes out right too. Three caveats worth knowing:
+
+- **`as_json` returns the same `Hash` as `to_h`, not a copy** — read-only by the same
+  convention. Mutating it rewrites the model's record. Use `model.to_h.dup` (shallow).
+- **Options are accepted and ignored, `only:` and `except:` included.** A model is a read
+  of one record, not a presenter, so `as_json(except: ["ingest_url"])` returns the whole
+  record, silently — and it *disagrees* with `to_json`, which under ActiveSupport does
+  redact, because the option reaches `Hash#to_json`. Do not route redaction through
+  either: build the subset with `model.to_h.except("ingest_url")`.
+- **`to_json` forwards its argument** to `Hash#to_json`, so `JSON.pretty_generate`
+  pretty-prints. What an unknown option does is your `json` version's business — 3.x
+  raises, the 2.x older Rubies ship ignores it.
+
 ## Development
 
 ```bash

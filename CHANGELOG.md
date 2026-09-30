@@ -4,6 +4,52 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-09-30
+
+### Fixed
+
+- **A model serializes as the record it stands for**
+  ([#191](https://github.com/basecradle/basecradle-ruby/issues/191)). `ApiObject` defined
+  no `to_json`, so serializing *any* model — `bc.me`, a `Timeline`, a `Message`, any
+  content object — fell through to Ruby's default and emitted a heap address:
+  `"#<BaseCradle::MessageContent:0x000072be94b09…>"`. Silently, with no field names and a
+  different value every run. `model.to_json` and `JSON.generate(model)` now emit the
+  record, and so does a model nested in an array or a hash. What `to_h` holds is exactly
+  what goes out: nothing renamed, nothing dropped, and a field newer than this SDK
+  release serialized like any other.
+  `WebhookEventHeaders` is unchanged — it subclasses `Hash`, so it already serialized as
+  the delivery's headers.
+  Long-standing; 0.9.0's typing of `timeline.items` content only widened which read path
+  reached it. **0.9.0's Migrating note on `to_json` is superseded by this release.**
+
+### Added
+
+- **`as_json`**, ActiveSupport's serialization hook, returning the same wire `Hash` as
+  `to_h`. It is what reaches a model nested inside a structure Rails renders
+  (`render json: { user: bc.me }`); a bare `render json: model` calls `to_json` directly
+  and never reaches it. Two things to know, neither of which a Rails habit expects:
+  - **It returns the same `Hash` as `to_h`, not a copy** — read-only by the same
+    convention, where every ActiveSupport `as_json` builds a fresh one. So
+    `model.as_json.merge!(extra)` rewrites the model's wire record, and for a wrapped
+    child its parent's too. Use `model.to_h.dup` (shallow) if you need to touch it.
+  - **Options are accepted and ignored, `only:` and `except:` included** — a model is a
+    read of one record, not a presenter. `as_json(except: ["ingest_url"])` returns the
+    whole record, silently, and it *disagrees* with `to_json`: with ActiveSupport loaded
+    `model.to_json(except: [...])` does redact, because the option reaches `Hash#to_json`.
+    Do not route redaction through either — build the subset with
+    `model.to_h.except("ingest_url")`.
+
+  `to_json` forwards its argument to `Hash#to_json` rather than swallowing it, so
+  `JSON.pretty_generate` pretty-prints; what an unknown option does is the host app's
+  `json` version's business (3.x raises, the 2.x older Rubies ship ignores it).
+
+  `to_s` is untouched, so interpolating a model (`"#{model}"`, `puts model`) still shows
+  the default object form. `inspect` names the model and its fields; `to_json` / `to_h`
+  give the record.
+
+  Minor rather than patch: the `to_json` output is a fix, but `as_json` is new public
+  surface and 0.9.0 documented the old behavior as expected — semver takes the higher.
+
 ## [0.9.0] - 2026-09-30
 
 ### Changed
@@ -46,6 +92,9 @@ enrichments come with them — but three things that worked on a `Hash` no longe
   field names — because `ApiObject` defines no `to_json`. That is long-standing for
   every other model in the SDK and now reaches this path too. Serialize
   `item.content.to_h` instead.
+  > ⚠️ **Superseded in [0.10.0](#0100---2026-09-30)**, which gives `ApiObject` a
+  > `to_json`. `item.content.to_json` emits the record; the `to_h` workaround above is
+  > no longer needed. Left as written for the historical record.
 - **`inspect` and `==` change, both for the better.** `inspect` names the model and its
   wire fields (`#<BaseCradle::MessageContent body, uuid>`) rather than printing a `Hash`;
   and equality now *holds* between an item's content and the same record fetched
@@ -342,6 +391,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.10.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.0
 [0.9.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.9.0
 [0.8.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.8.0
 [0.7.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.7.0
