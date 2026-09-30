@@ -23,14 +23,49 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # Deriving the release tag from the gemspec (#186) bought correctness at a price:
+      # the version guard further down reads the same source the tag now comes from, so
+      # the two agree *by construction*. A tag pushed onto a commit that is not main's
+      # tip therefore sails through it — the stale tree builds the version the stale
+      # tree names — and an immutable RubyGems version publishes from the wrong commit.
+      # This is the independent check that loss cost us (#188), in CI rather than in an
+      # operator's memory.
+      #
+      # First in the job on purpose: it needs only git and the tag name, so it rejects a
+      # bad tag in a second rather than after setup-ruby and gem build — and every
+      # second before it runs is another second in which an unattended Dependabot
+      # auto-merge can move main under a correct tag (the check is at run time, not at
+      # push time; that race is small but real, and its remedy is the skill's).
+      #
+      # Exact tip, not "an ancestor of main". Two consequences, both accepted when this
+      # was ordered: a merge landing between the bump and the tag fails the run, and a
+      # backport release from a maintenance branch cannot pass at all. Both are cheap
+      # next to publishing the wrong tree, which cannot be undone.
+      #
+      # Fails closed: `set -e` is on by default, so an unreachable origin fails the run
+      # rather than skipping the check. The fetch is unauthenticated — checkout runs
+      # with persist-credentials: false — which works because this repo is public; were
+      # it ever made private, this step would fail every release until it is given a
+      # token. The tag name is read from the environment, never interpolated into the
+      # script: it is attacker-supplied.
+      - name: The tag must sit on main's tip
+        run: |
+          git fetch --depth=1 origin main
+          tagged="$(git rev-parse HEAD)"
+          tip="$(git rev-parse FETCH_HEAD)"
+          if [ "$tagged" != "$tip" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME is on $tagged, not main's tip $tip. Nothing was published. Do not just move the tag — see .claude/skills/rubygems-release, 'When a rehearsal guard fails'."
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME is on main's tip ($tagged)."
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.2"
           bundler-cache: true
       - name: Build the gem
         run: gem build basecradle.gemspec
-      # Nothing before the gate reads the tag: `gem build` here, and `rake release`
-      # in the publish job, both take the version from lib/basecradle/version.rb via
+      # Nothing derives the *version* from the tag: `gem build` above, and `rake
+      # release` in the publish job, both take it from lib/basecradle/version.rb via
       # the gemspec — and the tag is a separate artifact, derived from that same file
       # by the documented procedure (.claude/skills/rubygems-release) but still
       # hand-editable, and pushed by the capital in a separate turn from the captain
