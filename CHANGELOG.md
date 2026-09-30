@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-30
+
+### Changed
+
+- **`event.content.headers` folds case on lookup**, the way HTTP names headers
+  ([#173](https://github.com/basecradle/basecradle-ruby/issues/173)). BaseCradle stores
+  header names in canonical Title-Case per segment and does not preserve the sender's
+  casing, and the API docs tell consumers to "look them up case-insensitively rather than
+  by a vendor's preferred spelling" — but the plain `Hash` the SDK handed back was
+  case-sensitive, so a caller who wrote the spelling a vendor publishes (GitHub's
+  `X-GitHub-Delivery`) or the lowercase form an HTTP/2 sender emits read a silent `nil`.
+  `headers["X-GitHub-Delivery"]`, `headers["X-Github-Delivery"]` and
+  `headers["x-github-delivery"]` now all read the header that arrived, and so does every
+  other read that takes a header name — `fetch`, `dig`, `values_at`, `fetch_values` and
+  `key?` (with `has_key?`, `include?` and `member?`). Only *lookup* folds: the value is
+  still a `Hash` of exactly what the wire carried, so `each`, `keys`, `to_h` and `to_json`
+  read the platform's own canonical spelling, nothing is renamed, and the methods that
+  reshape it (`slice`, `except`, `select`) work on those stored names.
+  Matches the Python SDK's
+  [#209](https://github.com/basecradle/basecradle-python/pull/209), decided in lockstep.
+- **A header that was not delivered is absent, never `nil`** — `headers[name]` and a
+  fallback-less `headers.fetch(name)` raise `KeyError` naming the headers that did
+  arrive, where before a `nil` could equally have meant "you spelled it wrong".
+  `headers.fetch(name, default)` (or a block, which is handed the name as written) and
+  `headers.dig(name)` answer for an absent header the way `Hash` does, and a name that is
+  not a `String` is not a header name, so it is never matched. A missing *field* is still
+  `BaseCradle::MissingFieldError`; a missing *header* is a `KeyError`.
+- **Documented the two paths that do not fold**: `event.content["headers"]`, `ApiObject`'s
+  raw-wire escape hatch, and a `webhook_event` row of `timeline.items`, whose content is a
+  union of four record types (so it is not a `WebhookEventContent`) — both hand back the
+  plain wire `Hash`. `bc.webhook_events` and `timeline.webhook_events` give the
+  case-folding headers.
+
 ## [0.7.0] - 2026-09-23
 
 ### Changed
@@ -261,6 +294,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.8.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.8.0
 [0.7.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.7.0
 [0.6.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.1
 [0.6.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.0

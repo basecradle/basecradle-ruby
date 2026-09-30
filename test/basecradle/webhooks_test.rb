@@ -51,8 +51,7 @@ class WebhooksTest < Minitest::Test
     assert_equal '{"status":"ok"}', event.content.payload
     # The SDK passes the headers hash through untouched, so the keys are the platform's
     # canonical Title-Case names — one pair per header as sent, Content-Type and
-    # Content-Length included. (The platform canonicalizes; a sender's own casing is not
-    # preserved, so "X-Github-Delivery" is the key even when GitHub wrote "X-GitHub-...".)
+    # Content-Length included. Lookup folds case on top of that; the tests below pin it.
     assert_equal "ping", event.content.headers["X-Example-Event"]
     assert_equal "application/json", event.content.headers["Content-Type"]
     assert_equal "15", event.content.headers["Content-Length"] # tracks the payload
@@ -61,6 +60,106 @@ class WebhooksTest < Minitest::Test
     # The event's two historical facts about the delivery, fixed at receipt.
     assert_equal "019e7750-66ee-705a-803c-b25c5ee9b1f3", event.content.ingest_token_at_receipt
     refute event.content.verified_at_receipt
+  end
+
+  # The platform canonicalizes header names to Title-Case per segment and does not keep
+  # the sender's casing, and its docs tell consumers to look names up case-insensitively
+  # rather than by a vendor's preferred spelling. So every casing of a delivered header
+  # finds it — GitHub's own documented X-GitHub-Delivery included.
+  def test_header_lookup_folds_case_so_any_spelling_of_a_delivered_header_resolves
+    delivery_uuid = "019e7750-66ee-7c41-9f3b-2a9d0f1c77a4"
+    payload = webhook_event_payload
+    payload["content"]["headers"]["X-Github-Delivery"] = delivery_uuid # as the platform stored it
+    headers = an_event(payload).content.headers
+
+    assert_equal delivery_uuid, headers["X-Github-Delivery"] # the wire's own spelling
+    assert_equal delivery_uuid, headers["X-GitHub-Delivery"] # GitHub's documented one
+    assert_equal delivery_uuid, headers["x-github-delivery"] # an HTTP/2 sender's
+    assert_equal "application/json", headers["content-type"]
+    assert_equal "ping", headers.fetch("x-EXAMPLE-event")
+    assert_equal "ping", headers.dig("x-example-event")
+    assert_equal [ "ping", delivery_uuid ], headers.values_at("x-example-event", "X-GITHUB-DELIVERY")
+    assert_equal [ "ping" ], headers.fetch_values("x-example-event")
+    assert_equal [ "ping" ], [ "x-example-event" ].map(&headers) # &headers folds too
+    assert headers.key?("X-GitHub-Delivery")
+    # Ruby's three aliases of key? fold too, or they contradict it.
+    assert headers.include?("x-github-delivery")
+    assert headers.member?("x-github-delivery")
+    assert headers.has_key?("x-github-delivery")
+  end
+
+  # A header that never arrived is absent, not an ambiguous nil: the reads that raise on a
+  # plain Hash raise here, and the ones that answer for a missing key answer here. With
+  # case already folded, a nil could only ever have meant "you spelled it wrong".
+  def test_a_header_that_never_arrived_is_absent_rather_than_nil
+    headers = an_event.content.headers
+
+    error = assert_raises(KeyError) { headers["X-Hub-Signature-256"] }
+    assert_includes error.message, '"X-Hub-Signature-256"'
+    assert_includes error.message, "X-Example-Event" # the message lists what did arrive
+    assert_equal "X-Hub-Signature-256", error.key
+    refute headers.key?("X-Hub-Signature-256")
+    # fetch is the tolerant read: a default or a block answers for an absent header, and
+    # the block is handed the name as written, not a folded one. fetch with neither
+    # behaves like []; dig keeps Ruby's nil-returning contract.
+    assert_nil headers.fetch("X-Hub-Signature-256", nil)
+    assert_equal "X-Hub-Signature-256", headers.fetch("X-Hub-Signature-256") { |name| name }
+    assert_equal "ping", headers.fetch("x-example-event", "absent")
+    assert_raises(KeyError) { headers.fetch("X-Hub-Signature-256") }
+    assert_raises(KeyError) { headers.fetch_values("X-Hub-Signature-256") }
+    assert_nil headers.dig("X-Hub-Signature-256")
+    assert_equal [ "ping", nil ], headers.values_at("x-example-event", "X-Hub-Signature-256")
+    # Anything but a String is not a header name, so it misses like it would on a Hash.
+    assert_raises(KeyError) { headers[:"X-Example-Event"] }
+    refute headers.key?(:"X-Example-Event")
+  end
+
+  # Only lookup folds case. The headers are a Hash of exactly what the wire carried, and
+  # the wire's own spelling is what every other Hash method sees.
+  def test_headers_are_a_hash_of_the_platforms_own_spelling_untouched
+    event = an_event
+    headers = event.content.headers
+
+    assert_kind_of Hash, headers
+    assert_equal event.content.to_h["headers"], headers.to_h
+    assert_includes headers.keys, "X-Example-Event" # not "x-example-event"
+    assert_equal({ "X-Example-Event" => "ping" }, headers.select { |name, _| name.start_with?("X-") })
+    assert_equal 5, headers.size
+    # It logs and serializes as the delivery's headers, not as an opaque object.
+    assert_equal event.content.to_h["headers"], JSON.parse(headers.to_json)
+    # A derived copy is still one of these, so it keeps folding...
+    derived = headers.merge("X-Late-Header" => "added")
+
+    assert_equal "added", derived["x-late-header"]
+    assert_equal "ping", derived["x-example-event"]
+    # ...and when a copy ends up holding two casings of one name, the exact spelling wins.
+    both = headers.merge("content-type" => "text/plain")
+
+    assert_equal "text/plain", both["content-type"]
+    assert_equal "application/json", both["Content-Type"]
+    # A key that never came off the wire does not break the folded scan, or the message
+    # a miss carries.
+    assert_nil headers.merge(host: "elsewhere").dig("X-Hub-Signature-256")
+  end
+
+  # The field itself is declared, so a response without it raises like any other — a
+  # missing *field* is the SDK's MissingFieldError; a missing *header* is a KeyError.
+  def test_content_without_headers_raises_missing_field
+    payload = webhook_event_payload
+    payload["content"].delete("headers")
+
+    assert_raises(BaseCradle::MissingFieldError) { an_event(payload).content.headers }
+  end
+
+  # Reached through a timeline item instead, content is the generic wire-exact Hash — a
+  # plain, case-sensitive one. bc.webhook_events gives the case-folding headers.
+  def test_a_webhook_event_timeline_item_carries_the_plain_wire_headers
+    payload = item_payload("webhook_event", webhook_event_payload["content"], user: nil)
+    item = BaseCradle::TimelineItem.new(payload, client: @bc)
+
+    assert_instance_of Hash, item.content["headers"]
+    assert_equal "ping", item.content["headers"]["X-Example-Event"]
+    assert_nil item.content["headers"]["x-example-event"] # a plain Hash: case-sensitive
   end
 
   def test_event_verified_at_receipt_reads_a_signed_delivery
@@ -214,5 +313,9 @@ class WebhooksTest < Minitest::Test
 
   def an_endpoint(**overrides)
     BaseCradle::WebhookEndpoint.new(webhook_endpoint_payload(**overrides), client: @bc)
+  end
+
+  def an_event(payload = webhook_event_payload)
+    BaseCradle::WebhookEvent.new(payload, client: @bc)
   end
 end
