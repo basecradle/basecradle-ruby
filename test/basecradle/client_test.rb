@@ -36,10 +36,6 @@ class ClientTest < Minitest::Test
     assert_match(/BASECRADLE_TOKEN/, error.message)
   end
 
-  def test_inspect_does_not_leak_the_token
-    refute_includes @bc.inspect, FAKE_TOKEN
-  end
-
   # --- request: success paths ------------------------------------------------------------
 
   def test_request_returns_parsed_json

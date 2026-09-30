@@ -359,6 +359,57 @@ something Rails renders comes out right too. Three caveats worth knowing:
   pretty-prints. What an unknown option does is your `json` version's business — 3.x
   raises, the 2.x older Rubies ship ignores it.
 
+## What does not serialize: clients and collections
+
+Two things in this SDK are *not* records, and serializing either raises
+`BaseCradle::NotSerializableError` rather than emitting something:
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+
+begin
+  bc.to_json                          # and render json: { conn: bc }
+rescue BaseCradle::NotSerializableError => e
+  puts e.message.include?("bc_uat_")  # => true
+end
+
+begin
+  bc.messages.to_json                 # a lazy query, not a record
+rescue BaseCradle::NotSerializableError => e
+  puts e.message.include?(".to_a")    # => true
+end
+
+puts bc.messages.first(20).to_json    # serialize the page you actually asked for
+```
+
+A **client** holds your `bc_uat_` token, and under ActiveSupport `Object#as_json` is
+`instance_values` — walked recursively. So `render json: { conn: bc }` or
+`logger.info({ conn: bc }.to_json)` used to write the raw credential into a response body
+or a log line, and a token in a log is a token to rotate.
+
+A **collection** (`bc.timelines`, `bc.messages`, `timeline.tasks`, any `.filter(...)`) is
+a lazy query. ActiveSupport's `Enumerable#as_json` calls `to_a`, so serializing one ran a
+page-by-page GET loop over the whole resource from inside the render and emitted every
+record it fetched. (It did *not* reach the token — `Enumerable#as_json` shadows the ivar
+walk — but a client's instance variables are eight collections, so serializing a *client*
+ran those loops too, on its way to the credential.) Call `.to_a` or `.first(n)` yourself
+and serialize that, so how much you fetch is a visible act in your code.
+
+Both refusals happen before any HTTP — but they are on the SDK's own objects. An
+`Enumerator` you built from one is a plain Ruby object this SDK does not own, so
+`render json: { recent: bc.messages.lazy }` and `bc.messages.each.to_json` still page the
+whole resource. Call `.first(n)` or `.to_a` before handing a query to a renderer.
+
+`bc.inspect` and `"#{bc}"` are redacted for the same reason — Ruby's default `inspect`
+dumps every instance variable, which would print the token into every exception message
+and REPL transcript that touched a client:
+
+```
+#<BaseCradle::Client base_url="https://basecradle.com" token=[REDACTED]>
+```
+
 ## Development
 
 ```bash

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "serialization"
+
 module BaseCradle
   # The shared cursor-pagination engine. Every list endpoint paginates the same way:
   # newest first, up to 50 per page, +next_cursor+ in the response passed back as
@@ -10,6 +12,7 @@ module BaseCradle
   # and cursors never appear in calling code.
   class Paginator
     include Enumerable
+    include NotSerializableCollection
 
     def initialize(client, path, envelope_key:, model:, params: nil)
       @client = client

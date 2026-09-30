@@ -9,6 +9,60 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.10.1] - 2026-09-30
+
+### Security
+
+- **A `Client` no longer serializes, and never emits its token**
+  ([#198](https://github.com/basecradle/basecradle-ruby/issues/198)). A client is a
+  connection, not a record, and it defined no `as_json`/`to_json` — so with ActiveSupport
+  loaded it fell through to `Object#as_json`, which is `instance_values`, walked
+  recursively. Its instance variables include the raw `bc_uat_` token, so
+  `render json: { conn: bc }` or `logger.info({ conn: bc }.to_json)` wrote the live
+  credential into a response body or a log line, and **a token in a log is a token to
+  rotate**. `bc.to_json` now raises `BaseCradle::NotSerializableError`, a
+  `BaseCradle::Error`, naming what to serialize instead. Long-standing and latent; no
+  token is known to have been emitted.
+- **`Client#inspect` and `#to_s` redact the token** — the same exposure through a
+  different door. Ruby's default `inspect` dumps every instance variable, so the
+  credential printed into every exception message, REPL transcript and `p` call that
+  touched a client. Both now read
+  `#<BaseCradle::Client base_url="https://basecradle.com" token=[REDACTED]>`, with `to_s`
+  the same string because interpolation is the door people reach for without thinking.
+
+### Fixed
+
+- **A collection resource no longer serializes either.** `bc.timelines`, `bc.messages`,
+  `timeline.tasks`, any `.filter(...)`, and the `Paginator` behind them are lazy queries,
+  not records. ActiveSupport's `Enumerable#as_json` calls `to_a`, so serializing one ran
+  a page-by-page GET loop over the whole resource from **inside a view render** and
+  emitted every record it fetched. It did *not* reach the token — `Enumerable#as_json`
+  shadows the `instance_values` walk above — but a client's instance variables are eight
+  collections, so serializing a client fired those loops on its way to the credential.
+  All of them now raise the same `NotSerializableError`, before any HTTP, pointing at
+  `.to_a` so how much you fetch is a visible act in your own code.
+  Without ActiveSupport these calls were useless rather than dangerous
+  (`"#<BaseCradle::MessagesResource:0x…>"`, the heap address 0.10.0 removed for models);
+  that is closed too.
+- **The collection resources' `inspect` is unchanged** and still shows Ruby's default
+  ivar dump — which renders the client through the redacting `Client#inspect` above, so
+  no token reaches it. Pinned by test so it stays that way.
+
+### Known limitation
+
+The refusals are on the SDK's own objects. An `Enumerator` built from a collection —
+`bc.messages.each`, `bc.messages.lazy` — is a plain Ruby object this SDK does not own,
+and ActiveSupport gives it an `as_json` that calls `to_a`, so
+`render json: { recent: bc.messages.lazy }` still pages the whole resource. No token is
+exposed; call `.first(n)` or `.to_a` before handing a query to a renderer.
+
+### Migrating
+
+Nothing to change unless you were serializing a `Client` or a collection, which never
+emitted anything useful and, for a client under ActiveSupport, emitted your token. If you
+were: serialize the record you meant (`bc.me`, a timeline, a message), or call `.to_a` /
+`.first(n)` on a collection first.
+
 ## [0.10.0] - 2026-09-30
 
 ### Fixed
@@ -396,6 +450,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.10.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.1
 [0.10.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.0
 [0.9.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.9.0
 [0.8.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.8.0

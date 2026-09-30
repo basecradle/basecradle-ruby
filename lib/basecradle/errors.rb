@@ -30,6 +30,12 @@ module BaseCradle
   # this response form). The SDK raises rather than return an ambiguous nil.
   class MissingFieldError < Error; end
 
+  # A Client or a collection resource was serialized (+to_json+ / +as_json+). Neither is
+  # a record: a Client holds your bearer token, and a collection is a lazy query whose
+  # serialization would page the whole API from inside your renderer. The SDK refuses
+  # loudly rather than emit a credential or a heap address — see BaseCradle::NotSerializable.
+  class NotSerializableError < Error; end
+
   # The request never got an API response (DNS failure, refused connection, timeout).
   # The underlying exception is preserved as +cause+.
   class APIConnectionError < Error; end
