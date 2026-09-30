@@ -198,7 +198,43 @@ class RenderingTest < Minitest::Test
     end
   end
 
+  # The guard is only as wide as the sweep behind it. `BaseCradle.constants` stops at the
+  # top level, so a class added one module down would be invisible to the very test
+  # written to notice a class added later — and it would be invisible silently, which is
+  # the whole shape of the 0.10.2 miss.
+  def test_the_sweep_reaches_a_class_in_a_nested_namespace
+    with_nested_probe_class(Class.new(Hash)) do |probe|
+      assert_includes renderable_classes, probe,
+                      "a class nested inside a module under BaseCradle must still be in " \
+                      "scope: a Hash descendant hidden one namespace down brings Hash's " \
+                      "render just the same"
+      refute renders_by_the_rule?(probe)
+    end
+  end
+
   # --- the module's contract ---------------------------------------------------------------
+
+  # A record can be rebuilt from a cached hash — the README says so — and a cache layer
+  # that symbolizes some keys hands back mixed types. `sort` refuses those with
+  # `comparison of Symbol with String failed`, which before the shared module raised from
+  # `inspect` alone and would now raise from interpolation and `pp` as well. A render that
+  # blows up a log line is worse than the disorder it was avoiding.
+  def test_a_record_renders_rather_than_raising_on_mixed_type_keys
+    message = BaseCradle::Message.new({ :body => "b", "uuid" => "u" }, client: @client)
+
+    each_door(message) do |door, rendered|
+      assert_equal "#<BaseCradle::Message body, uuid>", rendered, "Message##{door}"
+    end
+  end
+
+  # The nil contract, on the class behind thirty of the SDK's models rather than only on
+  # the headers. Reachable whenever the API sends a nested content object as {}.
+  def test_a_record_with_no_fields_renders_the_bare_class
+    each_door(BaseCradle::Message.new({}, client: @client)) do |door, rendered|
+      assert_equal "#<BaseCradle::Message>", rendered,
+                   "Message##{door} must not trail a space where the field names would be"
+    end
+  end
 
   # nil means "nothing to show" and renders the bare class; the empty string is a body and
   # renders after a space. Folding the two would report a delivery carrying one header named
@@ -289,5 +325,15 @@ class RenderingTest < Minitest::Test
       yield BaseCradle::RenderGuardProbe
     ensure
       BaseCradle.send(:remove_const, :RenderGuardProbe)
+    end
+
+    # The same, one namespace down — the case a top-level-only sweep cannot see.
+    def with_nested_probe_class(klass)
+      namespace = Module.new
+      BaseCradle.const_set(:RenderGuardNamespace, namespace)
+      namespace.const_set(:Probe, klass)
+      yield namespace::Probe
+    ensure
+      BaseCradle.send(:remove_const, :RenderGuardNamespace)
     end
 end
