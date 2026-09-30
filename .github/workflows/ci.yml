@@ -115,6 +115,19 @@ jobs:
             esac
             files="$files $f"
           done
+          # Given no paths at all, actionlint lints every workflow it can find (measured
+          # with the pinned 1.7.12). So an empty set does not make this step a no-op — it
+          # silently inverts it from "lint what this repo owns" into "lint everything,
+          # the capital's stubs included", as a *blocking* check on files this repo may
+          # not edit. That is the exact wedge the advisory step below exists to prevent.
+          # This job's own ci.yml must be in the checkout for the job to be running, so an
+          # empty set is never "this repo owns no workflows" — it is a broken checkout or
+          # the wrong working directory, and the message says so rather than making the
+          # reader infer it from an actionlint run over files nobody asked for.
+          if [ -z "$files" ]; then
+            echo "::error::No workflow files found under .github/workflows. ci.yml itself must be in the checkout for this job to run, so the checkout or the working directory is wrong. Refusing to run actionlint with no paths: given none it lints every workflow it finds, including the capital's shared stubs, which this blocking step must never do."
+            exit 1
+          fi
           # shellcheck disable=SC2086  # deliberate word-splitting: $files is a path list
           "$RUNNER_TEMP/actionlint" -color $files
       - name: Lint the capital's shared stubs (advisory)
@@ -123,11 +136,57 @@ jobs:
         # sovereignty). Blocking the required gate on a file we are forbidden to fix
         # would wedge every PR here; a finding is reported upward with `needs-capital`
         # instead. Advisory so it is still visible in the log.
+        #
+        # Each stub is asserted present before it is linted. `continue-on-error` cannot
+        # tell a clean run from one that died on a path that no longer exists, so without
+        # this a stub the capital renames or drops takes the whole step down with it: the
+        # non-zero is swallowed, the job is green, and the stub that IS still there stops
+        # being checked too. The step would report nothing wrong while checking nothing.
+        #
+        # Every match is collected, not the last one: a stub is resolved across both
+        # extensions to mirror the blocking step's exclusion above, which matches on the
+        # name without its extension. If both spellings are on disk mid-rename, keeping
+        # only one would leave a live workflow linted by neither step — blocking skips it
+        # by name, and this step would have dropped it.
+        #
+        # `if: always()`, because a step is skipped when an earlier one in the job fails:
+        # without it a finding in the blocking step above silently takes the stubs' check
+        # down too, which is the same swallowed-non-zero this step is being hardened
+        # against. It cannot affect the gate — it is advisory either way.
+        if: always()
         continue-on-error: true
         run: |
-          "$RUNNER_TEMP/actionlint" -color \
-            .github/workflows/needs-human-alert.yml \
-            .github/workflows/dependabot-auto-merge.yml
+          stubs=""
+          missing=""
+          for stub in needs-human-alert dependabot-auto-merge; do
+            found=""
+            for f in ".github/workflows/$stub.yml" ".github/workflows/$stub.yaml"; do
+              if [ -f "$f" ]; then
+                found="yes"
+                stubs="$stubs $f"
+              fi
+            done
+            if [ -z "$found" ]; then
+              missing="$missing $stub"
+              echo "::error::Not this PR's doing, and not fixable in this repo: the shared stub $stub is under .github/workflows in neither extension, so nothing linted it. It is a verbatim capital-owned artifact this repo carries; raise it with needs-capital."
+            fi
+          done
+          if [ -n "$stubs" ]; then
+            # shellcheck disable=SC2086  # deliberate word-splitting: $stubs is a path list
+            "$RUNNER_TEMP/actionlint" -color $stubs
+          fi
+          # Any absence exits non-zero, even when the other stub linted clean. This cannot
+          # turn the step red — it is `continue-on-error`, and GitHub reports the step's
+          # conclusion as `success` however the script exits (measured on the #210 break
+          # run). What it buys is that one missing stub and two read identically: the log
+          # carries `Process completed with exit code 1` either way, rather than the likely
+          # case — a rename, which hits one artifact at a time — looking like a clean run
+          # in the log while the total case does not. The loud half is the ::error::
+          # annotation above, which GitHub surfaces on the run regardless of step outcome.
+          if [ -n "$missing" ]; then
+            echo "Missing shared stubs:$missing"
+            exit 1
+          fi
 
   # The gate: the single required status check in branch protection (the "Protect
   # main" ruleset requires the context named "CI"). Adding or dropping Ruby
