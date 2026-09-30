@@ -115,17 +115,6 @@ jobs:
             .github/workflows/needs-human-alert.yml \
             .github/workflows/dependabot-auto-merge.yml
 
-  # TEMPORARY — reverted in the very next commit on this branch. It exists to prove, on
-  # CI and not just locally, that the new test fails when a job is added to this file and
-  # not to the gate's `needs` (#200). This job itself passes; the `test` job is what goes
-  # red, which is the whole point: today that would have merged green.
-  unlisted:
-    name: unlisted
-    runs-on: ubuntu-latest
-    steps:
-      - name: Exist without being required
-        run: echo "This job is not in the CI gate's needs."
-
   # The gate: the single required status check in branch protection (the "Protect
   # main" ruleset requires the context named "CI"). Adding or dropping Ruby
   # versions never requires a ruleset change.
