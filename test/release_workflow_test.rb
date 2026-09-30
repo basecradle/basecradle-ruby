@@ -10,6 +10,11 @@ require "yaml"
 # a `v*` tag, after the rehearsal is green and the capital has actuated the gate, and a tag
 # pushed to a public repo is not really un-pushable.
 #
+# The publish job's `permissions:` are pinned here for the same reason rather than for a
+# contractual one (#208): `id-token: write` is the whole of this gem's authentication, and
+# dropping it has the identical shape — green tree, green actionlint, dead on a tag that
+# has already cleared the gate.
+#
 # ci.yml (#200), the README and the CHANGELOG (#196) each had a test holding them honest;
 # the workflow that publishes the gem had none (#203). #202 is the reason that matters: it
 # corrected a comment in this file that had been wrong since the file was written and
@@ -36,6 +41,15 @@ class ReleaseWorkflowTest < Minitest::Test
   # environment is not: a job rename must stay green, while dropping the environment — the
   # edit that actually 403s — must not.
   PUBLISH_ACTION = "rubygems/release-gem"
+
+  # The publish job's permissions, exactly. `id-token: write` is what rubygems/release-gem
+  # mints the OIDC token with — without it there is no Trusted Publishing at all, and no
+  # stored credential to fall back on. `contents: write` is what `rake release` pushes with.
+  REQUIRED_PUBLISH_PERMISSIONS = { "contents" => "write", "id-token" => "write" }.freeze
+
+  # The workflow-level grant every job that does not set its own `permissions:` inherits —
+  # here, the rehearsal, which only builds a gem and installs it.
+  DEFAULT_PERMISSIONS = { "contents" => "read" }.freeze
 
   # Exactly one workflow in this repo may publish on a release tag, and it must be the file
   # RubyGems trusts. Renaming it, or adding a second tag-triggered workflow beside it, both
@@ -120,6 +134,50 @@ class ReleaseWorkflowTest < Minitest::Test
                "teach this test which ones keep the rehearsal binding."
   end
 
+  # The publish job's `permissions` have the same failure shape as the two contractual names
+  # above, and sit four lines from them. Drop either key and the tree stays green — `bundle
+  # exec rake` passes, `actionlint` passes, a narrower block being valid YAML and a valid
+  # workflow — and the run dies on a `v*` tag, after the rehearsal has gone green and after
+  # the capital has actuated the gate, which is the failure this file exists to move earlier.
+  #
+  # Equality rather than containment, for the reason the gate's dependencies are compared by
+  # equality in ci_workflow_test.rb: a permission this job does not need is a permission a
+  # compromised action gets, and this is the one job in the repo holding a write token. So a
+  # key *added* here fails too, deliberately — including via the `permissions: write-all`
+  # shorthand, which is a String and cannot equal the Hash either way.
+  def test_the_publish_job_holds_exactly_the_permissions_the_publish_needs
+    permissions = jobs.fetch(publish_key)["permissions"]
+
+    assert_equal REQUIRED_PUBLISH_PERMISSIONS, permissions,
+                 "the #{publish_key} job must grant exactly " \
+                 "#{REQUIRED_PUBLISH_PERMISSIONS.inspect} (found #{permissions.inspect}). " \
+                 "`id-token: write` is what #{PUBLISH_ACTION} mints the OIDC token with — " \
+                 "drop it and there is no Trusted Publishing at all, and no stored " \
+                 "credential to fall back on — and `contents: write` is what `rake " \
+                 "release` needs for its SCM push. Dropping either is green in this tree " \
+                 "and fails on a tag, after the gate has been actuated and a tag pushed to " \
+                 "a public repo is not really un-pushable. Adding one fails too: this is " \
+                 "the only job here that holds a write token."
+  end
+
+  # The workflow-level block is what every *other* job runs with — today the rehearsal, and
+  # any job added later that does not say otherwise. A hardening pin rather than a
+  # correctness one: widening it breaks no release, which is precisely why nothing else in
+  # the repo would ever notice. Removing it is the worse of the two edits, since the token
+  # then falls back to the repository's default workflow permissions — a setting outside
+  # this tree, which can be read *and* write.
+  def test_the_workflow_hands_every_job_read_by_default_and_nothing_more
+    permissions = workflow["permissions"]
+
+    assert_equal DEFAULT_PERMISSIONS, permissions,
+                 "#{FILENAME} must grant #{DEFAULT_PERMISSIONS.inspect} at the workflow " \
+                 "level (found #{permissions.inspect}). That is what the rehearsal runs " \
+                 "with, and what any job added later without its own `permissions:` block " \
+                 "inherits. Removing it does not fall back to nothing — it falls back to " \
+                 "the repository's default workflow permissions, a setting outside this " \
+                 "tree that may be read-write. The one job that needs more says so itself."
+  end
+
   private
     def workflow_path
       File.join(WORKFLOWS, FILENAME)
@@ -127,15 +185,27 @@ class ReleaseWorkflowTest < Minitest::Test
 
     # The release workflow, read strictly: this repo owns the file, and anything that stops
     # it parsing should name itself here rather than quietly emptying the assertions above.
-    def jobs
-      @jobs ||= begin
+    # The whole document, not just its jobs, because the workflow-level `permissions:` is
+    # one of the things pinned.
+    def workflow
+      @workflow ||= begin
         unless File.exist?(workflow_path)
           flunk ".github/workflows/#{FILENAME} does not exist. That filename is " \
                 "contractual — it is registered at rubygems.org as this gem's trusted " \
                 "publisher — so whatever replaced it cannot publish."
         end
-        YAML.safe_load(File.read(workflow_path)).fetch("jobs")
+        document = YAML.safe_load(File.read(workflow_path))
+        unless document.is_a?(Hash)
+          flunk ".github/workflows/#{FILENAME} does not read as a workflow (parsed as " \
+                "#{document.class}). An empty file is the usual cause, and it cannot " \
+                "publish anything."
+        end
+        document
       end
+    end
+
+    def jobs
+      @jobs ||= workflow.fetch("jobs")
     end
 
     # Every workflow in the directory, by filename. Both extensions: GitHub honours `.yaml`
