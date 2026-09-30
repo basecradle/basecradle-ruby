@@ -31,17 +31,19 @@ jobs:
         run: gem build basecradle.gemspec
       # Nothing before the gate reads the tag: `gem build` here, and `rake release`
       # in the publish job, both take the version from lib/basecradle/version.rb via
-      # the gemspec — and the tag is hand-typed by the capital in a separate turn
-      # from the captain who bumped that file. A mismatch cannot publish the wrong
-      # version (bundler derives its own version_tag from the gemspec, so `rake
-      # release` dies at its SCM push or at RubyGems' re-push rejection), but it dies
-      # *after* the rehearsal is green and the capital has approved the rubygems
-      # gate, naming neither the tag nor the mismatch. Failing here costs a deleted
-      # tag and a retype instead. The version compared is the one on the gem just
-      # built, which is also bundler's version_tag ("v" + Gem::Version#to_s, which
-      # normalizes 1.0.0-rc1 to 1.0.0.pre.rc1) — so passing this step is precisely
-      # the precondition `rake release` needs. The tag is read from the environment,
-      # never interpolated into the script: a tag name is attacker-supplied.
+      # the gemspec — and the tag is a separate artifact, derived from that same file
+      # by the documented procedure (.claude/skills/rubygems-release) but still
+      # hand-editable, and pushed by the capital in a separate turn from the captain
+      # who bumped it. A mismatch cannot publish the wrong version (bundler derives
+      # its own version_tag from the gemspec, so `rake release` dies at its SCM push
+      # or at RubyGems' re-push rejection), but it dies *after* the rehearsal is
+      # green and the capital has approved the rubygems gate, naming neither the tag
+      # nor the mismatch. Failing here costs a deleted tag and a re-tag instead. The
+      # version compared is the one on the gem just built, which is also bundler's
+      # version_tag ("v" + Gem::Version#to_s, which normalizes 1.0.0-rc1 to
+      # 1.0.0.pre.rc1) — so passing this step is precisely the precondition `rake
+      # release` needs. The tag is read from the environment, never interpolated
+      # into the script: a tag name is attacker-supplied.
       - name: The tag must name the version being built
         run: |
           gem_file="$(ls basecradle-*.gem)"
