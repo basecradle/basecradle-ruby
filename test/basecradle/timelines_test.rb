@@ -146,6 +146,139 @@ class TimelinesTest < Minitest::Test
     assert_requested(:post, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}/rotation")
   end
 
+  # --- an item's content is typed by its type --------------------------------------------
+
+  # One record, one shape: an item's content is the same model its own resource returns,
+  # so everything those models add — nested wrapping, case-folding headers — reads the
+  # same down either path. (Verbs live on the item models, not on content: cancelling a
+  # task found on a timeline is still bc.tasks.get(item.content.uuid).cancel.)
+  # The dispatch is per row, not per page: a real timeline is mixed, and each row must
+  # resolve to its own model. (A pending task is never inline — a task appears only once
+  # it activates — so the task row here is an activated one.)
+  def test_each_row_of_a_mixed_page_resolves_to_its_own_content_model
+    stub_request(:get, "#{BASE_URL}/timelines/#{TIMELINE_UUID}").to_return(
+      status: 200,
+      body: { "timeline" => timeline_payload,
+              "items" => [ message_payload, asset_payload, task_payload(status: "activated"),
+                           webhook_event_item ] }.to_json
+    )
+
+    contents = @bc.timelines.get(TIMELINE_UUID).items.map(&:content)
+
+    assert_equal [ BaseCradle::MessageContent, BaseCradle::AssetContent,
+                   BaseCradle::TaskContent, BaseCradle::WebhookEventContent ],
+                 contents.map(&:class)
+    assert_equal "Hello from a peer.", contents[0].body
+    assert_equal "activated", contents[2].status
+    assert_equal "ping", contents[3].headers["x-example-event"]
+  end
+
+  def test_a_message_item_content_is_a_message_content
+    stub_timeline_with(message_payload)
+
+    content = @bc.timelines.get(TIMELINE_UUID).items.first.content
+
+    assert_instance_of BaseCradle::MessageContent, content
+    assert_equal "Hello from a peer.", content.body
+  end
+
+  def test_an_asset_item_content_is_an_asset_content_down_to_its_file
+    stub_timeline_with(asset_payload)
+
+    content = @bc.timelines.get(TIMELINE_UUID).items.first.content
+
+    assert_instance_of BaseCradle::AssetContent, content
+    assert_equal "Quarterly report", content.description
+    # Nested wrapping comes with it — the file is an AssetFile, not a Hash.
+    assert_instance_of BaseCradle::AssetFile, content.file
+    assert_equal "report.pdf", content.file.filename
+  end
+
+  def test_a_task_item_content_is_a_task_content
+    stub_timeline_with(task_payload)
+
+    content = @bc.timelines.get(TIMELINE_UUID).items.first.content
+
+    assert_instance_of BaseCradle::TaskContent, content
+    assert_equal "pending", content.status
+    assert_equal "Review the report.", content.instructions
+  end
+
+  def test_a_webhook_event_item_content_is_a_webhook_event_content
+    stub_timeline_with(webhook_event_item)
+
+    content = @bc.timelines.get(TIMELINE_UUID).items.first.content
+
+    assert_instance_of BaseCradle::WebhookEventContent, content
+    assert_equal '{"status":"ok"}', content.payload
+    assert content.headers.key?("x-example-event") # the folding lookup, through items
+  end
+
+  # The API is additive-only: an item type newer than this release must keep reading.
+  # It comes back generic — no declared fields to name, but every wire field still there.
+  def test_an_unknown_item_type_falls_back_to_the_generic_object
+    stub_timeline_with(item_payload("quantum_entanglement",
+                                    { "uuid" => "019e7750-66ee-7b31-9f0d-5a4e2c8d71aa",
+                                      "spin" => "up" }))
+
+    content = @bc.timelines.get(TIMELINE_UUID).items.first.content
+
+    assert_instance_of BaseCradle::ApiObject, content
+    assert_equal "up", content["spin"]
+  end
+
+  # An *unknown* type is forward-compatibility; an *absent* one is a malformed response
+  # (the spec marks type required on every item), and those must not blur together. The
+  # SDK never guesses which, so reading content off a typeless item raises like any other
+  # withheld field — the same answer item.type itself gives.
+  def test_an_item_without_a_type_at_all_raises_rather_than_guessing
+    item = message_payload
+    item.delete("type")
+    stub_timeline_with(item)
+
+    first = @bc.timelines.get(TIMELINE_UUID).items.first
+
+    assert_raises(BaseCradle::MissingFieldError) { first.content }
+    assert_raises(BaseCradle::MissingFieldError) { first.type }
+    # The wire is still reachable through the escape hatch, as it is for any raising field.
+    assert_equal "Hello from a peer.", first["content"]["body"]
+  end
+
+  # The point of typing content: an item's content and the same record fetched directly
+  # are now the same object, so they compare equal (ApiObject#== is class + wire data).
+  def test_an_items_content_equals_the_same_record_fetched_directly
+    stub_timeline_with(message_payload)
+    stub_request(:get, "#{BASE_URL}/messages/#{message_payload['content']['uuid']}")
+      .to_return(status: 200, body: { "message" => message_payload }.to_json)
+
+    from_timeline = @bc.timelines.get(TIMELINE_UUID).items.first.content
+    fetched = @bc.messages.get(message_payload["content"]["uuid"]).content
+
+    assert_equal fetched, from_timeline
+  end
+
+  # Typing wraps the read; it does not touch the wire. The raw escape hatch still hands
+  # back exactly what the API sent.
+  def test_the_raw_escape_hatch_still_returns_the_wire_hash
+    stub_timeline_with(message_payload)
+
+    item = @bc.timelines.get(TIMELINE_UUID).items.first
+
+    assert_instance_of Hash, item["content"]
+    assert_equal message_payload["content"], item["content"]
+  end
+
+  # A declared field the API did not return still raises rather than reading as nil.
+  def test_an_item_without_content_raises_missing_field
+    item = message_payload
+    item.delete("content")
+    stub_timeline_with(item)
+
+    assert_raises(BaseCradle::MissingFieldError) do
+      @bc.timelines.get(TIMELINE_UUID).items.first.content
+    end
+  end
+
   # Only a webhook_event item carries an endpoint — on any other item reading it raises
   # rather than inventing one.
   def test_a_message_item_has_no_webhook_endpoint

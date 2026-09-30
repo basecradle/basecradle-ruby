@@ -4,6 +4,54 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-30
+
+### Changed
+
+- **A timeline item's `content` is typed by the item's `type`**
+  ([#189](https://github.com/basecradle/basecradle-ruby/issues/189)). `item.content` now
+  reads as the same content model the record's own resource returns — `MessageContent`,
+  `AssetContent`, `TaskContent` or `WebhookEventContent` — where it was the raw wire
+  `Hash`. One record has one shape however you reach it, so everything those models add
+  reads down both paths: `timeline.items` gives an `AssetContent` whose `file` is an
+  `AssetFile`, and a `webhook_event` row's `content.headers` is the case-folding
+  `WebhookEventHeaders` 0.8.0 shipped, so `item.content.headers["X-GitHub-Delivery"]`
+  now finds the header it names. The previous release documented that split as a
+  boundary; it is now closed, and every future enrichment of a content model arrives on
+  both paths at once. The README documents `timeline.items` with a worked example for
+  the first time.
+- **An item `type` this release does not know keeps reading.** The API is additive-only,
+  so an unrecognized `type` is never an error: its content comes back as a plain
+  `ApiObject`, and `content["any_field"]` still returns the wire value untouched.
+  Upgrading the SDK is what types it. An item carrying *no* `type` is a different thing
+  — a malformed response, not a new record kind — and raises `MissingFieldError` the way
+  `item.type` itself does, rather than being guessed into the generic case.
+- The wire is untouched — `item["content"]`, `ApiObject`'s raw escape hatch, still hands
+  back exactly the `Hash` the API sent, and no field is renamed.
+  Decided in lockstep with the Python SDK's
+  [#210](https://github.com/basecradle/basecradle-python/issues/210); that port is still
+  in flight, so the two SDKs reach parity on this when it ships.
+
+### Migrating
+
+`item.content` was a `Hash` and is now an `ApiObject`. Reads of *named* fields get
+better — `item.content.body` instead of `item.content["body"]`, and the models' own
+enrichments come with them — but three things that worked on a `Hash` no longer do:
+
+- **The `Hash` protocol is gone.** `item.content.fetch("body")`, `.each`, `.keys`,
+  `.dig(...)` and `.key?(...)` raise `NoMethodError`. Use the field reader, or
+  `item.content.to_h` for the wire `Hash` itself (`item["content"]` gives the same).
+- **`to_json` no longer serializes the record.** `item.content.to_json` emits Ruby's
+  default `to_s` — `"#<BaseCradle::MessageContent:0x…>"`, an object address with no
+  field names — because `ApiObject` defines no `to_json`. That is long-standing for
+  every other model in the SDK and now reaches this path too. Serialize
+  `item.content.to_h` instead.
+- **`inspect` and `==` change, both for the better.** `inspect` names the model and its
+  wire fields (`#<BaseCradle::MessageContent body, uuid>`) rather than printing a `Hash`;
+  and equality now *holds* between an item's content and the same record fetched
+  directly (`timeline.items.first.content == bc.messages.get(uuid).content`), where
+  comparing a `Hash` to an `ApiObject` was always false.
+
 ## [0.8.0] - 2026-09-30
 
 ### Changed
@@ -294,6 +342,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.9.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.9.0
 [0.8.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.8.0
 [0.7.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.7.0
 [0.6.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.6.1
