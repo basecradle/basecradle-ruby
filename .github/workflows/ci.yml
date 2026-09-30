@@ -107,7 +107,7 @@ jobs:
         # `*.yaml` from reaching actionlint as though it were a workflow.
         run: |
           files=""
-          for f in .github/workflows/*.yml .github/workflows/*.yaml; do
+          for f in .github/no-such-dir/*.yml .github/no-such-dir/*.yaml; do
             [ -f "$f" ] || continue
             name="${f##*/}"
             case "${name%.*}" in
@@ -158,7 +158,7 @@ jobs:
         run: |
           stubs=""
           missing=""
-          for stub in needs-human-alert dependabot-auto-merge; do
+          for stub in needs-human-alert dependabot-auto-merge renamed-by-the-capital; do
             found=""
             for f in ".github/workflows/$stub.yml" ".github/workflows/$stub.yaml"; do
               if [ -f "$f" ]; then
