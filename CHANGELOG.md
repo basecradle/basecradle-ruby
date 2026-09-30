@@ -9,7 +9,7 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
-## [0.10.0] - 2026-09-30
+## [0.10.1] - 2026-09-30
 
 ### Fixed
 
