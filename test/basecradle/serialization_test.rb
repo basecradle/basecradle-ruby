@@ -127,11 +127,12 @@ class SerializationTest < Minitest::Test
   # resource — an unbounded GET loop from inside a view render. No stub is registered
   # here, so a request would also trip WebMock; the registry assertion says it plainly.
   def test_serializing_never_issues_a_request
+    subjects = collections.merge("bc" => @client)
+
     serialization_doors.each do |door, call|
-      collections.each_value do |collection|
-        assert_raises(BaseCradle::NotSerializableError, door) { call.call(collection) }
+      subjects.each do |name, subject|
+        assert_raises(BaseCradle::NotSerializableError, "#{door} / #{name}") { call.call(subject) }
       end
-      assert_raises(BaseCradle::NotSerializableError, door) { call.call(@client) }
     end
 
     assert_empty WebMock::RequestRegistry.instance.requested_signatures.hash,
@@ -153,6 +154,11 @@ class SerializationTest < Minitest::Test
       assert_includes error.message, "bc_uat_"
       assert_includes error.message, "BaseCradle::Client"
     end
+
+    # Marshal.load(Marshal.dump(x)) is the deep-copy idiom, and on a client it made a
+    # second copy of the credential for as long as the process lived. It refuses at the
+    # dump, so the load never runs and the copy is never made.
+    assert_raises(BaseCradle::NotSerializableError) { Marshal.load(Marshal.dump(@client)) }
   end
 
   # The measured asymmetry this issue turned on: Enumerable#as_json shadowed the ivar walk,
@@ -183,13 +189,6 @@ class SerializationTest < Minitest::Test
     end
   end
 
-  # Marshal.load(Marshal.dump(x)) is the deep-copy idiom, and on a client it was a second
-  # copy of the credential for as long as the process lived. It refuses at the dump, so
-  # the copy is never made.
-  def test_the_marshal_deep_copy_idiom_refuses_at_the_dump
-    assert_raises(BaseCradle::NotSerializableError) { Marshal.load(Marshal.dump(@client)) }
-  end
-
   # A model holds the client that fetched it, so the walkers reach the token through one
   # — a live leak the JSON door never had, since a model serializes as its wire record.
   # Refusing is the right answer and the message names Client as what was reached; the
@@ -205,6 +204,19 @@ class SerializationTest < Minitest::Test
 
     assert_equal message_payload, Marshal.load(Marshal.dump(message.to_h))
     refute_includes Marshal.dump(message.to_h), FAKE_TOKEN
+  end
+
+  # That caller passed no client, so a message about clients alone would be about an
+  # object they never named. It has to point at the one thing that works for them, and
+  # the README and CHANGELOG both promise this word. The Python SDK's __reduce__ message
+  # is worded for the same reason.
+  def test_the_refusal_names_the_indirect_path_and_what_to_dump_instead
+    error = assert_raises(BaseCradle::NotSerializableError) do
+      Marshal.dump(BaseCradle::Message.new(message_payload, client: @client))
+    end
+
+    assert_includes error.message, "to_h"
+    assert_includes error.message, "Nothing holding a client serializes either"
   end
 
   # One refusal per resource, reached through four doors — not four texts drifting apart.
@@ -241,6 +253,21 @@ class SerializationTest < Minitest::Test
     records = enumerable_classes.select { |klass| klass <= Hash }
 
     assert_equal [ BaseCradle::WebhookEventHeaders ], records
+  end
+
+  # And the exemption is pinned by behaviour, not only by that list: a delivery's headers
+  # are a record, so caching one must keep working through every door. The list check
+  # above would stay green the day someone gives this class a @client ivar to hang a verb
+  # on — at which point the Hash-subclass ivar walk reaches the token and every
+  # Rails.cache.write of a delivery starts raising. This is the test that would fail.
+  def test_the_exempt_record_still_serializes_through_every_door
+    headers = delivered_headers
+
+    assert_equal headers.to_h, JSON.parse(headers.to_json)
+    assert_equal headers.to_h, Marshal.load(Marshal.dump(headers)).to_h
+    assert_equal headers.to_h, YAML.unsafe_load(headers.to_yaml).to_h
+    refute_includes Marshal.dump(headers), FAKE_TOKEN
+    refute_includes headers.to_yaml, FAKE_TOKEN
   end
 
   # ActiveSupport defines as_json/to_json on Enumerable itself, so a collection is only

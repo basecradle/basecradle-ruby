@@ -428,10 +428,12 @@ and serialize that, so how much you fetch is a visible act in your code.
 variables directly, so neither needed ActiveSupport to reach the token — and neither is
 shadowed the way `Enumerable#as_json` shadowed the ivar walk, so `Marshal.dump(bc.messages)`
 reached the credential where `bc.messages.to_json` never did. They are also where a leaked
-token stops being a log line and becomes a token *at rest*: `Rails.cache.write("bc", bc)`
-puts it in Redis or a file, a client passed as an ActiveJob or Sidekiq argument puts it in
-the queue backend, a Marshal-backed session puts it in the session. `Marshal.load(Marshal.dump(x))`,
-the deep-copy idiom, refuses at the dump.
+token stops being a log line and becomes a token *at rest*: ActiveSupport's cache stores
+marshal what you write, so `Rails.cache.write("bc", bc)` landed it in Redis, memcached or
+a file; a Marshal-backed session landed it in the session; Delayed::Job YAMLs its handler
+into the database. `Marshal.load(Marshal.dump(x))`, the deep-copy idiom, refuses at the
+dump. (Queue backends that serialize arguments as **JSON** — ActiveJob and Sidekiq among
+them — go through `to_json`, and so were already closed in 0.10.1.)
 
 **Anything *holding* a client refuses too, models included** — both walkers recurse, so
 `Marshal.dump(message)` reaches the client and raises naming `BaseCradle::Client`. That is
@@ -448,10 +450,15 @@ record = message.to_h                                  # the wire Hash, no clien
 puts Marshal.load(Marshal.dump(record)) == record      # => true
 ```
 
-Both refusals happen before any HTTP — but they are on the SDK's own objects. An
+Every refusal happens before any HTTP — but they are on the SDK's own objects. An
 `Enumerator` you built from one is a plain Ruby object this SDK does not own, so
 `render json: { recent: bc.messages.lazy }` and `bc.messages.each.to_json` still page the
-whole resource. Call `.first(n)` or `.to_a` before handing a query to a renderer.
+whole resource. **YAML is the wider version of that escape**: Psych dumps an `Enumerator`
+by calling `to_a`, with no ActiveSupport required, so `bc.messages.each.to_yaml` and
+`YAML.dump(bc.messages.lazy)` fire the page-by-page GET loop on plain Ruby, where the
+`to_json` version is inert without ActiveSupport. (`Marshal` is the exception — Ruby
+itself refuses to dump an `Enumerator`.) No token is exposed either way. Call `.first(n)`
+or `.to_a` before handing a query to a renderer or a dumper.
 
 `bc.inspect` and `"#{bc}"` are redacted for the same reason — Ruby's default `inspect`
 dumps every instance variable, which would print the token into every exception message

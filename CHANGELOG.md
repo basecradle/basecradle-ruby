@@ -18,9 +18,12 @@ fails CI if the two ever disagree.
   JSON door on a client; `Marshal` and Psych walk instance variables directly, consult no
   `as_json`, and need no ActiveSupport to do it — so both still wrote the raw `bc_uat_`
   credential into their output. They are the worse pair, because they are what puts a
-  token *at rest*: `Rails.cache.write("bc", bc)` lands it in Redis or a file store, a
-  client passed as an ActiveJob or Sidekiq argument lands it in the queue backend, a
-  Marshal-backed session lands it in the session. `Marshal.dump(bc)`, `bc.to_yaml`,
+  token *at rest*: ActiveSupport's cache stores marshal what you write, so
+  `Rails.cache.write("bc", bc)` landed it in Redis, memcached or a file store; a
+  Marshal-backed session landed it in the session; Delayed::Job YAMLs its handler into
+  the database. (Queue backends that serialize arguments as **JSON** — ActiveJob and
+  Sidekiq among them — go through `to_json`, and so were already closed in 0.10.1.)
+  `Marshal.dump(bc)`, `bc.to_yaml`,
   `YAML.dump(conn: bc)` and the `Marshal.load(Marshal.dump(bc))` deep-copy idiom now all
   raise `BaseCradle::NotSerializableError`, the same typed error with the same message
   the JSON door already raised. Long-standing and latent; no token is known to have been
@@ -42,6 +45,37 @@ fails CI if the two ever disagree.
   client, and marshals exactly as it always did. Nothing else changed: `to_json`,
   `as_json`, `to_h`, `inspect`, every field reader and `dup`/`clone` (which do not go
   through `Marshal`) are untouched.
+
+### Known limitation
+
+- **YAML widens the `Enumerator` escape that 0.10.1 documented for JSON.** Both refusals
+  are on this SDK's own objects; an `Enumerator` you build from a collection
+  (`bc.messages.each`, `bc.messages.lazy`) is a plain Ruby object this SDK does not own
+  and may not patch. Psych dumps one by calling `to_a` — with **no ActiveSupport
+  required** — so `bc.messages.each.to_yaml` and `YAML.dump(bc.messages.lazy)` fire the
+  page-by-page GET loop on plain Ruby, where the `to_json` version is inert unless
+  ActiveSupport is loaded. `Marshal` is the exception: Ruby itself refuses to dump an
+  `Enumerator`. No token is exposed through any of them. Call `.first(n)` or `.to_a`
+  before handing a query to a renderer or a dumper.
+
+### Migrating
+
+Nothing to change unless you `Marshal.dump` or `to_yaml` something that holds a client.
+If you do:
+
+- **Caching or enqueuing a model** — `Rails.cache.write(key, message)`,
+  `Rails.cache.fetch(key) { bc.messages.get(id) }` — now raises
+  `BaseCradle::NotSerializableError` where it used to write your token to the store.
+  Cache `message.to_h`, the wire `Hash`, and rebuild with
+  `BaseCradle::Message.new(record, client: bc)` if you need the verbs back.
+- **Caching or enqueuing a client or a collection** — serialize nothing; build a client
+  where you need one (`BaseCradle::Client.new(token)`), moving the token only through
+  whatever you already trust with secrets, and call `.to_a` / `.first(n)` on a collection.
+- **Deep-copying with `Marshal.load(Marshal.dump(x))`** — refuses at the dump for the
+  same objects. `dup` and `clone` do not go through `Marshal` and are unchanged.
+
+If any of these ran in production against a real store, treat the token as disclosed and
+rotate it: `bc.sessions` lists your credentials and `session.revoke` retires one.
 
 ## [0.10.2] - 2026-09-30
 

@@ -35,6 +35,10 @@ module BaseCradle
   # bearer token, and a collection is a lazy query that holds the client and would page
   # the whole API from inside your renderer. The SDK refuses loudly rather than emit a
   # credential or a heap address — see BaseCradle::NotSerializable.
+  #
+  # It is also how a caller who serialized *neither* gets here: +Marshal+ and Psych
+  # recurse, so dumping a model reaches the client it holds and raises this, naming
+  # BaseCradle::Client. Dump the record's own data, +model.to_h+, which holds no client.
   class NotSerializableError < Error; end
 
   # The request never got an API response (DNS failure, refused connection, timeout).
