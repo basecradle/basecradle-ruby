@@ -37,26 +37,37 @@ fails CI if the two ever disagree.
   collection (`bc.timelines`, `bc.messages`, `timeline.tasks`, any `.filter(...)`, the
   `Paginator` behind them) now refuses through all four doors; the refusals are on the
   shared `NotSerializable` mixin, so a resource added later is covered by construction.
+  **`.to_a` is only half the remedy for a dumper** — the array it hands back is full of
+  models that each hold the client, so `Marshal.dump(bc.messages.to_a)` lands back on the
+  same error. Dump `bc.messages.to_a.map(&:to_h)`, which the refusal now says.
 - **Anything holding a client refuses too — models included, and that is the fix.** Both
   walkers recurse, so `Marshal.dump(message)` and `message.to_yaml` reached the client's
   token where `message.to_json` (which serializes the wire record) never did. They now
   raise, naming `BaseCradle::Client` as what was reached. **If you cache or enqueue
   models, cache the record instead** — `message.to_h` is the wire `Hash`, holds no
-  client, and marshals exactly as it always did. Nothing else changed: `to_json`,
-  `as_json`, `to_h`, `inspect`, every field reader and `dup`/`clone` (which do not go
-  through `Marshal`) are untouched.
+  client, and marshals exactly as it always did; rebuild with
+  `BaseCradle::Message.new(record, client: bc)` when you need the verbs back. Nothing
+  else changed: `to_json`, `as_json`, `to_h`, `inspect`, every field reader and
+  `dup`/`clone` (which do not go through `Marshal`) are untouched. This matches the
+  Python SDK, whose `__reduce__` refusal says the same thing — *“Nothing holding a client
+  can be serialized either … copy the record's data instead.”*
 
 ### Known limitation
 
-- **YAML widens the `Enumerator` escape that 0.10.1 documented for JSON.** Both refusals
-  are on this SDK's own objects; an `Enumerator` you build from a collection
-  (`bc.messages.each`, `bc.messages.lazy`) is a plain Ruby object this SDK does not own
-  and may not patch. Psych dumps one by calling `to_a` — with **no ActiveSupport
-  required** — so `bc.messages.each.to_yaml` and `YAML.dump(bc.messages.lazy)` fire the
-  page-by-page GET loop on plain Ruby, where the `to_json` version is inert unless
-  ActiveSupport is loaded. `Marshal` is the exception: Ruby itself refuses to dump an
-  `Enumerator`. No token is exposed through any of them. Call `.first(n)` or `.to_a`
-  before handing a query to a renderer or a dumper.
+- **YAML reaches the `Enumerator` escape that 0.10.1 documented for JSON, on plain
+  Ruby.** Every refusal here is on this SDK's own objects; an `Enumerator` you build from
+  a collection (`bc.messages.each`, `bc.messages.lazy`) is a plain Ruby object this SDK
+  does not own and may not patch. Psych iterates one to dump it — with **no
+  ActiveSupport required**, where the `to_json` version is inert without it — so
+  `bc.messages.each.to_yaml` fires the page-by-page GET loop and *then* raises
+  `NotSerializableError` on the first record, which holds the client: the requests are
+  spent and no document comes out. `Marshal` is the exception — Ruby itself refuses to
+  dump an `Enumerator` at all. No token is exposed through any of them. Call `.first(n)`
+  or `.to_a` before a renderer, and `.map(&:to_h)` too before a dumper.
+- **Four doors is every hook Ruby gives a library**, not every way bytes can be made. A
+  serializer that reads instance variables directly rather than through `as_json`,
+  `to_json`, `marshal_dump` or `encode_with` is outside what this SDK can intercept.
+  Keep a client out of one.
 
 ### Migrating
 
@@ -70,7 +81,9 @@ If you do:
   `BaseCradle::Message.new(record, client: bc)` if you need the verbs back.
 - **Caching or enqueuing a client or a collection** — serialize nothing; build a client
   where you need one (`BaseCradle::Client.new(token)`), moving the token only through
-  whatever you already trust with secrets, and call `.to_a` / `.first(n)` on a collection.
+  whatever you already trust with secrets. For a collection, `.to_a` / `.first(n)` is
+  enough for JSON but **not** for a dumper — use `bc.messages.to_a.map(&:to_h)`, since
+  the models in that array each hold the client.
 - **Deep-copying with `Marshal.load(Marshal.dump(x))`** — refuses at the dump for the
   same objects. `dup` and `clone` do not go through `Marshal` and are unchanged.
 

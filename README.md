@@ -375,8 +375,11 @@ something Rails renders comes out right too. Three caveats worth knowing:
 ## What does not serialize: clients and collections
 
 Two things in this SDK are *not* records, and serializing either raises
-`BaseCradle::NotSerializableError` rather than emitting something. All four doors out of
-an object and into bytes refuse: `to_json`, `as_json`, `Marshal.dump`, and `to_yaml`.
+`BaseCradle::NotSerializableError` rather than emitting something — and under `Marshal`
+and YAML, so does anything *holding* one, models included (see below). Four doors refuse:
+`to_json`, `as_json`, `Marshal.dump` and `to_yaml` — every hook Ruby gives a library to
+intercept. A serializer that reads instance variables directly instead of through those
+hooks is outside what any library can stop, so keep a client out of one.
 
 ```ruby
 require "basecradle"
@@ -437,8 +440,10 @@ them — go through `to_json`, and so were already closed in 0.10.1.)
 
 **Anything *holding* a client refuses too, models included** — both walkers recurse, so
 `Marshal.dump(message)` reaches the client and raises naming `BaseCradle::Client`. That is
-the fix, not a limitation: before, it emitted the token. Cache the record, which is what
-you wanted anyway:
+the fix, not a limitation: before, it emitted the token. It is also why **`.to_a` is only
+half the remedy for a dumper**: the array it hands back is full of models that each hold
+the client, so `Marshal.dump(bc.messages.to_a)` lands straight back on the same error.
+Dump the wire records — which is what you wanted in a cache anyway:
 
 ```ruby
 require "basecradle"
@@ -448,17 +453,24 @@ message = bc.messages.first
 
 record = message.to_h                                  # the wire Hash, no client in it
 puts Marshal.load(Marshal.dump(record)) == record      # => true
+
+page = bc.messages.first(20).map(&:to_h)               # a whole page, no client in it
+puts Marshal.load(Marshal.dump(page)) == page          # => true
 ```
+
+Rebuild a model from a cached record with `BaseCradle::Message.new(record, client: bc)`
+when you need its verbs back.
 
 Every refusal happens before any HTTP — but they are on the SDK's own objects. An
 `Enumerator` you built from one is a plain Ruby object this SDK does not own, so
 `render json: { recent: bc.messages.lazy }` and `bc.messages.each.to_json` still page the
-whole resource. **YAML is the wider version of that escape**: Psych dumps an `Enumerator`
-by calling `to_a`, with no ActiveSupport required, so `bc.messages.each.to_yaml` and
-`YAML.dump(bc.messages.lazy)` fire the page-by-page GET loop on plain Ruby, where the
-`to_json` version is inert without ActiveSupport. (`Marshal` is the exception — Ruby
-itself refuses to dump an `Enumerator`.) No token is exposed either way. Call `.first(n)`
-or `.to_a` before handing a query to a renderer or a dumper.
+whole resource. **YAML reaches that escape on plain Ruby**, where the `to_json` version
+needs ActiveSupport: Psych iterates an `Enumerator` to dump it, so
+`bc.messages.each.to_yaml` fires the page-by-page GET loop and *then* raises
+`NotSerializableError` on the first record (which holds the client) — the requests are
+spent, and no document comes out. (`Marshal` is the exception: Ruby itself refuses to
+dump an `Enumerator` at all.) No token is exposed through any of them. Call `.first(n)`
+or `.to_a` before handing a query to a renderer, and `.map(&:to_h)` too before a dumper.
 
 `bc.inspect` and `"#{bc}"` are redacted for the same reason — Ruby's default `inspect`
 dumps every instance variable, which would print the token into every exception message

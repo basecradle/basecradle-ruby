@@ -99,13 +99,20 @@ module BaseCradle
     # was slow to write rather than at rest in Redis — a wrong diagnosis being worse than
     # a missing one. Naming both keeps one refusal per resource, which is what stops the
     # doors drifting apart.
+    #
+    # The remedy is two-part for the same reason. <tt>.to_a</tt> alone is enough for JSON,
+    # where a model serializes as its record — but the array it hands back is full of
+    # models that each hold the client, so <tt>Marshal.dump(bc.messages.to_a)</tt> lands
+    # straight back here. Measured, not assumed.
     def serialization_refusal
       "#{self.class} is a lazy, auto-paginating query holding your connection, not a " \
       "record, so there is no one record to serialize. Serializing it either runs a " \
       "page-by-page GET loop over the whole resource from inside your renderer and " \
       "emits every record it fetched, or writes out the connection it holds — your " \
       "bc_uat_ token with it. Call .to_a (or .first(n), or .filter(...).to_a) and " \
-      "serialize that — then how much you fetch is a visible act in your own code."
+      "serialize that — then how much you fetch is a visible act in your own code. " \
+      "Marshal and YAML reach the client through the records too, so dump the wire " \
+      "records rather than the models: .to_a.map(&:to_h)."
     end
   end
 end
