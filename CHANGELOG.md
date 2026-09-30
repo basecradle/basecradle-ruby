@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+One deliberate departure from that format: this changelog keeps **no `Unreleased`
+section**. The newest heading is always the version `lib/basecradle/version.rb` builds —
+a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
+fails CI if the two ever disagree.
+
 ## [0.10.0] - 2026-09-30
 
 ### Fixed
