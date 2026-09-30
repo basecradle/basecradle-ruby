@@ -44,8 +44,57 @@ class CiWorkflowTest < Minitest::Test
   # The entire mechanism by which a dependency's result becomes a red required check.
   FAIL_COMMAND = "exit 1"
 
+  # ci.yml, read strictly. `gate_key` below already takes this stance — it flunks "rather
+  # than returning nil and failing obscurely inside a caller" — but the read feeding it did
+  # not, and this file's whole subject is a required check that can be green without having
+  # checked anything. Three states got past it, in rising order of how badly:
+  #
+  #   * an empty ci.yml, and a `jobs:` key with nothing under it, each reached a
+  #     `NoMethodError` on nil. Those do name this file and this line, so the cost was a
+  #     reader's minute, not a silent pass;
+  #   * `jobs: {}` reached `gate_key` and flunked about the gate's *name*, for a workflow
+  #     that defines nothing at all;
+  #   * YAML that Psych's safe mode refuses raised a bare Psych backtrace under ten frames
+  #     of psych internals, naming neither ci.yml nor the check it guards.
+  #
+  # That last construct is an **alias** (`*ref`) or an unquoted date — not an anchor: a bare
+  # `&anchor` parses fine. Flunking on one rather than passing `aliases: true` is the
+  # conservative side of a real choice, taken because this reader has never met an alias and
+  # safe_load refuses them by default; opting in belongs to the PR that first needs one.
   def jobs
-    @jobs ||= YAML.safe_load(File.read(WORKFLOW)).fetch("jobs")
+    @jobs ||= read_jobs
+  end
+
+  # Split out so the guards read as a sequence rather than as nested `begin`s. `flunk`
+  # raises `Minitest::Assertion`, which descends from `Exception` and not `StandardError`,
+  # so the method-level rescue below cannot swallow any of them.
+  def read_jobs
+    unless File.exist?(WORKFLOW)
+      flunk "ci.yml does not exist at #{WORKFLOW}. Branch protection requires the " \
+            "#{GATE_NAME.inspect} context this file produces, so with the file gone every " \
+            "PR here waits on a check that can never report."
+    end
+
+    document = YAML.safe_load(File.read(WORKFLOW))
+    unless document.is_a?(Hash)
+      flunk "ci.yml did not parse as a YAML mapping (read as #{document.class}). An empty " \
+            "file is the usual cause. Nothing below is checking the workflow that produces " \
+            "the #{GATE_NAME.inspect} check."
+    end
+
+    job_definitions = document["jobs"]
+    unless job_definitions.is_a?(Hash) && !job_definitions.empty?
+      flunk "ci.yml defines no jobs (`jobs:` read as #{job_definitions.inspect}). Every " \
+            "assertion below reads a job, and a workflow with no jobs produces no " \
+            "#{GATE_NAME.inspect} check at all."
+    end
+    job_definitions
+  rescue Psych::Exception, SystemCallError => e
+    flunk "ci.yml could not be read: #{e.class} — #{e.message}. Psych's safe mode refuses " \
+          "some YAML that is otherwise legal — an alias (`*ref`), an unquoted date — so " \
+          "this may be a workflow that runs fine and that this reader cannot see into. " \
+          "Either way nothing below is checking the file that produces the " \
+          "#{GATE_NAME.inspect} check every PR here is gated on."
   end
 
   # The gate's job key. Flunks here rather than returning nil and failing obscurely inside
