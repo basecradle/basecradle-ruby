@@ -143,30 +143,45 @@ jobs:
         # non-zero is swallowed, the job is green, and the stub that IS still there stops
         # being checked too. The step would report nothing wrong while checking nothing.
         #
-        # Resolved by name across both extensions, mirroring the blocking step's exclusion
-        # above, which matches on the name without its extension. A stub arriving as .yaml
-        # is excluded from blocking, so if this step looked only for .yml it would call
-        # that stub missing while the file sat right there, unlinted by either step.
+        # Every match is collected, not the last one: a stub is resolved across both
+        # extensions to mirror the blocking step's exclusion above, which matches on the
+        # name without its extension. If both spellings are on disk mid-rename, keeping
+        # only one would leave a live workflow linted by neither step — blocking skips it
+        # by name, and this step would have dropped it.
+        #
+        # `if: always()`, because a step is skipped when an earlier one in the job fails:
+        # without it a finding in the blocking step above silently takes the stubs' check
+        # down too, which is the same swallowed-non-zero this step is being hardened
+        # against. It cannot affect the gate — it is advisory either way.
+        if: always()
         continue-on-error: true
         run: |
           stubs=""
+          missing=""
           for stub in needs-human-alert dependabot-auto-merge; do
             found=""
             for f in ".github/workflows/$stub.yml" ".github/workflows/$stub.yaml"; do
-              if [ -f "$f" ]; then found="$f"; fi
+              if [ -f "$f" ]; then
+                found="yes"
+                stubs="$stubs $f"
+              fi
             done
             if [ -z "$found" ]; then
-              echo "::error::Shared stub $stub is not under .github/workflows in either extension, so nothing linted it. It is a verbatim capital-owned artifact this repo carries and may not edit; if the capital renamed or dropped it, raise it with needs-capital rather than fixing it here."
-              continue
+              missing="$missing $stub"
+              echo "::error::Not this PR's doing, and not fixable in this repo: the shared stub $stub is under .github/workflows in neither extension, so nothing linted it. It is a verbatim capital-owned artifact this repo carries; raise it with needs-capital."
             fi
-            stubs="$stubs $found"
           done
-          if [ -z "$stubs" ]; then
-            echo "::error::Not one shared stub was found, so this step linted nothing at all. This repo carries both as shared artifacts; their absence is itself the finding."
+          if [ -n "$stubs" ]; then
+            # shellcheck disable=SC2086  # deliberate word-splitting: $stubs is a path list
+            "$RUNNER_TEMP/actionlint" -color $stubs
+          fi
+          # Any absence marks the step failed, even when the other stub linted clean —
+          # otherwise the single-missing case, which is the likely one since a rename hits
+          # one artifact at a time, still ends in a green tick.
+          if [ -n "$missing" ]; then
+            echo "Missing shared stubs:$missing"
             exit 1
           fi
-          # shellcheck disable=SC2086  # deliberate word-splitting: $stubs is a path list
-          "$RUNNER_TEMP/actionlint" -color $stubs
 
   # The gate: the single required status check in branch protection (the "Protect
   # main" ruleset requires the context named "CI"). Adding or dropping Ruby
