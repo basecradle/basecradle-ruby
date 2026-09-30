@@ -166,6 +166,16 @@ class WebhooksTest < Minitest::Test
     assert_equal an_event(webhook_event_payload).content, item.content
   end
 
+  # ApiObject gained to_json/as_json; headers are a Hash subclass and keep Hash's own,
+  # which already emitted the delivery's headers. Pinned because the two now sit side by
+  # side: content serializes through ApiObject, its headers through Hash.
+  def test_headers_still_serialize_as_the_delivery_headers
+    content = an_event(webhook_event_payload).content
+
+    assert_equal content.to_h["headers"], JSON.parse(content.headers.to_json)
+    assert_equal content.to_h, JSON.parse(content.to_json)
+  end
+
   # The raw escape hatch is unchanged by the typing: it wraps nothing, so it still hands
   # back the plain, case-sensitive wire Hash — on both reads of the record, which is what
   # README and WebhookEventContent's docstring now claim is the *only* unfolded path.

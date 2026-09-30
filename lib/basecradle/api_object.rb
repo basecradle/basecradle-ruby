@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+
 require_relative "errors"
 
 module BaseCradle
@@ -59,6 +61,46 @@ module BaseCradle
     # The underlying wire data (a Hash). Read-only by convention.
     def to_h
       @data
+    end
+
+    # The wire record, for a serializer — ActiveSupport's hook, and what reaches a model
+    # nested inside a structure Rails renders (<tt>render json: { user: bc.me }</tt>).
+    # A bare <tt>render json: model</tt> calls +to_json+ instead and never comes here.
+    #
+    # Returns +to_h+: the wire keys, nothing renamed, nothing dropped, and a field newer
+    # than this release carried like any other. (It is the record *as this object holds
+    # it* — for a Timeline fetched whole, that is the API's two-key envelope merged into
+    # one object, so it carries +items+ alongside the timeline's own fields.)
+    #
+    # Two traps, because neither is what a Rails habit expects:
+    #
+    # - **It is the same Hash +to_h+ returns, not a copy** — read-only by the same
+    #   convention, where every ActiveSupport +as_json+ builds a fresh one. So
+    #   <tt>model.as_json.merge!(extra)</tt> rewrites the model's wire record, and for a
+    #   wrapped child its parent's too (a child wraps the parent's own nested Hash).
+    #   +to_h.dup+ if you need to touch it; note that is shallow.
+    # - **Options are accepted and ignored, +only:+ and +except:+ included** — a model is
+    #   a read of one record, not a presenter. +as_json(except: ["ingest_url"])+ returns
+    #   the whole record, *silently*. Worse, it disagrees with +to_json+: with
+    #   ActiveSupport loaded <tt>model.to_json(except: [...])</tt> *does* redact, because
+    #   the option reaches +Hash#to_json+. Do not rely on either — build the subset
+    #   yourself with <tt>model.to_h.except("ingest_url")</tt>.
+    def as_json(*)
+      to_h
+    end
+
+    # The wire record as JSON. Without this a model fell through to Ruby's default and
+    # emitted a heap address — silently, with no field names and a different value every
+    # run. +JSON.generate+ and +Array#to_json+ / +Hash#to_json+ call this, so a model
+    # nested in either serializes correctly too.
+    #
+    # The argument is forwarded to +Hash#to_json+ rather than swallowed, so
+    # +JSON.pretty_generate+ pretty-prints — and what an unknown option does is the host
+    # app's json version's business, not this SDK's: json 3.x raises on an unknown
+    # keyword, the json 2.x that older Rubies ship ignores it, and ActiveSupport acts on
+    # +only:+ / +except:+. See +as_json+ above: do not route redaction through either.
+    def to_json(*args)
+      to_h.to_json(*args)
     end
 
     def ==(other)
