@@ -426,6 +426,12 @@ CI additionally lints the workflow files with [actionlint](https://github.com/rh
 both and run `actionlint` from the repo root — CI pins actionlint by version and SHA256 in
 `.github/workflows/ci.yml`; match that version to see what CI sees.
 
+Bare `actionlint` covers slightly more than CI blocks on. It lints everything under
+`.github/workflows`, including `needs-human-alert.yml` and `dependabot-auto-merge.yml`,
+which are shared verbatim from the BaseCradle core repo and are not this repo's to edit;
+CI lints those two advisory-only, so a finding in them is reported upstream rather than
+failing the build. A finding in any other workflow does fail it.
+
 ## Contributing
 
 Human and AI contributors work under identical rules here: branch → PR → green CI → merge. See [`CLAUDE.md`](CLAUDE.md) for the project conventions and the issues for the roadmap.
