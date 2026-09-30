@@ -79,7 +79,15 @@ jobs:
       # 1.0.0.pre.rc1) — so passing this step is precisely the precondition `rake
       # release` needs. The tag is read from the environment, never interpolated
       # into the script: a tag name is attacker-supplied.
-      - name: The tag must name the version being built
+      #
+      # It also refuses a version that is not a plain X.Y.Z. Both guards above compare
+      # the tag against the tree and each other; nothing asks whether the version they
+      # agree on is one we meant to publish. A tag derived (#186) at the wrong moment —
+      # before the release bump lands, or from a tree carrying a prerelease literal —
+      # publishes that version, and a RubyGems version can never be replaced. This SDK
+      # has only ever shipped final releases; the day a prerelease is planned, this
+      # regex is widened deliberately in the PR that plans it (#192).
+      - name: The tag must name a publishable version of this tree
         run: |
           gem_file="$(ls basecradle-*.gem)"
           built="${gem_file#basecradle-}"
@@ -89,7 +97,11 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not name the version this tree builds ($built). Re-tag as v$built, or bump lib/basecradle/version.rb to $tagged — then push again."
             exit 1
           fi
-          echo "Tag $GITHUB_REF_NAME matches the built gem $gem_file."
+          if [[ ! "$built" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version $built is not a plain X.Y.Z, so nothing will be published. This SDK ships final releases only — Gem::Version normalizes a 1.0.0-rc1 literal in lib/basecradle/version.rb to 1.0.0.pre.rc1, which is refused here on purpose. Delete the tag and fix the version, or widen this check in the PR that deliberately plans a prerelease."
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME matches the built gem $gem_file, and names a final release."
       - name: Install into a clean environment and verify it loads
         run: |
           gem install ./basecradle-*.gem

@@ -235,4 +235,9 @@ bundle exec rake             # lint + tests (offline — the default)
 bundle exec rake test:live   # the spec drift-guard (one network call to the live spec)
 bundle exec rubocop          # lint only
 gem build basecradle.gemspec # build the gem
+actionlint                   # lint .github/workflows (CI pins the version + SHA256 in ci.yml)
 ```
+
+`actionlint` is not a gem and not in the `Gemfile` — install the binary (and `shellcheck`,
+which it shells out to; without it the shell checks are silently skipped). CI's `actionlint`
+job is part of the `CI` gate's `needs`, so a workflow edit that fails it blocks the merge.

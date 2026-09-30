@@ -332,7 +332,13 @@ bundle exec rake          # lint + tests (offline — the default)
 bundle exec rake test:live  # the spec drift-guard (one network call to the live spec)
 bundle exec rubocop       # lint only
 gem build basecradle.gemspec  # build the gem
+actionlint                # lint the GitHub workflows (CI runs this; see below)
 ```
+
+CI additionally lints the workflow files with [actionlint](https://github.com/rhysd/actionlint)
+(which runs `shellcheck` over each `run:` block). To reproduce that check locally, install
+both and run `actionlint` from the repo root — CI pins actionlint by version and SHA256 in
+`.github/workflows/ci.yml`; match that version to see what CI sees.
 
 ## Contributing
 
