@@ -12,6 +12,7 @@
 # It asserts nothing — the parent test does all the judging.
 
 require "json"
+require "yaml"
 
 # Same rule as the suite: never the live API. WebMock's minitest integration is not
 # wanted here (there is no Minitest in this process), but its Net::HTTP adapter and the
@@ -86,6 +87,16 @@ report = subjects.transform_values do |subject|
     "encode" => observe { ActiveSupport::JSON.encode(subject) },
     # held by an ordinary object with no as_json of its own — one hop further down.
     "held" => observe { { "holder" => Holder.new(subject) }.to_json },
+    # Marshal and Psych need no ActiveSupport to walk ivars, so the offline half is
+    # where they are pinned — but Rails.cache.write and a Marshal-backed session are
+    # the scenarios that made them urgent, and those happen in *this* environment.
+    # Reported as "does the output contain the token" rather than as the bytes: a
+    # Marshal dump is binary and would fail JSON.generate, turning a reopened hole into
+    # an opaque encoding error instead of a plain `true`.
+    "marshal" => observe { Marshal.dump(subject).include?(TOKEN) },
+    "yaml" => observe { subject.to_yaml.include?(TOKEN) },
+    # And one hop down, which is the shape Rails.cache.write(key, model) really has.
+    "marshal_held" => observe { Marshal.dump(Holder.new(subject)).include?(TOKEN) },
     "inspect" => subject.inspect,
     "to_s" => subject.to_s
   }

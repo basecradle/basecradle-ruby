@@ -375,10 +375,15 @@ something Rails renders comes out right too. Three caveats worth knowing:
 ## What does not serialize: clients and collections
 
 Two things in this SDK are *not* records, and serializing either raises
-`BaseCradle::NotSerializableError` rather than emitting something:
+`BaseCradle::NotSerializableError` rather than emitting something — and under `Marshal`
+and YAML, so does anything *holding* one, models included (see below). Four doors refuse:
+`to_json`, `as_json`, `Marshal.dump` and `to_yaml` — every hook Ruby gives a library to
+intercept. A serializer that reads instance variables directly instead of through those
+hooks is outside what any library can stop, so keep a client out of one.
 
 ```ruby
 require "basecradle"
+require "yaml"
 
 bc = BaseCradle::Client.new
 
@@ -390,6 +395,18 @@ end
 
 begin
   bc.messages.to_json                 # a lazy query, not a record
+rescue BaseCradle::NotSerializableError => e
+  puts e.message.include?(".to_a")    # => true
+end
+
+begin
+  Marshal.dump(bc)                    # and Rails.cache.write("bc", bc), a job argument
+rescue BaseCradle::NotSerializableError => e
+  puts e.message.include?("bc_uat_")  # => true
+end
+
+begin
+  bc.messages.to_yaml                 # YAML walks the ivars, and reaches the client
 rescue BaseCradle::NotSerializableError => e
   puts e.message.include?(".to_a")    # => true
 end
@@ -410,10 +427,50 @@ walk — but a client's instance variables are eight collections, so serializing
 ran those loops too, on its way to the credential.) Call `.to_a` or `.first(n)` yourself
 and serialize that, so how much you fetch is a visible act in your code.
 
-Both refusals happen before any HTTP — but they are on the SDK's own objects. An
+**`Marshal` and YAML are the same refusal for a different reason.** Both walk instance
+variables directly, so neither needed ActiveSupport to reach the token — and neither is
+shadowed the way `Enumerable#as_json` shadowed the ivar walk, so `Marshal.dump(bc.messages)`
+reached the credential where `bc.messages.to_json` never did. They are also where a leaked
+token stops being a log line and becomes a token *at rest*: ActiveSupport's cache stores
+marshal what you write, so `Rails.cache.write("bc", bc)` landed it in Redis, memcached or
+a file; a Marshal-backed session landed it in the session; Delayed::Job YAMLs its handler
+into the database. `Marshal.load(Marshal.dump(x))`, the deep-copy idiom, refuses at the
+dump. (Queue backends that serialize arguments as **JSON** — ActiveJob and Sidekiq among
+them — go through `to_json`, and so were already closed in 0.10.1.)
+
+**Anything *holding* a client refuses too, models included** — both walkers recurse, so
+`Marshal.dump(message)` reaches the client and raises naming `BaseCradle::Client`. That is
+the fix, not a limitation: before, it emitted the token. It is also why **`.to_a` is only
+half the remedy for a dumper**: the array it hands back is full of models that each hold
+the client, so `Marshal.dump(bc.messages.to_a)` lands straight back on the same error.
+Dump the wire records — which is what you wanted in a cache anyway:
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+message = bc.messages.first
+
+record = message.to_h                                  # the wire Hash, no client in it
+puts Marshal.load(Marshal.dump(record)) == record      # => true
+
+page = bc.messages.first(20).map(&:to_h)               # a whole page, no client in it
+puts Marshal.load(Marshal.dump(page)) == page          # => true
+```
+
+Rebuild a model from a cached record with `BaseCradle::Message.new(record, client: bc)`
+when you need its verbs back.
+
+Every refusal happens before any HTTP — but they are on the SDK's own objects. An
 `Enumerator` you built from one is a plain Ruby object this SDK does not own, so
 `render json: { recent: bc.messages.lazy }` and `bc.messages.each.to_json` still page the
-whole resource. Call `.first(n)` or `.to_a` before handing a query to a renderer.
+whole resource. **YAML reaches that escape on plain Ruby**, where the `to_json` version
+needs ActiveSupport: Psych iterates an `Enumerator` to dump it, so
+`bc.messages.each.to_yaml` fires the page-by-page GET loop and *then* raises
+`NotSerializableError` on the first record (which holds the client) — the requests are
+spent, and no document comes out. (`Marshal` is the exception: Ruby itself refuses to
+dump an `Enumerator` at all.) No token is exposed through any of them. Call `.first(n)`
+or `.to_a` before handing a query to a renderer, and `.map(&:to_h)` too before a dumper.
 
 `bc.inspect` and `"#{bc}"` are redacted for the same reason — Ruby's default `inspect`
 dumps every instance variable, which would print the token into every exception message

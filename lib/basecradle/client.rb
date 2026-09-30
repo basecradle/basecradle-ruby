@@ -243,14 +243,28 @@ module BaseCradle
 
     private
 
-    # Why +to_json+ / +as_json+ refuse (see BaseCradle::NotSerializable). A client is not
-    # a record, and the thing it would emit is a live credential.
+    # Why every serializer refuses — +to_json+ / +as_json+, +Marshal.dump+, +to_yaml+
+    # (see BaseCradle::NotSerializable). A client is not a record, and the thing it would
+    # emit is a live credential.
+    #
+    # The last sentence is for the caller who never named a client: Marshal and Psych
+    # recurse, so dumping a model or a resource reaches the client it holds and lands
+    # here. Telling that caller only about clients would be telling them about an object
+    # they did not pass — the Python SDK's +__reduce__+ is worded for the same reason
+    # ("copying a resource or a record reaches this too — copy the record's data").
+    #
+    # And it has to name +to_h+, because the first remedy does not hold through those two
+    # doors: a model serializes as its record through JSON, but <tt>Marshal.dump(bc.me)</tt>
+    # walks to the client again. Advice that fails through the door the reader just used
+    # is worse than none.
     def serialization_refusal
       "#{self.class} is a connection holding your bc_uat_ token, not a record. " \
-      "Serializing it writes the raw credential into whatever you were rendering or " \
-      "logging, and a token in a log is a token to rotate. Serialize the record you " \
-      "meant instead (bc.me, a timeline, a message), or bc.base_url to name the " \
-      "connection itself."
+      "Serializing it writes the raw credential into whatever you were rendering, " \
+      "logging or storing, and a token in a log or a cache is a token to rotate. " \
+      "Serialize the record you meant instead (bc.me, a timeline, a message), or " \
+      "bc.base_url to name the connection itself. Marshal and YAML reach a client " \
+      "through anything holding one, models included, so dump the wire record rather " \
+      "than the object: model.to_h holds no client."
     end
 
     # Record what the mint response said about the credential just issued. Private: only

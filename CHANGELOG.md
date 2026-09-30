@@ -9,6 +9,87 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.10.3] - 2026-09-30
+
+### Security
+
+- **`Marshal.dump` and `to_yaml` no longer emit a `Client`'s token**
+  ([#205](https://github.com/basecradle/basecradle-ruby/issues/205)). 0.10.1 shut the
+  JSON door on a client; `Marshal` and Psych walk instance variables directly, consult no
+  `as_json`, and need no ActiveSupport to do it — so both still wrote the raw `bc_uat_`
+  credential into their output. They are the worse pair, because they are what puts a
+  token *at rest*: ActiveSupport's cache stores marshal what you write, so
+  `Rails.cache.write("bc", bc)` landed it in Redis, memcached or a file store; a
+  Marshal-backed session landed it in the session; Delayed::Job YAMLs its handler into
+  the database. (Queue backends that serialize arguments as **JSON** — ActiveJob and
+  Sidekiq among them — go through `to_json`, and so were already closed in 0.10.1.)
+  `Marshal.dump(bc)`, `bc.to_yaml`,
+  `YAML.dump(conn: bc)` and the `Marshal.load(Marshal.dump(bc))` deep-copy idiom now all
+  raise `BaseCradle::NotSerializableError`, the same typed error with the same message
+  the JSON door already raised. Long-standing and latent; no token is known to have been
+  emitted.
+- **The collection door was the wider one, not the narrower one.** Through JSON, a
+  collection never reached the token — ActiveSupport's `Enumerable#as_json` shadows
+  `Object#as_json`, so `bc.messages.to_json` serialized fetched records, never the client
+  held in an ivar. `Marshal` and Psych have no such shadow, so
+  **`Marshal.dump(bc.messages)` reached the credential where `bc.messages.to_json` never
+  did** — and a query is the likelier of the two to be handed to a cache. Every lazy
+  collection (`bc.timelines`, `bc.messages`, `timeline.tasks`, any `.filter(...)`, the
+  `Paginator` behind them) now refuses through all four doors; the refusals are on the
+  shared `NotSerializable` mixin, so a resource added later is covered by construction.
+  **`.to_a` is only half the remedy for a dumper** — the array it hands back is full of
+  models that each hold the client, so `Marshal.dump(bc.messages.to_a)` lands back on the
+  same error. Dump `bc.messages.to_a.map(&:to_h)`, which the refusal now says.
+- **Anything holding a client refuses too — models included, and that is the fix.** Both
+  walkers recurse, so `Marshal.dump(message)` and `message.to_yaml` reached the client's
+  token where `message.to_json` (which serializes the wire record) never did. They now
+  raise, naming `BaseCradle::Client` as what was reached. **If you cache or enqueue
+  models, cache the record instead** — `message.to_h` is the wire `Hash`, holds no
+  client, and marshals exactly as it always did; rebuild with
+  `BaseCradle::Message.new(record, client: bc)` when you need the verbs back. Nothing
+  else changed: `to_json`, `as_json`, `to_h`, `inspect`, every field reader and
+  `dup`/`clone` (which do not go through `Marshal`) are untouched. This matches the
+  Python SDK, whose `__reduce__` refusal says the same thing — *“Nothing holding a client
+  can be serialized either … copy the record's data instead.”*
+
+### Known limitation
+
+- **YAML reaches the `Enumerator` escape that 0.10.1 documented for JSON, on plain
+  Ruby.** Every refusal here is on this SDK's own objects; an `Enumerator` you build from
+  a collection (`bc.messages.each`, `bc.messages.lazy`) is a plain Ruby object this SDK
+  does not own and may not patch. Psych iterates one to dump it — with **no
+  ActiveSupport required**, where the `to_json` version is inert without it — so
+  `bc.messages.each.to_yaml` fires the page-by-page GET loop and *then* raises
+  `NotSerializableError` on the first record, which holds the client: the requests are
+  spent and no document comes out. `Marshal` is the exception — Ruby itself refuses to
+  dump an `Enumerator` at all. No token is exposed through any of them. Call `.first(n)`
+  or `.to_a` before a renderer, and `.map(&:to_h)` too before a dumper.
+- **Four doors is every hook Ruby gives a library**, not every way bytes can be made. A
+  serializer that reads instance variables directly rather than through `as_json`,
+  `to_json`, `marshal_dump` or `encode_with` is outside what this SDK can intercept.
+  Keep a client out of one.
+
+### Migrating
+
+Nothing to change unless you `Marshal.dump` or `to_yaml` something that holds a client.
+If you do:
+
+- **Caching or enqueuing a model** — `Rails.cache.write(key, message)`,
+  `Rails.cache.fetch(key) { bc.messages.get(id) }` — now raises
+  `BaseCradle::NotSerializableError` where it used to write your token to the store.
+  Cache `message.to_h`, the wire `Hash`, and rebuild with
+  `BaseCradle::Message.new(record, client: bc)` if you need the verbs back.
+- **Caching or enqueuing a client or a collection** — serialize nothing; build a client
+  where you need one (`BaseCradle::Client.new(token)`), moving the token only through
+  whatever you already trust with secrets. For a collection, `.to_a` / `.first(n)` is
+  enough for JSON but **not** for a dumper — use `bc.messages.to_a.map(&:to_h)`, since
+  the models in that array each hold the client.
+- **Deep-copying with `Marshal.load(Marshal.dump(x))`** — refuses at the dump for the
+  same objects. `dup` and `clone` do not go through `Marshal` and are unchanged.
+
+If any of these ran in production against a real store, treat the token as disclosed and
+rotate it: `bc.sessions` lists your credentials and `session.revoke` retires one.
+
 ## [0.10.2] - 2026-09-30
 
 ### Security
@@ -484,6 +565,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.10.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.3
 [0.10.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.2
 [0.10.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.1
 [0.10.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.0

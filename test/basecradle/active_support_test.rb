@@ -23,8 +23,11 @@ class ActiveSupportTest < Minitest::Test
   LIB = File.expand_path("../../lib", __dir__)
   REFUSAL = "BaseCradle::NotSerializableError"
 
-  # Every way a caller reaches the object, as the probe labels them.
-  SERIALIZATIONS = %w[as_json to_json nested encode held].freeze
+  # Every way a caller reaches the object, as the probe labels them. The last three are
+  # the Marshal and Psych doors (#205): they are pinned offline too, since neither needs
+  # ActiveSupport — but Rails.cache.write is the scenario that made them urgent, and it
+  # happens in an app with ActiveSupport loaded, so they are observed here as well.
+  SERIALIZATIONS = %w[as_json to_json nested encode held marshal yaml marshal_held].freeze
 
   def self.report
     @report ||= begin
