@@ -11,15 +11,13 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: read
-
 jobs:
   # RubyGems has no TestPyPI analogue, so the "rehearsal" is building the gem and
   # proving it installs and loads cleanly — on the 3.2 floor — before the gated push.
   rehearsal:
     name: rehearsal (build + clean install)
     runs-on: ubuntu-latest
+    permissions: write-all
     steps:
       - uses: actions/checkout@v7
         with:
@@ -124,7 +122,6 @@ jobs:
       url: https://rubygems.org/gems/basecradle
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@v7
         with:
