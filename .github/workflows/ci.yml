@@ -55,13 +55,73 @@ jobs:
       - name: Check the SDK covers the live API
         run: bundle exec rake test:live
 
+  # release.yml runs only on a `v*` tag push, so nothing on a PR ever parses it — and
+  # it carries the release guards' shell. actionlint checks every workflow's schema,
+  # expressions and action inputs, and runs shellcheck over each `run:` block, so a
+  # typo in a guard is caught on the PR instead of on a tag nobody can un-push.
+  #
+  # The binary is pinned by version and verified by SHA256 against the checksum the
+  # release publishes — never `curl | bash` off a moving branch, which is what the
+  # project's own quick-start suggests. Nothing bumps this for us: dependabot's
+  # github-actions ecosystem reads `uses:` refs and cannot see an `env:` version, so
+  # the pin is this repo's captain to bump, on the occasion of any release-pipeline
+  # work or a workflow feature the pinned linter does not know. shellcheck, by
+  # contrast, is the runner image's: it moves when the image does, which can surface a
+  # new finding on a PR that changed nothing — accepted, the same bet `ubuntu-latest`
+  # already is everywhere else in this file.
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install actionlint (pinned, checksum-verified)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          # actionlint's shellcheck integration is *silently* skipped when the binary
+          # is absent — it exits 0 with no diagnostic, even given an explicit path to
+          # a missing one (measured). Half this job's value is the `run:` blocks, so
+          # the assumption that the image ships shellcheck is asserted, not trusted.
+          shellcheck --version
+      - name: Lint the workflows this repo owns
+        # No file list: every workflow under .github/workflows is linted except the
+        # two named below, so one added later is covered without touching this job.
+        run: |
+          files=""
+          for f in .github/workflows/*.yml; do
+            case "$(basename "$f")" in
+              needs-human-alert.yml|dependabot-auto-merge.yml) continue ;;
+            esac
+            files="$files $f"
+          done
+          # shellcheck disable=SC2086  # deliberate word-splitting: $files is a path list
+          "$RUNNER_TEMP/actionlint" -color $files
+      - name: Lint the capital's shared stubs (advisory)
+        # These two are verbatim shared artifacts anchored at the capital and byte-diffed
+        # by the NOC drift-guard, so this repo may not edit them (CLAUDE.md → Repo
+        # sovereignty). Blocking the required gate on a file we are forbidden to fix
+        # would wedge every PR here; a finding is reported upward with `needs-capital`
+        # instead. Advisory so it is still visible in the log.
+        continue-on-error: true
+        run: |
+          "$RUNNER_TEMP/actionlint" -color \
+            .github/workflows/needs-human-alert.yml \
+            .github/workflows/dependabot-auto-merge.yml
+
   # The gate: the single required status check in branch protection (the "Protect
   # main" ruleset requires the context named "CI"). Adding or dropping Ruby
   # versions never requires a ruleset change.
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [lint, test, drift]
+    needs: [lint, test, drift, actionlint]
     if: always()
     steps:
       - name: Fail unless every required job succeeded

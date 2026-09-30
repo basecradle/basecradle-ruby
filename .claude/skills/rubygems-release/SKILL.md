@@ -37,10 +37,11 @@ The matching **GitHub side** — a `rubygems` environment whose protection rule 
 
 ## The pipeline (mechanism)
 
-The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04). On a `v*` tag it runs **rehearsal** (build the gem; refuse a tag that is not on `main`'s tip; refuse a tag that does not name the version just built; verify a clean `gem install` + `require` on the 3.2 floor) → **publish** (gated by the `rubygems` environment, then `rubygems/release-gem` runs `bundle exec rake release` via OIDC). `release-gem` also generates sigstore build attestations.
+The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04). On a `v*` tag it runs **rehearsal** (refuse a tag that is not on `main`'s tip; build the gem; refuse a tag that does not name the version just built, or that names anything but a final `X.Y.Z`; verify a clean `gem install` + `require` on the 3.2 floor) → **publish** (gated by the `rubygems` environment, then `rubygems/release-gem` runs `bundle exec rake release` via OIDC). `release-gem` also generates sigstore build attestations.
 
 - **`rake release` is provided by `bundler/gem_tasks`** (required in the `Rakefile`). In a tag-triggered run the tag already exists, so bundler's `already_tagged?` guard skips tagging/SCM-push (`release-gem` runs `git fetch --tags --force` to make the tag visible) — the run does only the gem push. Do not pre-create the tag with `rake release` locally; tag with the derived command under **Tagging** below.
-- **The tag must name the version being built.** Rehearsal's tag guard compares `${GITHUB_REF_NAME#v}` against the version on the gem it just built and fails with an `::error::` naming both, so a mistyped tag stops in seconds instead of after the gate is approved. The version it accepts is bundler's `version_tag` — `"v" + Gem::Version#to_s`, which **normalizes** a hyphenated prerelease (`1.0.0-rc1` in `version.rb` → tag `v1.0.0.pre.rc1`, matching the built gem's filename). The error names the tag to use; take it literally rather than re-typing the raw `version.rb` literal.
+- **The tag must name a publishable version of this tree.** Rehearsal's second guard compares `${GITHUB_REF_NAME#v}` against the version on the gem it just built and fails with an `::error::` naming both, so a mistyped tag stops in seconds instead of after the gate is approved. The version it accepts is bundler's `version_tag` — `"v" + Gem::Version#to_s`. The error names the tag to use; take it literally rather than re-typing the raw `version.rb` literal.
+- **Final releases only — `X.Y.Z`, nothing else.** The same step then refuses any version that is not `^[0-9]+\.[0-9]+\.[0-9]+$`. The other two guards — this one's version comparison, and the tip check in the next bullet — ask only whether the tag, the tree and `main` agree; none of them asks whether the version they *agree on* is one we meant to publish, and a tag derived at the wrong moment — before the bump lands, or from a tree carrying a prerelease literal — would publish it to an immutable registry. Note the trap this closes: `Gem::Version#to_s` **normalizes** a hyphenated prerelease, so a `1.0.0-rc1` literal in `version.rb` builds `basecradle-1.0.0.pre.rc1.gem` and derives the tag `v1.0.0.pre.rc1` — every other check passes, because they all agree. This SDK has only ever shipped final releases; the day one is genuinely planned, the regex is widened deliberately in the PR that plans it (#192).
 - **The tag must sit on `main`'s tip.** Rehearsal's *first* step (before `setup-ruby`, so it costs a second) fetches `main` and fails with an `::error::` naming both shas when the tagged commit is not it. Deriving the version (#186) made the version guard above agree with the tree *by construction*, so a tag on a stale commit would otherwise sail through it and publish the wrong tree — this is the independent check that loss cost us (#188), in CI rather than in an operator's memory. It is **exact tip, not "an ancestor of `main`"**, which has two accepted consequences: a merge landing between the bump and the tag fails the run (see **When a rehearsal guard fails** — the remedy is *not* simply moving the tag), and a backport release from a maintenance branch cannot pass at all. Both are cheap next to publishing the wrong tree, which is immutable.
 - **Captain vs. capital split.** The captain's (this repo's) release responsibility **ends at the version bump + changelog**. From there the capital takes over: it tags, runs the pipeline, approves the `rubygems` env-gate via its operator credential, verifies the live install, and closes the release issue. (Mirrors the harness's four-owner framing — *"A release is not done at PyPI…"*.)
 
@@ -53,7 +54,7 @@ git fetch origin main && git switch main && git merge --ff-only FETCH_HEAD
 V="v$(ruby -e 'print Gem::Specification.load("basecradle.gemspec").version')" && git tag "$V" && git push origin "$V"
 ```
 
-The version is **derived, never typed**: it is the same `Gem::Version#to_s` that names the gem the rehearsal's tag guard checks (#184), so the tag cannot disagree with the tree it names, and a prerelease normalizes on its own — nobody has to know that `1.0.0-rc1` in `version.rb` tags as `v1.0.0.pre.rc1` — leaving that guard as the backstop against a hand-edited tag (decided in #186).
+The version is **derived, never typed**: it is the same `Gem::Version#to_s` that names the gem the rehearsal's version guard checks (#184), so the tag cannot disagree with the tree it names, leaving that guard as the backstop against a hand-edited tag (decided in #186). It also means the tag inherits whatever `version.rb` says, normalization included — a `1.0.0-rc1` literal derives `v1.0.0.pre.rc1` without complaint, which is exactly why rehearsal refuses anything that is not a plain `X.Y.Z` (#192).
 
 Three things the chain depends on:
 
@@ -63,7 +64,7 @@ Three things the chain depends on:
 
 ## When a rehearsal guard fails
 
-Neither guard failing is a workflow bug, and neither publishes anything. Read which one fired.
+No guard failing is a workflow bug, and none of them publishes anything. Read which one fired.
 
 **"Tag *v* is on *sha*, not main's tip *sha*"** — the tagged commit is not what `main` is now, because something merged after the bump or the tag was cut from a stale clone.
 
@@ -82,6 +83,16 @@ In both branches the version is re-decided deliberately rather than inherited fr
 
 - **The tag was mistyped** (the tree holds the version you meant) → delete it and re-tag with the version the error names, which was computed from the gem CI built at the tagged commit: `git tag -d vWRONG && git push origin :refs/tags/vWRONG && git tag v<built> && git push origin v<built>`.
 - **The bump never landed** (the tag names the version you meant) → that is captain work: a version bump + changelog PR, merged, then re-tag per the section below.
+
+**"Version *X* is not a plain X.Y.Z"** — the tag, the tree and `main` all agree, and the thing they agree on is not something this SDK publishes. Almost always a `version.rb` literal that is a prerelease: `Gem::Version#to_s` normalizes `1.0.0-rc1` to `1.0.0.pre.rc1`, which becomes both the gem filename and the derived tag, so every other check passes.
+
+That is captain work, not a re-tag: the version in `lib/basecradle/version.rb` is wrong and has to change on `main` in a version bump + changelog PR. Delete the tag meanwhile — remote ref first — so nothing re-fires on it:
+
+```bash
+git push origin ":refs/tags/vWRONG" && git tag -d vWRONG
+```
+
+If a prerelease is *genuinely* what is wanted, this guard is not to be worked around with a hand-cut tag: widen its regex in the same PR that plans the prerelease, so the decision is recorded where the check is.
 
 ## Re-triggering after a fixed workflow bug
 
