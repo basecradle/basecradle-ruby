@@ -128,6 +128,39 @@ end
 
 `cancel` withdraws a still-*pending* task — the scheduled-work equivalent of `timeline.lock`: its alarm never fires and the slot it held under your `max_pending_tasks` cap is freed at once. It is author-only (an admin may cancel any task) and works even on a locked timeline (cancellation is cleanup, not new content). Cancelling a task you did not author raises `BaseCradle::NotTaskAuthorError`; cancelling one that is no longer pending — already activated, blocked, or cancelled — raises `BaseCradle::TaskNotPendingError`. Create-then-cancel-and-reschedule gives you a rolling **dead man's switch**: a task that fires only if you stop renewing it.
 
+## Reading a timeline's items
+
+Fetching one timeline gives you everything on it inline — a single mixed list, **oldest
+first** (it is the timeline as read, not a paginated feed). `item.type` says which record
+each row is, and `item.content` is that record's own content model — the very object the
+record's own resource returns:
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+
+bc.timelines.get("019e7750-66ee-7f53-829f-13a8a710b6da").items.each do |item|
+  case item.type
+  when "message" then puts item.content.body
+  when "asset"   then puts item.content.file.filename
+  when "task"    then puts item.content.status
+  end
+end
+```
+
+Two things the list does not carry. A **pending** task is not on it — a task appears only
+once it activates — so survey scheduled work with `bc.tasks.filter(status: "pending")`
+instead. And an item `type` this SDK release does not know is not an error: the API is
+additive-only, so its content reads as a plain `BaseCradle::ApiObject` and
+`content["any_field"]` still returns the wire value untouched.
+
+Two fields are type-specific, so branch on `type` before reaching for them: a
+`webhook_event` item has no author (it came from an external sender, not a peer), and it
+alone carries `webhook_endpoint`, the endpoint it arrived on, embedded in full. Reading
+either where it does not belong raises `BaseCradle::MissingFieldError` rather than
+inventing a value.
+
 ## Webhooks
 
 External services deliver into a timeline by POSTing to an endpoint's secret ingest URL. Each delivery becomes a readable event. This is the **inbound** direction — data arriving at BaseCradle. Its outbound counterpart is Event Delivery, the platform's push through your integration, which the SDK does not model.
@@ -187,11 +220,12 @@ fallback-less `fetch` raise `KeyError` naming the headers that did arrive, while
 and the methods that reshape it (`slice`, `except`, `select`) work on those stored names,
 case-sensitively.
 
-Two paths hand back the raw wire hash instead, case-sensitive as a plain `Hash` is:
-`event.content["headers"]` — `ApiObject`'s raw-wire escape hatch, which wraps nothing —
-and a `webhook_event` row of `timeline.items`, whose content is a union of four record
-types, so `item.content["headers"]` is the `Hash` the API returned. `bc.webhook_events`
-and `timeline.webhook_events` give the case-folding one.
+This holds however you reach the record. A timeline item's `content` is typed by the
+item's own `type`, so a `webhook_event` row of `timeline.items` is a `WebhookEventContent`
+just like one from `bc.webhook_events` — `item.content.headers["X-GitHub-Delivery"]` folds
+the same way. What gives the folding up is converting away from the type: both
+`event.content["headers"]` (`ApiObject`'s raw-wire escape hatch, which wraps nothing) and
+`headers.to_h` hand back a plain, case-sensitive `Hash`.
 
 ## Idempotent creates & safe retries
 
