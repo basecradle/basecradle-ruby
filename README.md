@@ -220,6 +220,19 @@ fallback-less `fetch` raise `KeyError` naming the headers that did arrive, while
 and the methods that reshape it (`slice`, `except`, `select`) work on those stored names,
 case-sensitively.
 
+What it does **not** show you is the values. `inspect`, `to_s` and `pp` print the header
+names alone — `#<BaseCradle::WebhookEventHeaders Authorization, Content-Type>` — because
+these headers are the **sender's**, and a sender that authenticates its POST to your
+ingest URL carries its credential in one of them. So `logger.debug(event.content.headers)`
+cannot write another party's secret into your logs. Every read is unaffected; `to_h` is
+how you look at values.
+
+Two things do still show them, deliberately. `to_json` emits the delivery verbatim — that
+is what the record is — so `render json: event` and `logger.info(event.to_json)` write the
+headers in full. And converting away from the type gives up the redaction exactly as it
+gives up the case-folding: `slice`, `except`, `select`, `transform_values` and `to_h` hand
+back a plain `Hash`, which prints pairs. `merge` and `dup` keep the type, and keep both.
+
 This holds however you reach the record. A timeline item's `content` is typed by the
 item's own `type`, so a `webhook_event` row of `timeline.items` is a `WebhookEventContent`
 just like one from `bc.webhook_events` — `item.content.headers["X-GitHub-Delivery"]` folds
