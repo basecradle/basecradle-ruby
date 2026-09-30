@@ -93,7 +93,7 @@ jobs:
           built="${gem_file#basecradle-}"
           built="${built%.gem}"
           tagged="${GITHUB_REF_NAME#v}"
-          if [ "$built" != "$tagged" ]; then
+          if [ "$built" != "$tagged ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not name the version this tree builds ($built). Re-tag as v$built, or bump lib/basecradle/version.rb to $tagged — then push again."
             exit 1
           fi
