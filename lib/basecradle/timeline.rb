@@ -7,7 +7,7 @@ require_relative "webhooks"
 
 module BaseCradle
   # One item on a timeline — a message, asset, webhook event, or task. +type+ says which;
-  # +content+ is the item itself, wire-exact; +user+ is the author.
+  # +content+ is the item itself, typed by that +type+; +user+ is the author.
   #
   # An inline item is the record's own standalone form, with one difference: +created_at+
   # is the *item's* — when the record landed on the timeline (for a task, its activation;
@@ -19,13 +19,59 @@ module BaseCradle
   # Reading either where it does not belong raises +MissingFieldError+ rather than
   # inventing a value.
   class TimelineItem < ApiObject
+    # The content model each item +type+ reads as — the very class that +type+'s own
+    # resource returns, so one record has one shape however you reach it. A +type+ this
+    # release does not know is not in here on purpose; see +content+. Internal: the
+    # dispatch table is not API surface, so re-keying it is never a breaking change.
+    CONTENT_MODELS = {
+      "message" => MessageContent,
+      "asset" => AssetContent,
+      "task" => TaskContent,
+      "webhook_event" => WebhookEventContent
+    }.freeze
+    private_constant :CONTENT_MODELS
+
     attribute :type
     attribute :created_at
     attribute :updated_at
     attribute :user, wrap: User
     attribute :timeline, wrap: Reference
     attribute :webhook_endpoint, wrap: WebhookEndpoint # webhook_event items only
-    attribute :content # shape depends on type — read it wire-exact
+
+    # The item itself, as the content model its +type+ names: a MessageContent,
+    # AssetContent, TaskContent or WebhookEventContent — the same object the record's own
+    # page hands back. So a record reads identically down either path, enrichments
+    # included (+item.content.headers+ folds case exactly as
+    # +bc.webhook_events.get(uuid).content.headers+ does), and an item's content +==+ the
+    # same record fetched directly.
+    #
+    # The API is additive-only, so an item +type+ newer than this SDK release must keep
+    # reading rather than raise: its content comes back as a plain ApiObject, whose +[]+
+    # still returns every wire field untouched. Upgrading the SDK is what types it.
+    def content
+      raise_missing("content") unless to_h.key?("content")
+      # The two ways a +type+ can be unusable are different answers, not one. A type the
+      # API sent that this release has no model for is the forward-compatible case and
+      # falls back below; an item carrying no +type+ at all is a malformed response (the
+      # spec marks it required), and the SDK raises rather than guessing which — the same
+      # promise ApiObject makes for every other withheld field.
+      raise_untypable unless to_h.key?("type")
+
+      wrap_value(to_h["content"], CONTENT_MODELS.fetch(type, ApiObject))
+    end
+
+    private
+
+    # Reading +type+ here would raise about a field the caller never asked for, on an
+    # object whose "fields present" list includes the +content+ they did ask for. Name
+    # the dependency between the two instead, and the escape hatch that still works.
+    def raise_untypable
+      raise MissingFieldError,
+            "This #{self.class}'s content cannot be typed: the API did not return " \
+            "\"type\" for it, and an item's content model is chosen by its type. The " \
+            "wire content is still readable with item[\"content\"]. " \
+            "Fields present: #{to_h.keys.sort.inspect}"
+    end
   end
 
   # A timeline: its metadata, owner, participants, lock state — and its verbs.

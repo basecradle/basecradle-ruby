@@ -35,6 +35,15 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 200, body: DASHBOARD_RESPONSE.to_json)
     stub_request(:get, "#{BASE_URL}/timelines")
       .to_return(status: 200, body: { "timelines" => [ timeline_payload ], "next_cursor" => nil }.to_json)
+    # The one endpoint that returns a timeline's items inline — a mixed list, so the
+    # README's case/when over item.type is exercised on every branch it names. The task
+    # is activated: a pending one never appears inline (api.md, "Fetching a Timeline").
+    stub_request(:get, %r{#{BASE_URL}/timelines/[^/]+\z}).to_return(
+      status: 200,
+      body: { "timeline" => timeline_payload,
+              "items" => [ message_payload, asset_payload,
+                           task_payload(status: "activated") ] }.to_json
+    )
     stub_request(:post, "#{BASE_URL}/timelines")
       .to_return(status: 201, body: { "timeline" => timeline_payload(participants: []), "items" => [] }.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/participations})

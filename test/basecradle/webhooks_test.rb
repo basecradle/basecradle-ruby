@@ -151,15 +151,33 @@ class WebhooksTest < Minitest::Test
     assert_raises(BaseCradle::MissingFieldError) { an_event(payload).content.headers }
   end
 
-  # Reached through a timeline item instead, content is the generic wire-exact Hash — a
-  # plain, case-sensitive one. bc.webhook_events gives the case-folding headers.
-  def test_a_webhook_event_timeline_item_carries_the_plain_wire_headers
+  # Reached through a timeline item, the headers fold too: an item's content is typed by
+  # the item's type, so a webhook_event row is a WebhookEventContent like any other read
+  # of that record. One record, one shape, one answer.
+  def test_a_webhook_event_timeline_item_folds_its_headers_too
     payload = item_payload("webhook_event", webhook_event_payload["content"], user: nil)
     item = BaseCradle::TimelineItem.new(payload, client: @bc)
 
-    assert_instance_of Hash, item.content["headers"]
-    assert_equal "ping", item.content["headers"]["X-Example-Event"]
-    assert_nil item.content["headers"]["x-example-event"] # a plain Hash: case-sensitive
+    assert_instance_of BaseCradle::WebhookEventContent, item.content
+    assert_instance_of BaseCradle::WebhookEventHeaders, item.content.headers
+    assert_equal "ping", item.content.headers["X-Example-Event"]
+    assert_equal "ping", item.content.headers["x-example-event"] # folded, as HTTP means it
+    # And the same record read directly answers identically — that is the whole point.
+    assert_equal an_event(webhook_event_payload).content, item.content
+  end
+
+  # The raw escape hatch is unchanged by the typing: it wraps nothing, so it still hands
+  # back the plain, case-sensitive wire Hash — on both reads of the record, which is what
+  # README and WebhookEventContent's docstring now claim is the *only* unfolded path.
+  def test_the_raw_escape_hatch_still_gives_the_unfolded_wire_hash
+    payload = item_payload("webhook_event", webhook_event_payload["content"], user: nil)
+    item = BaseCradle::TimelineItem.new(payload, client: @bc)
+
+    [ an_event(webhook_event_payload).content["headers"], item.content["headers"] ].each do |headers|
+      assert_instance_of Hash, headers
+      assert_equal "ping", headers["X-Example-Event"]
+      assert_nil headers["x-example-event"]
+    end
   end
 
   def test_event_verified_at_receipt_reads_a_signed_delivery

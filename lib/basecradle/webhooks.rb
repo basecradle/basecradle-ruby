@@ -196,11 +196,13 @@ module BaseCradle
   # two are historical, and they are the only ones.
   #
   # +headers+ is the delivery's request headers as a +WebhookEventHeaders+ — the wire's
-  # own pairs, looked up case-insensitively. Reached instead through a +webhook_event+ row
-  # of +timeline.items+, +content+ is the generic wire-exact Hash — a timeline item's
-  # content is a union of four record types, so it is not a +WebhookEventContent+ — and
-  # +item.content["headers"]+ is the plain Hash the API returned. +bc.webhook_events+ and
-  # +timeline.webhook_events+ give the case-folding one.
+  # own pairs, looked up case-insensitively. This is the content model every read of the
+  # record returns, +timeline.items+ included: a +webhook_event+ row's +content+ is one of
+  # these (TimelineItem types content by the item's +type+), so the folding lookup is
+  # there too. What gives it up is converting away from the type — +content["headers"]+,
+  # ApiObject's raw-wire escape hatch, which wraps nothing, and the conversions
+  # WebhookEventHeaders names above (+to_h+ and friends) all hand back a plain,
+  # case-sensitive Hash.
   class WebhookEventContent < ApiObject
     attribute :uuid
     attribute :content_type
