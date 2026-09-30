@@ -99,6 +99,14 @@ module BaseCradle
   # that already happened. Converting away from this type gives up the folding too
   # (+to_h+, <tt>{**headers}</tt>, and anything else that hands back a plain +Hash+);
   # +merge+ and +dup+ keep it.
+  #
+  # What it does *not* print is the values: +inspect+, +to_s+ and +pp+ render the header
+  # names alone, because these are the sender's headers and one of them may be the
+  # sender's credential. Every read is unaffected — and so is +to_json+, which still
+  # emits the delivery verbatim. Converting away from this type gives the redaction up
+  # exactly as it gives up the folding, and for the same reason: +slice+, +except+,
+  # +select+, +transform_values+ and +to_h+ hand back a plain +Hash+, whose +inspect+
+  # prints pairs.
   class WebhookEventHeaders < Hash
     # Hash's own exact-match membership, kept under a private name before the case-folding
     # +key?+ below takes the name: a caller who wrote the wire's own spelling is answered
@@ -165,6 +173,43 @@ module BaseCradle
     # +&headers+ — a header name to its value, folded, +nil+ for one not delivered.
     def to_proc
       ->(name) { dig(name) }
+    end
+
+    # The header *names* this delivery carried, and none of their values.
+    #
+    # +Hash+'s own +inspect+ prints every pair, and these headers are the *sender's*,
+    # stored verbatim by the platform: a sender that authenticates its POST to an ingest
+    # URL puts its credential in one of them, so +logger.debug(event.content.headers)+
+    # would write another party's secret into our logs. Every other renderable object in
+    # this SDK is already safe by one rule — +ApiObject#inspect+ prints field names, never
+    # values — and this is the one class that sat outside it, because +Hash+ brought its
+    # own render.
+    #
+    # Only the human-facing render changes. Every *read* is untouched and still
+    # wire-exact: lookups, +fetch+, +each+, +keys+, +to_h+, +to_json+, +==+.
+    #
+    # Names are sorted, as +ApiObject#inspect+ sorts its fields and as the +KeyError+ a
+    # missing header raises already lists the ones that did arrive.
+    def inspect
+      return "#<#{self.class}>" if empty?
+
+      "#<#{self.class} #{keys.sort_by(&:to_s).join(', ')}>"
+    end
+
+    # +Hash+ aliases +to_s+ to its *own* +inspect+ — one shared method entry — so
+    # overriding +inspect+ alone would leave <tt>"#{headers}"</tt> and +puts headers+
+    # printing every value. Late-bound rather than +alias to_s inspect+, so a subclass
+    # that redacts more is not bypassed by interpolation (as +Client#to_s+ is).
+    def to_s
+      inspect
+    end
+
+    # +pp+ reaches for +pretty_print+, and +Hash+ brings one that prints the pairs — the
+    # same leak through the one door +inspect+ does not cover. Delegating puts +pp+ back
+    # on the SDK-wide rule: +pp+ uses an object's own +inspect+ when it defines one, which
+    # is why every +ApiObject+ is already safe here and only a +Hash+ descendant was not.
+    def pretty_print(printer)
+      printer.text(inspect)
     end
 
     private

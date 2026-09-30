@@ -125,7 +125,8 @@ class WebhooksTest < Minitest::Test
     assert_includes headers.keys, "X-Example-Event" # not "x-example-event"
     assert_equal({ "X-Example-Event" => "ping" }, headers.select { |name, _| name.start_with?("X-") })
     assert_equal 5, headers.size
-    # It logs and serializes as the delivery's headers, not as an opaque object.
+    # It serializes as the delivery's headers — it is a record, not an opaque object.
+    # (What it no longer *logs* is the values: #206 gave it a names-only inspect.)
     assert_equal event.content.to_h["headers"], JSON.parse(headers.to_json)
     # A derived copy is still one of these, so it keeps folding...
     derived = headers.merge("X-Late-Header" => "added")

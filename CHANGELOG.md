@@ -9,6 +9,40 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.10.2] - 2026-09-30
+
+### Security
+
+- **`WebhookEventHeaders` no longer prints header values when inspected**
+  ([#206](https://github.com/basecradle/basecradle-ruby/issues/206)). An inbound
+  delivery's headers are the *sender's*, stored verbatim by the platform, so one of them
+  may be the sender's own credential — a POST authenticated to an ingest URL carries its
+  `Authorization` or `X-Api-Key` right there. `WebhookEventHeaders` is a `Hash`
+  descendant and inherited `Hash`'s render, which prints every pair, so
+  `logger.debug(event.content.headers)` wrote **another party's secret** into your logs.
+  `inspect`, `to_s` and `pp` now render the header names alone, sorted, matching the rule
+  every other object in this SDK already followed (`ApiObject#inspect` prints field
+  names, never values):
+
+  ```
+  #<BaseCradle::WebhookEventHeaders Authorization, Content-Type, X-Api-Key>
+  ```
+
+  **Only the human-facing render changed.** Every read is untouched and still wire-exact:
+  the case-folded lookup, `fetch`, `each`, `keys`, `to_h`, `to_json`, `==`. If you were
+  relying on `inspect` to see values, use `to_h` — which is what it was always for. No
+  credential of yours was exposed; the exposure was of whoever sent you the webhook, so
+  if you have logged inbound deliveries at debug level, treat those senders' headers as
+  disclosed.
+- **Two ways a header value still reaches a log, both by design.** `to_json`/`as_json`
+  emit the delivery verbatim — that is what a webhook record *is* — so
+  `render json: event` and `logger.info(event.to_json)` still write the sender's headers
+  in full. And converting away from the type gives up the redaction exactly as it gives up
+  the case-folding: `slice`, `except`, `select`, `transform_values` and `to_h` each hand
+  back a plain `Hash`, whose `inspect` prints pairs. Only `merge` and `dup` keep the type,
+  and so the redaction. Changing what a webhook record *serializes* as is a separate
+  decision and is not made here.
+
 ## [0.10.1] - 2026-09-30
 
 ### Security
@@ -450,6 +484,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.10.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.2
 [0.10.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.1
 [0.10.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.0
 [0.9.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.9.0

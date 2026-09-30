@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "pp"
+require "stringio"
 
 # A Client and a collection resource are not records, and serializing one used to emit
 # something anyway. Under ActiveSupport a Client emitted its raw bc_uat_ token
@@ -17,6 +19,14 @@ class SerializationTest < Minitest::Test
 
   def setup
     @client = BaseCradle::Client.new(FAKE_TOKEN)
+  end
+
+  # `pp obj` writes to $stdout, so it is captured rather than asserted on indirectly.
+  # PP.pp takes the sink explicitly, which keeps this out of the process's real stdout.
+  def capture_pp(object)
+    sink = StringIO.new
+    PP.pp(object, sink)
+    sink.string
   end
 
   # Every lazy collection the SDK hands out, instantiated the way a caller gets one.
@@ -181,6 +191,10 @@ class SerializationTest < Minitest::Test
     assert_equal "conn=#{@client.inspect}", "conn=#{@client}"
     refute_includes @client.inspect, FAKE_TOKEN
     refute_includes @client.to_s, FAKE_TOKEN
+    # pp is the third door: it uses an object's own inspect when it defines one, which is
+    # why every ApiObject and the Client are already safe there (#206 found the one class
+    # that was not). Pinned rather than assumed.
+    refute_includes capture_pp(@client), FAKE_TOKEN
   end
 
   # The resources hold the client, so Ruby's default inspect renders it — safe only
@@ -189,7 +203,113 @@ class SerializationTest < Minitest::Test
     collections.each do |name, collection|
       refute_includes collection.inspect, FAKE_TOKEN, name
       refute_includes collection.to_s, FAKE_TOKEN, name
+      # A collection has no inspect of its own, so pp dumps its ivars — reaching the
+      # client, and safe only because Client#inspect above is the redacting one.
+      refute_includes capture_pp(collection), FAKE_TOKEN, name
     end
+  end
+
+  # --- a third party's credential: WebhookEventHeaders -------------------------------------
+
+  # The headers of an inbound delivery are the *sender's*, stored verbatim by the platform,
+  # so one of them may be the sender's own credential — a POST authenticated to an ingest
+  # URL carries its `Authorization` or `X-Api-Key` right there. WebhookEventHeaders is a
+  # Hash descendant, so it inherited Hash's render, which prints every pair: that made
+  # `logger.debug(event.content.headers)` write another party's secret into our logs. Every
+  # other renderable object here is safe by one rule — ApiObject#inspect prints field names,
+  # never values — and this was the one class outside it (#206).
+  #
+  # Values are fabricated, and are checked for in each of the four renders separately so a
+  # failure names the door that reopened.
+  SENDER_SECRETS = {
+    "Authorization" => "Bearer nova-to-basecradle-2f8c41d7",
+    "X-Api-Key" => "ak_live_9b4e7a12c5d38f60"
+  }.freeze
+
+  def delivered_headers
+    payload = webhook_event_payload
+    payload["content"]["headers"] = payload["content"]["headers"].merge(SENDER_SECRETS)
+    BaseCradle::WebhookEvent.new(payload, client: @client).content.headers
+  end
+
+  def test_webhook_event_headers_render_the_header_names_and_never_a_value
+    headers = delivered_headers
+
+    assert_instance_of BaseCradle::WebhookEventHeaders, headers
+    # Names, sorted, as ApiObject#inspect renders its fields.
+    assert_equal "#<BaseCradle::WebhookEventHeaders #{headers.keys.sort.join(', ')}>",
+                 headers.inspect
+    # The names ARE the point — a render that dropped them would leak nothing and say
+    # nothing, so the assertion above must not be satisfiable by an empty list.
+    assert_includes headers.inspect, "Authorization"
+    assert_includes headers.inspect, "X-Api-Key"
+
+    renders = {
+      "inspect" => headers.inspect,
+      # Hash aliases to_s to its own inspect, one shared method entry, so overriding
+      # inspect alone would leave both of these printing every value.
+      "to_s" => headers.to_s,
+      "interpolation" => "delivery=#{headers}",
+      "%p" => format("%p", headers),
+      # pp reaches for pretty_print, which Hash also brings — the one door inspect does
+      # not cover on a Hash descendant.
+      "pp" => capture_pp(headers),
+      # And held by something else, which is how it reaches a log line in practice.
+      "nested in a Hash" => { delivery: headers }.inspect
+    }
+
+    SENDER_SECRETS.each_value do |secret|
+      renders.each { |door, rendered| refute_includes rendered, secret, door }
+    end
+  end
+
+  # Only the render changed: every read still hands back exactly what the wire carried,
+  # including the folded lookup that is this class's whole reason to exist.
+  def test_webhook_event_headers_still_read_exactly_what_the_wire_carried
+    headers = delivered_headers
+
+    SENDER_SECRETS.each do |name, secret|
+      assert_equal secret, headers[name]
+      assert_equal secret, headers[name.downcase] # folded, as HTTP means it
+      assert_equal secret, headers.fetch(name)
+      assert_equal secret, headers.to_h[name]
+      assert_equal secret, JSON.parse(headers.to_json)[name]
+    end
+  end
+
+  # A derived copy is still one of these (merge keeps the type), so the render travels
+  # with it — through all three doors, since a copy is built by dup rather than through
+  # initialize, and a copy with a correlation header added is what a caller actually logs.
+  def test_a_derived_copy_of_the_headers_renders_the_same_way
+    derived = delivered_headers.merge("X-Late-Header" => "added")
+
+    assert_instance_of BaseCradle::WebhookEventHeaders, derived
+    assert_includes derived.inspect, "X-Late-Header"
+    [ derived.inspect, derived.to_s, "delivery=#{derived}", capture_pp(derived) ].each do |rendered|
+      SENDER_SECRETS.each_value { |secret| refute_includes rendered, secret }
+    end
+  end
+
+  # The names are sorted with `sort_by(&:to_s)`, not `sort`, and that is load-bearing:
+  # `merge` accepts any key (wire_name's own comment says so, and webhooks_test exercises
+  # it), and a plain sort raises `ArgumentError: comparison of String with :host failed`.
+  # Aligning this with ApiObject#inspect's `keys.sort` would pass every other test here
+  # and then raise from a log statement.
+  def test_the_render_survives_a_key_that_never_came_off_the_wire
+    derived = delivered_headers.merge(host: "elsewhere")
+
+    assert_includes derived.inspect, "host"
+    SENDER_SECRETS.each_value { |secret| refute_includes derived.inspect, secret }
+  end
+
+  # The other arm of the render. A delivery the platform records with no headers at all
+  # renders as the bare class, with no dangling separator — and it is distinct from a
+  # delivery carrying a header whose name is the empty string, which `size` reports as 1.
+  def test_a_delivery_with_no_headers_renders_as_the_bare_class
+    assert_equal "#<BaseCradle::WebhookEventHeaders>",
+                 BaseCradle::WebhookEventHeaders.new({}).inspect
+    refute_equal "#<BaseCradle::WebhookEventHeaders>",
+                 BaseCradle::WebhookEventHeaders.new({ "" => "x" }).inspect
   end
 
   # --- the error itself ---------------------------------------------------------------------
