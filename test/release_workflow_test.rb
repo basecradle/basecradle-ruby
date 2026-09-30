@@ -10,6 +10,11 @@ require "yaml"
 # a `v*` tag, after the rehearsal is green and the capital has actuated the gate, and a tag
 # pushed to a public repo is not really un-pushable.
 #
+# The publish job's `permissions:` are pinned here too (#208) — not as a contract with
+# RubyGems but because they fail the same way: `id-token: write` is the whole of this gem's
+# authentication, and dropping it leaves a green tree, a green actionlint, and a run that
+# dies on a tag which has already cleared the gate.
+#
 # ci.yml (#200), the README and the CHANGELOG (#196) each had a test holding them honest;
 # the workflow that publishes the gem had none (#203). #202 is the reason that matters: it
 # corrected a comment in this file that had been wrong since the file was written and
@@ -36,6 +41,25 @@ class ReleaseWorkflowTest < Minitest::Test
   # environment is not: a job rename must stay green, while dropping the environment — the
   # edit that actually 403s — must not.
   PUBLISH_ACTION = "rubygems/release-gem"
+
+  # The publish job's permissions, exhaustively — what it grants today, not a floor.
+  #
+  # `id-token: write` is the whole of this gem's authentication: it is what
+  # rubygems/release-gem mints the OIDC token with, and Trusted Publishing has no stored
+  # credential to fall back on.
+  #
+  # `contents: write` is the grant release-gem documents for the git operation `rake
+  # release` *can* perform — but this pipeline is tag-triggered only, and by the time the
+  # task runs the tag exists (release-gem does `git fetch --tags --force` first), so
+  # bundler's `already_tagged?` skips `release:source_control_push` and no push is made.
+  # It is pinned as the widest grant in this workflow rather than as a necessity: narrowing
+  # it is a change to release.yml, which is the capital's to decide, and this equality is
+  # what makes that decision deliberate instead of a silent edit.
+  PUBLISH_PERMISSIONS = { "contents" => "write", "id-token" => "write" }.freeze
+
+  # The workflow-level grant, exhaustively: what every job that does not set its own
+  # `permissions:` inherits — here the rehearsal, which only builds a gem and installs it.
+  WORKFLOW_PERMISSIONS = { "contents" => "read" }.freeze
 
   # Exactly one workflow in this repo may publish on a release tag, and it must be the file
   # RubyGems trusts. Renaming it, or adding a second tag-triggered workflow beside it, both
@@ -120,21 +144,129 @@ class ReleaseWorkflowTest < Minitest::Test
                "teach this test which ones keep the rehearsal binding."
   end
 
+  # The publish job's `permissions` have the same failure shape as the two contractual names
+  # above, and sit four lines from them. Drop `id-token: write` and the tree stays green —
+  # `bundle exec rake` passes, `actionlint` passes, a narrower block being valid YAML and a
+  # valid workflow — and the run dies on a `v*` tag, after the rehearsal has gone green and
+  # after the capital has actuated the gate, which is the failure this file exists to move
+  # earlier.
+  #
+  # Equality rather than containment, and the reason is this job specifically: it is the one
+  # job in the repo that holds a write token, so a permission added here is a permission a
+  # compromised action gets. A key *added* therefore fails too — including via the
+  # `permissions: write-all` shorthand, which is a String and cannot equal the Hash either
+  # way. (ci_workflow_test.rb also compares by equality, but for its own, different reason:
+  # a `needs` entry naming a job that no longer exists stops CI running at all.)
+  def test_the_publish_job_holds_exactly_the_permissions_the_publish_grants_today
+    permissions = jobs.fetch(publish_key)["permissions"]
+
+    assert_equal PUBLISH_PERMISSIONS, permissions,
+                 "the #{publish_key} job must grant exactly #{PUBLISH_PERMISSIONS.inspect} " \
+                 "(found #{permissions.inspect}). `id-token: write` is what " \
+                 "#{PUBLISH_ACTION} mints the OIDC token with — drop it and there is no " \
+                 "Trusted Publishing at all, and no stored credential to fall back on. " \
+                 "`contents: write` is the grant release-gem documents for the git push " \
+                 "`rake release` can make, which a tag-triggered run never reaches " \
+                 "(`already_tagged?`); it is pinned as the widest grant here, so removing " \
+                 "it is a deliberate decision about release.yml rather than a silent edit. " \
+                 "A missing key is green in this tree and fails on a tag, after the gate " \
+                 "has been actuated — and a tag pushed to a public repo is not really " \
+                 "un-pushable. An extra key fails too: this is the only job here holding a " \
+                 "write token."
+  end
+
+  # The workflow-level block is what every *other* job runs with — today the rehearsal, and
+  # any job added later that does not say otherwise. A hardening pin rather than a
+  # correctness one: widening it breaks no release, which is precisely why nothing else in
+  # the repo would ever notice. Removing it is the worse of the two edits, since the token
+  # then falls back to the repository's default workflow permissions — a setting outside
+  # this tree, which can be read *and* write.
+  def test_the_workflow_grants_read_by_default_and_nothing_more
+    permissions = workflow["permissions"]
+
+    assert_equal WORKFLOW_PERMISSIONS, permissions,
+                 "#{FILENAME} must grant #{WORKFLOW_PERMISSIONS.inspect} at the workflow " \
+                 "level (found #{permissions.inspect}). That is what the rehearsal runs " \
+                 "with, and what any job added later without its own `permissions:` block " \
+                 "inherits. Removing it does not fall back to nothing — it falls back to " \
+                 "the repository's default workflow permissions, a setting outside this " \
+                 "tree that may be read-write. The one job that needs more says so itself."
+  end
+
+  # The one-line bypass of the pin above: a job-level `permissions:` overrides the
+  # workflow-level block entirely, so `permissions: write-all` on the rehearsal hands a
+  # full read-write token to the job that fetches and builds an attacker-suppliable tag,
+  # while the two assertions above stay green. Pinned as "no other job may declare
+  # permissions at all" rather than "no other job may exceed the default", for the reason
+  # `rehearsal_key` is strict about a third job: a release job that needs its own scopes
+  # changes the shape of the release, and that is a decision to take in the PR that adds it
+  # — and to teach this test — not one to infer.
+  def test_no_job_but_the_publish_grants_itself_anything
+    overriding = jobs.except(publish_key).select { |_, job| job.key?("permissions") }.keys
+
+    assert_empty overriding,
+                 "#{overriding.join(', ')} declares its own `permissions:`. A job-level " \
+                 "block replaces the workflow-level #{WORKFLOW_PERMISSIONS.inspect} " \
+                 "outright, so this is how a job quietly gets more than the default " \
+                 "without touching the default — `write-all` on the rehearsal hands a " \
+                 "read-write token to the job that builds an attacker-supplied tag. Only " \
+                 "#{publish_key} may grant itself anything, because only it publishes. If " \
+                 "a job genuinely needs a scope, decide it in the PR that adds it and " \
+                 "teach this test which scope and why."
+  end
+
   private
     def workflow_path
       File.join(WORKFLOWS, FILENAME)
     end
 
     # The release workflow, read strictly: this repo owns the file, and anything that stops
-    # it parsing should name itself here rather than quietly emptying the assertions above.
-    def jobs
-      @jobs ||= begin
+    # it parsing must name itself here rather than surfacing as a NoMethodError on nil, or
+    # quietly emptying the assertions above. The whole document, not just its jobs, because
+    # the workflow-level `permissions:` is one of the things pinned.
+    #
+    # Strict is right here and soft is right in `triggers` below, for one reason: that
+    # reader walks every file in the directory, two of which this repo may not fix, while
+    # this one reads the single file this repo owns and publishes with.
+    def workflow
+      @workflow ||= begin
         unless File.exist?(workflow_path)
           flunk ".github/workflows/#{FILENAME} does not exist. That filename is " \
                 "contractual — it is registered at rubygems.org as this gem's trusted " \
                 "publisher — so whatever replaced it cannot publish."
         end
-        YAML.safe_load(File.read(workflow_path)).fetch("jobs")
+
+        document =
+          begin
+            YAML.safe_load(File.read(workflow_path))
+          rescue Psych::Exception, SystemCallError => e
+            flunk ".github/workflows/#{FILENAME} could not be read: #{e.class} — " \
+                  "#{e.message}. Psych's safe mode also refuses YAML that GitHub accepts " \
+                  "(an anchor, an unquoted date), so this may be a workflow that publishes " \
+                  "fine and that this reader cannot see into; either way nothing below is " \
+                  "checking it."
+          end
+
+        unless document.is_a?(Hash)
+          flunk ".github/workflows/#{FILENAME} does not read as a workflow (parsed as " \
+                "#{document.class}). An empty file is the usual cause, and it cannot " \
+                "publish anything."
+        end
+        document
+      end
+    end
+
+    # Same strictness one level down: `jobs:` present but empty parses fine and then fails
+    # as a NoMethodError inside whichever assertion happened to run first.
+    def jobs
+      @jobs ||= begin
+        defined = workflow["jobs"]
+        unless defined.is_a?(Hash)
+          flunk ".github/workflows/#{FILENAME} defines no jobs (`jobs:` read as " \
+                "#{defined.class}). Every assertion here reads a job, so the file has " \
+                "stopped describing a release rather than failing one of these checks."
+        end
+        defined
       end
     end
 
@@ -161,11 +293,15 @@ class ReleaseWorkflowTest < Minitest::Test
     # string "on"; both are read, so a quoted key and a future Psych that stops folding it
     # each keep working. The array form (`on: [push, schedule]`) carries no filters, so it
     # is not a tag trigger and `{}` is the right answer for it too.
+    # The local is named `document`, not `workflow`: `workflow` is a method on this class
+    # now, and Ruby resolves a bare name to a local only from its assignment onward — so a
+    # later edit referring to it above this line would silently read release.yml instead of
+    # the file being inspected, and invert the filename pin with no error anywhere.
     def triggers(file)
-      workflow = YAML.safe_load(File.read(File.join(WORKFLOWS, file)))
-      return {} unless workflow.is_a?(Hash)
+      document = YAML.safe_load(File.read(File.join(WORKFLOWS, file)))
+      return {} unless document.is_a?(Hash)
 
-      on = workflow.key?(true) ? workflow[true] : workflow["on"]
+      on = document.key?(true) ? document[true] : document["on"]
       on.is_a?(Hash) ? on : {}
     rescue Psych::Exception, SystemCallError
       {}
