@@ -3,6 +3,7 @@
 require "json"
 
 require_relative "errors"
+require_relative "rendering"
 
 module BaseCradle
   # The uuid for a value that may be a model object or a uuid string. A model's identity
@@ -36,6 +37,10 @@ module BaseCradle
   # Objects built by a client carry a reference to it, so resource verbs added in later
   # releases (e.g. +timeline.lock+) can act on the platform.
   class ApiObject
+    # A record renders as its field names — never its values, which are whatever the API
+    # sent (a webhook endpoint's ingest_url among them).
+    include RendersNamesOnly
+
     def initialize(data, client: nil)
       @data = data
       @client = client
@@ -112,11 +117,13 @@ module BaseCradle
       [ self.class, @data ].hash
     end
 
-    def inspect
-      "#<#{self.class} #{@data.keys.sort.join(', ')}>"
-    end
-
     private
+
+    # The record's wire field names, sorted — never their values. A record holds whatever
+    # the API sent, which for a webhook endpoint includes its ingest_url.
+    def render_body
+      @data.keys.sort.join(", ")
+    end
 
     # The client this object came from — required by verbs that call the API (later releases).
     def require_client

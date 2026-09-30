@@ -9,6 +9,39 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.10.4] - 2026-09-30
+
+### Changed
+
+- **The names-only render rule is one module, and a reflective test now asks it of every
+  class** ([#212](https://github.com/basecradle/basecradle-ruby/issues/212)). Every
+  renderable object in this SDK prints its field *names* and never its field values —
+  that is what keeps a `bc_uat_` token, an inbound sender's `Authorization` header and an
+  endpoint's `ingest_url` out of logs, REPL transcripts and exception messages. Until now
+  the rule was three hand-rolled copies of the same three methods with nothing asking the
+  question of a fourth class, which is precisely how 0.10.2's leak arrived:
+  `WebhookEventHeaders` was added as a `Hash` descendant, `Hash` brought its own render,
+  every header value printed, and the suite stayed green. `BaseCradle::RendersNamesOnly`
+  now supplies `inspect`, `to_s` and `pretty_print` to `ApiObject`, `Client` and
+  `WebhookEventHeaders`, and `test/basecradle/rendering_test.rb` walks the SDK's own
+  constants to assert every renderable class gets all three from it. **No existing render
+  changed**, `Client`'s included — this is the same output from one place instead of
+  three, plus the guard. No leak was found; this closes the shape of the last one.
+- **A record interpolates as its field names instead of a heap address.** `ApiObject` had
+  no `to_s` or `pretty_print` of its own, so `"#{message}"` and `puts message` gave
+  `#<BaseCradle::Message:0x000074385e23d470>`. They now give
+  `#<BaseCradle::Message body, uuid>`, the same string `inspect` and `pp` already gave.
+  Nothing was leaking — a heap address is not a value — but two of the three doors on the
+  SDK's most common object belonged to `Kernel` rather than to the rule.
+- **The ActiveSupport harness renders the class 0.10.2 secured.** The child-process probe
+  excluded `Hash` descendants, which was a true statement about *serialization* (a
+  delivery's headers are a record and serialize) applied to a render question it does not
+  answer — so the one class that fix was written for was never rendered under real
+  ActiveSupport by the harness that exists for that. There is now a records bucket,
+  covered reflectively against every `Hash` descendant the SDK defines, asserting both
+  halves: the render stays names-only through all three doors, and the record still
+  serializes.
+
 ## [0.10.3] - 2026-09-30
 
 ### Security
@@ -565,6 +598,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.10.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.4
 [0.10.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.3
 [0.10.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.2
 [0.10.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.1

@@ -12,6 +12,7 @@
 # It asserts nothing — the parent test does all the judging.
 
 require "json"
+require "pp"
 require "yaml"
 
 # Same rule as the suite: never the live API. WebMock's minitest integration is not
@@ -31,6 +32,12 @@ require "active_support/core_ext/object/json"
 
 TOKEN = ARGV.fetch(0)
 TIMELINE_UUID = "019e7750-66ee-7f53-829f-13a8a710b6da"
+
+# A value that must never appear in a render: the credential an inbound sender put in its
+# own header, and a record field. Distinct from TOKEN, which is *our* credential — a
+# render can leak either, and only one of them is ours to rotate.
+SENDER_SECRET = "Bearer sender-authorization-value"
+RECORD_SECRET = "the-body-text-of-this-message"
 
 # A request must never be attempted in the first place: serializing a lazy collection
 # used to call to_a and page the whole resource. The one send path both Client#request
@@ -75,6 +82,25 @@ subjects = {
                                                                  model: BaseCradle::Timeline)
 }
 
+# The records: they render by the same names-only rule as everything else, and unlike the
+# collections they legitimately *serialize* — a delivery's headers and a message are
+# records, and an app is meant to be able to render one as JSON.
+#
+# They are here because the harness used to exclude them and so never rendered, under real
+# ActiveSupport, the one class 0.10.2's fix was written for (#212). The exclusion's reason
+# was true of serialization and silently applied to a render question it does not answer.
+records = {
+  "WebhookEventHeaders" => BaseCradle::WebhookEventHeaders.new(
+    { "Content-Type" => "application/json", "Authorization" => SENDER_SECRET }
+  ),
+  # An ApiObject too: #212 gave records their to_s and pretty_print from the shared module,
+  # and those are new doors that had never been observed in this environment.
+  "Message" => BaseCradle::Message.new(
+    { "uuid" => "0199a1f2-4c7e-7c3a-9f11-2b6d5e8a9c04", "body" => RECORD_SECRET },
+    client: client
+  )
+}
+
 report = subjects.transform_values do |subject|
   {
     # render json: { conn: bc } — the hook ActiveSupport reaches for.
@@ -102,18 +128,42 @@ report = subjects.transform_values do |subject|
   }
 end
 
+record_report = records.transform_values do |record|
+  {
+    # A record is supposed to serialize. Observed so the parent can assert it still does:
+    # the render rule must not have been bought by breaking what these objects are for.
+    "as_json" => observe { record.as_json },
+    "to_json" => observe { record.to_json },
+    # The three render doors, which is what this bucket is really here for.
+    "inspect" => record.inspect,
+    "to_s" => record.to_s,
+    "pretty_print" => PP.pp(record, +"").chomp
+  }
+end
+
 puts JSON.generate(
   # The control: the same Holder around a harmless string. It MUST serialize its ivar —
   # that is how we know ActiveSupport's instance_values walk is live in this process and
   # the subjects above were genuinely exposed to it.
   "control" => observe { { "holder" => Holder.new("held-in-the-clear") }.to_json },
-  # Every lazy collection class the SDK defines, found the same reflective way the
-  # offline test finds them (Hash descendants excluded: WebhookEventHeaders *is* a
-  # record). The parent asserts the hand-written subject list above covers all of them,
-  # so a resource added later cannot quietly skip the real-ActiveSupport half.
+  # Every lazy collection class the SDK defines, found the same reflective way the offline
+  # test finds them. Hash descendants are excluded *here* because they serialize rather
+  # than refuse — and they are picked up by "hash_descendant_classes" below, which is the
+  # half that was missing: the exclusion used to end the sentence, so the class 0.10.2
+  # secured was in neither list. The parent asserts the hand-written subject list covers
+  # all of these, so a resource added later cannot quietly skip the real-ActiveSupport half.
   "enumerable_classes" => BaseCradle.constants.map { |name| BaseCradle.const_get(name) }
                                     .select { |const| const.is_a?(Class) && const.include?(Enumerable) }
                                     .reject { |klass| klass <= Hash }
                                     .map { |klass| klass.name.split("::").last }.sort,
-  "subjects" => report
+  # Every Hash descendant the SDK defines. This is the shape that brought its own render
+  # and printed every value (0.10.2), so the parent asserts the records bucket covers all
+  # of them — a second one added later cannot skip this environment the way the first did.
+  "hash_descendant_classes" => BaseCradle.constants.map { |name| BaseCradle.const_get(name) }
+                                         .select { |const| const.is_a?(Class) && const <= Hash }
+                                         .map { |klass| klass.name.split("::").last }.sort,
+  "sender_secret" => SENDER_SECRET,
+  "record_secret" => RECORD_SECRET,
+  "subjects" => report,
+  "records" => record_report
 )
