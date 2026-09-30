@@ -37,10 +37,18 @@ The matching **GitHub side** — a `rubygems` environment whose protection rule 
 
 ## The pipeline (mechanism)
 
-The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04). On a `v*` tag it runs **rehearsal** (build the gem; verify a clean `gem install` + `require` on the 3.2 floor) → **publish** (gated by the `rubygems` environment, then `rubygems/release-gem` runs `bundle exec rake release` via OIDC). `release-gem` also generates sigstore build attestations.
+The pipeline (`.github/workflows/release.yml`) is built and proven (`0.0.1` shipped 2026-06-04). On a `v*` tag it runs **rehearsal** (build the gem; refuse a tag that does not name the version just built; verify a clean `gem install` + `require` on the 3.2 floor) → **publish** (gated by the `rubygems` environment, then `rubygems/release-gem` runs `bundle exec rake release` via OIDC). `release-gem` also generates sigstore build attestations.
 
 - **`rake release` is provided by `bundler/gem_tasks`** (required in the `Rakefile`). In a tag-triggered run the tag already exists, so bundler's `already_tagged?` guard skips tagging/SCM-push (`release-gem` runs `git fetch --tags --force` to make the tag visible) — the run does only the gem push. Do not pre-create the tag with `rake release` locally; tag with plain `git tag vX.Y.Z && git push origin vX.Y.Z`.
+- **The tag must name the version being built.** Rehearsal's tag guard compares `${GITHUB_REF_NAME#v}` against the version on the gem it just built and fails with an `::error::` naming both, so a mistyped tag stops in seconds instead of after the gate is approved. The version it accepts is bundler's `version_tag` — `"v" + Gem::Version#to_s`, which **normalizes** a hyphenated prerelease (`1.0.0-rc1` in `version.rb` → tag `v1.0.0.pre.rc1`, matching the built gem's filename). The error names the tag to use; take it literally rather than re-typing the raw `version.rb` literal.
 - **Captain vs. capital split.** The captain's (this repo's) release responsibility **ends at the version bump + changelog**. From there the capital takes over: it tags, runs the pipeline, approves the `rubygems` env-gate via its operator credential, verifies the live install, and closes the release issue. (Mirrors the harness's four-owner framing — *"A release is not done at PyPI…"*.)
+
+## When the tag guard fails
+
+Not a workflow bug — the tag and `lib/basecradle/version.rb` disagree, and nothing has been published. Decide which one is right:
+
+- **The tag was mistyped** (the tree holds the version you meant) → delete and re-tag with the version the error names: `git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z && git tag v<built> && git push origin v<built>`.
+- **The bump never landed** (the tag names the version you meant) → that is captain work: a version bump + changelog PR, merged, then re-tag per the section below.
 
 ## Re-triggering after a fixed workflow bug
 
