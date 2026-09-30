@@ -151,6 +151,7 @@ endpoint.rotate   # leaked URL? new ingest_url, old one dies, uuid unchanged
 bc.webhook_events.filter(endpoint: endpoint).each do |event|
   puts [event.content.content_type, event.content.payload].inspect
   puts event.content.headers["X-Example-Event"]       # the request headers, as delivered
+  puts event.content.headers["x-example-event"]       # ...found under any casing, as HTTP means it
   puts event.content.verified_at_receipt              # was this delivery's signature verified?
   puts event.webhook_endpoint.content.ingest_url      # the endpoint's URL *now*
 end
@@ -170,12 +171,27 @@ embedded endpoint is current.
 
 `content.headers` is the delivery's request headers — one pair per header **as sent**,
 `Content-Type` and `Content-Length` included — and `content.payload` is the raw request
-body. The SDK passes the hash through untouched, so the keys are the platform's own
-spelling, and there is one rule worth knowing before you index it: BaseCradle stores
-header names in canonical **Title-Case per segment** and does *not* preserve the sender's
-casing. Look a vendor's header up by that spelling — `X-Github-Delivery`, not GitHub's
-own documented `X-GitHub-Delivery`. It is a plain Ruby `Hash`, so lookup is
-case-sensitive and a mismatched spelling reads `nil`.
+body. BaseCradle stores header names in canonical **Title-Case per segment** and does
+*not* preserve the sender's casing, so the spelling a vendor publishes is often not the
+spelling on the wire: `X-Github-Delivery` is stored where GitHub documents
+`X-GitHub-Delivery`. So **lookup folds case**, the way HTTP names headers —
+`headers["X-GitHub-Delivery"]`, `headers["X-Github-Delivery"]` and
+`headers["x-github-delivery"]` all read the header that arrived, and you never have to
+guess a casing. Every read that takes a header name folds with it — `fetch`, `dig`,
+`values_at`, `fetch_values` and `key?` (with `has_key?`, `include?` and `member?`). A
+header that was **not** delivered is *absent*, never `nil`: `headers[name]` and a
+fallback-less `fetch` raise `KeyError` naming the headers that did arrive, while
+`headers.fetch(name, default)`, `headers.dig(name)` and `values_at` answer for it the way
+`Hash` does. It is otherwise a plain Ruby `Hash` of exactly what the wire carried —
+`each`, `keys`, `to_h` and `to_json` read the platform's own spelling, nothing is renamed,
+and the methods that reshape it (`slice`, `except`, `select`) work on those stored names,
+case-sensitively.
+
+Two paths hand back the raw wire hash instead, case-sensitive as a plain `Hash` is:
+`event.content["headers"]` — `ApiObject`'s raw-wire escape hatch, which wraps nothing —
+and a `webhook_event` row of `timeline.items`, whose content is a union of four record
+types, so `item.content["headers"]` is the `Hash` the API returned. `bc.webhook_events`
+and `timeline.webhook_events` give the case-folding one.
 
 ## Idempotent creates & safe retries
 
