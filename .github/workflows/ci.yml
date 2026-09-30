@@ -115,6 +115,19 @@ jobs:
             esac
             files="$files $f"
           done
+          # Given no paths at all, actionlint lints every workflow it can find (measured
+          # with the pinned 1.7.12). So an empty set does not make this step a no-op — it
+          # silently inverts it from "lint what this repo owns" into "lint everything,
+          # the capital's stubs included", as a *blocking* check on files this repo may
+          # not edit. That is the exact wedge the advisory step below exists to prevent.
+          # This job's own ci.yml must be in the checkout for the job to be running, so an
+          # empty set is never "this repo owns no workflows" — it is a broken checkout or
+          # the wrong working directory, and the message says so rather than making the
+          # reader infer it from an actionlint run over files nobody asked for.
+          if [ -z "$files" ]; then
+            echo "::error::No workflow files found under .github/workflows. ci.yml itself must be in the checkout for this job to run, so the checkout or the working directory is wrong. Refusing to run actionlint with no paths: given none it lints every workflow it finds, including the capital's shared stubs, which this blocking step must never do."
+            exit 1
+          fi
           # shellcheck disable=SC2086  # deliberate word-splitting: $files is a path list
           "$RUNNER_TEMP/actionlint" -color $files
       - name: Lint the capital's shared stubs (advisory)
@@ -123,11 +136,37 @@ jobs:
         # sovereignty). Blocking the required gate on a file we are forbidden to fix
         # would wedge every PR here; a finding is reported upward with `needs-capital`
         # instead. Advisory so it is still visible in the log.
+        #
+        # Each stub is asserted present before it is linted. `continue-on-error` cannot
+        # tell a clean run from one that died on a path that no longer exists, so without
+        # this a stub the capital renames or drops takes the whole step down with it: the
+        # non-zero is swallowed, the job is green, and the stub that IS still there stops
+        # being checked too. The step would report nothing wrong while checking nothing.
+        #
+        # Resolved by name across both extensions, mirroring the blocking step's exclusion
+        # above, which matches on the name without its extension. A stub arriving as .yaml
+        # is excluded from blocking, so if this step looked only for .yml it would call
+        # that stub missing while the file sat right there, unlinted by either step.
         continue-on-error: true
         run: |
-          "$RUNNER_TEMP/actionlint" -color \
-            .github/workflows/needs-human-alert.yml \
-            .github/workflows/dependabot-auto-merge.yml
+          stubs=""
+          for stub in needs-human-alert dependabot-auto-merge; do
+            found=""
+            for f in ".github/workflows/$stub.yml" ".github/workflows/$stub.yaml"; do
+              if [ -f "$f" ]; then found="$f"; fi
+            done
+            if [ -z "$found" ]; then
+              echo "::error::Shared stub $stub is not under .github/workflows in either extension, so nothing linted it. It is a verbatim capital-owned artifact this repo carries and may not edit; if the capital renamed or dropped it, raise it with needs-capital rather than fixing it here."
+              continue
+            fi
+            stubs="$stubs $found"
+          done
+          if [ -z "$stubs" ]; then
+            echo "::error::Not one shared stub was found, so this step linted nothing at all. This repo carries both as shared artifacts; their absence is itself the finding."
+            exit 1
+          fi
+          # shellcheck disable=SC2086  # deliberate word-splitting: $stubs is a path list
+          "$RUNNER_TEMP/actionlint" -color $stubs
 
   # The gate: the single required status check in branch protection (the "Protect
   # main" ruleset requires the context named "CI"). Adding or dropping Ruby
