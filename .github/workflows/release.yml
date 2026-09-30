@@ -1,4 +1,5 @@
-# The release pipeline: tag → rehearse → human approval → publish.
+# The release pipeline: tag → rehearse → gate → publish. The gate is the capital's to
+# actuate, never @origin's — see the publish job below.
 #
 # Zero stored credentials: RubyGems trusts this workflow via OIDC (Trusted
 # Publishing). The workflow filename (release.yml) and the environment name
@@ -107,9 +108,13 @@ jobs:
           gem install ./basecradle-*.gem
           ruby -e 'require "basecradle"; abort "bad version: #{BaseCradle::VERSION.inspect}" unless Gem::Version.correct?(BaseCradle::VERSION); puts "basecradle #{BaseCradle::VERSION} installs and loads cleanly"'
 
-  # The real publish. The rubygems environment requires the project owner's approval
-  # (Drawk) — the one correct manual gate in this repo. rubygems/release-gem builds
-  # and pushes via OIDC; no API key is ever stored.
+  # The real publish, behind the one manual gate in this repo — a second one is a
+  # regression. The `rubygems` environment holds the run until its gate is actuated, and
+  # that actuation belongs to the *capital*, via the capital's operator credential; it is
+  # not @origin's, so a waiting run here is never a wait on a human (CLAUDE.md ->
+  # Releasing carries the rule and names the current reviewer identity; the
+  # `rubygems-release` skill carries the procedure). rubygems/release-gem builds and
+  # pushes via OIDC; no API key is ever stored.
   publish:
     name: publish to RubyGems
     runs-on: ubuntu-latest
