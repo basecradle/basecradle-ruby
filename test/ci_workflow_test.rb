@@ -73,8 +73,9 @@ class CiWorkflowTest < Minitest::Test
   # conservative side of a real choice, taken because this reader has never met an alias and
   # safe_load refuses them by default; opting in belongs to the PR that first needs one.
   #
-  # The whole document, not just its jobs, because the workflow-level `permissions:` is one
-  # of the things pinned.
+  # This method and `jobs` below are that read, split in two: the whole document comes
+  # back from here, not just its jobs, because the workflow-level `permissions:` is one of
+  # the things pinned; the two `jobs:` states above are refused in `jobs`, the rest here.
   def workflow
     @workflow ||= read_workflow
   end
@@ -245,11 +246,12 @@ class CiWorkflowTest < Minitest::Test
 
     assert_equal WORKFLOW_PERMISSIONS, permissions,
                  "ci.yml must grant #{WORKFLOW_PERMISSIONS.inspect} at the workflow level " \
-                 "(found #{permissions.inspect}). Every job here runs with it, on every PR " \
-                 "and every push to main — PRs that come from Dependabot and from bot " \
-                 "identities. Removing it does not fall back to nothing — it falls back to " \
-                 "the repository's default workflow permissions, a setting outside this " \
-                 "tree that may be read-write."
+                 "(found #{permissions.inspect}). Every job here runs with it, on every " \
+                 "same-repo PR — this repo's bot PRs among them — and every push to main. " \
+                 "Removing it does not fall back to nothing — it falls back to the " \
+                 "repository's default workflow permissions, a setting outside this tree " \
+                 "that may be read-write. (Fork and Dependabot PRs get a read-only token " \
+                 "regardless; it is everything else this block holds down.)"
   end
 
   # The one-line bypass of the pin above: a job-level `permissions:` replaces the
