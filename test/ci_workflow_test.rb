@@ -21,9 +21,16 @@ require "yaml"
 #   * the gate's step still runs `exit 1`, and is not `continue-on-error`
 #   * no job the gate stands in for — itself included — sets job-level `continue-on-error`
 #
+# One pin here is not about the gate: the token every job runs with (#218). release.yml's
+# workflow-level `permissions:` was pinned in #208; ci.yml carries the identical block,
+# runs on every PR and every push to main rather than a few tags a year, and deleting the
+# block left a green tree. The last two tests below hold it, after the gate's.
+#
 # The limit of this file: it proves ci.yml is internally consistent. The other half of the
 # gate — that the "Protect main" ruleset requires this workflow's context and no other —
-# lives in repo settings, is invisible to any test in the tree, and is not pinned here.
+# lives in repo settings, is invisible to any test in the tree, and is not pinned here. So
+# is the repository's default workflow permissions setting, which is what the
+# workflow-level block protects against.
 #
 # Sits at test/ rather than test/basecradle/ for the same reason changelog_test.rb and
 # readme_test.rb do: it tests a repo-level file, not a file under lib/basecradle/.
@@ -44,6 +51,10 @@ class CiWorkflowTest < Minitest::Test
   # The entire mechanism by which a dependency's result becomes a red required check.
   FAIL_COMMAND = "exit 1"
 
+  # The workflow-level grant, exhaustively: what every job here runs with, since none sets
+  # its own. Checkout and setup-ruby read the repo; nothing in CI writes to it.
+  WORKFLOW_PERMISSIONS = { "contents" => "read" }.freeze
+
   # ci.yml, read strictly. `gate_key` below already takes this stance — it flunks "rather
   # than returning nil and failing obscurely inside a caller" — but the read feeding it did
   # not, and this file's whole subject is a required check that can be green without having
@@ -61,14 +72,32 @@ class CiWorkflowTest < Minitest::Test
   # `&anchor` parses fine. Flunking on one rather than passing `aliases: true` is the
   # conservative side of a real choice, taken because this reader has never met an alias and
   # safe_load refuses them by default; opting in belongs to the PR that first needs one.
+  #
+  # This method and `jobs` below are that read, split in two: the whole document comes
+  # back from here, not just its jobs, because the workflow-level `permissions:` is one of
+  # the things pinned; the two `jobs:` states above are refused in `jobs`, the rest here.
+  def workflow
+    @workflow ||= read_workflow
+  end
+
+  # Same strictness one level down: `jobs:` with nothing under it, or `jobs: {}`, is a
+  # workflow that parses and defines nothing.
   def jobs
-    @jobs ||= read_jobs
+    @jobs ||= begin
+      job_definitions = workflow["jobs"]
+      unless job_definitions.is_a?(Hash) && !job_definitions.empty?
+        flunk "ci.yml defines no jobs (`jobs:` read as #{job_definitions.inspect}). Every " \
+              "assertion below reads a job, and a workflow with no jobs produces no " \
+              "#{GATE_NAME.inspect} check at all."
+      end
+      job_definitions
+    end
   end
 
   # Split out so the guards read as a sequence rather than as nested `begin`s. `flunk`
   # raises `Minitest::Assertion`, which descends from `Exception` and not `StandardError`,
   # so the method-level rescue below cannot swallow any of them.
-  def read_jobs
+  def read_workflow
     unless File.exist?(WORKFLOW)
       flunk "ci.yml does not exist at #{WORKFLOW}. Branch protection requires the " \
             "#{GATE_NAME.inspect} context this file produces, so with the file gone every " \
@@ -81,14 +110,7 @@ class CiWorkflowTest < Minitest::Test
             "file is the usual cause. Nothing below is checking the workflow that produces " \
             "the #{GATE_NAME.inspect} check."
     end
-
-    job_definitions = document["jobs"]
-    unless job_definitions.is_a?(Hash) && !job_definitions.empty?
-      flunk "ci.yml defines no jobs (`jobs:` read as #{job_definitions.inspect}). Every " \
-            "assertion below reads a job, and a workflow with no jobs produces no " \
-            "#{GATE_NAME.inspect} check at all."
-    end
-    job_definitions
+    document
   rescue Psych::Exception, SystemCallError => e
     flunk "ci.yml could not be read: #{e.class} — #{e.message}. Psych's safe mode refuses " \
           "some YAML that is otherwise legal — an alias (`*ref`), an unquoted date — so " \
@@ -211,6 +233,42 @@ class CiWorkflowTest < Minitest::Test
                  "and looking wired up. An advisory *step* inside a job is fine; an " \
                  "advisory job is a job outside CI. If one is ever genuinely wanted, that " \
                  "is a decision to take deliberately, not a key to inherit by copy-paste."
+  end
+
+  # The token, not the gate. A hardening pin rather than a correctness one — widening it
+  # breaks no check, which is exactly why nothing else in the repo would notice. Removing
+  # the block is the worse of the two edits: the token does not fall back to nothing, it
+  # falls back to the repository's default workflow permissions, a setting outside this
+  # tree that may be read-write. Equality rather than containment, so an added key fails,
+  # and so do the `read-all` and `write-all` shorthands, which are Strings.
+  def test_the_workflow_grants_read_by_default_and_nothing_more
+    permissions = workflow["permissions"]
+
+    assert_equal WORKFLOW_PERMISSIONS, permissions,
+                 "ci.yml must grant #{WORKFLOW_PERMISSIONS.inspect} at the workflow level " \
+                 "(found #{permissions.inspect}). Every job here runs with it, on every " \
+                 "same-repo PR — this repo's bot PRs among them — and every push to main. " \
+                 "Removing it does not fall back to nothing — it falls back to the " \
+                 "repository's default workflow permissions, a setting outside this tree " \
+                 "that may be read-write. (Fork and Dependabot PRs get a read-only token " \
+                 "regardless; it is everything else this block holds down.)"
+  end
+
+  # The one-line bypass of the pin above: a job-level `permissions:` replaces the
+  # workflow-level block outright, so `write-all` on any job hands it a read-write token
+  # while the assertion above stays green. release_workflow_test.rb exempts its publish
+  # job; nothing here needs one, so no job is exempt. A job that genuinely needs a scope
+  # is a decision for the PR that adds it — and a lesson for this test — not one to infer.
+  def test_no_job_grants_itself_anything
+    overriding = jobs.select { |_, job| job.key?("permissions") }.keys
+
+    assert_empty overriding,
+                 "ci.yml: #{overriding.join(', ')} declares its own `permissions:`. A " \
+                 "job-level block replaces the workflow-level " \
+                 "#{WORKFLOW_PERMISSIONS.inspect} outright, so this is how a job quietly " \
+                 "gets more than the default without touching the default. No CI job " \
+                 "writes to the repo. If one genuinely needs a scope, decide it in the PR " \
+                 "that adds it and teach this test which scope and why."
   end
 
   private
