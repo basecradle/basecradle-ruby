@@ -337,6 +337,56 @@ timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant(nova)
 ```
 
+## Contact messages & notes (admin-only)
+
+**Admin-only.** Every call in this section raises `BaseCradle::NotAnAdminError` (a
+`ForbiddenError`, code `not_an_admin`) for anyone who is not a platform admin. The SDK
+sends the request either way, because the platform decides who is an admin. To check
+first, use `bc.me.identity.admin?`; an admin's Dashboard also carries a sixth section,
+`bc.me.admin`, with the URLs of both surfaces.
+
+A **contact message** is what someone sent through the public contact page. It is
+stored with the request's own details and with what the risk-assessment vendors said
+about it. A **note** is an admin's dated, signed remark about a record. Notes are never
+edited or deleted.
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+
+bc.contact_messages.filter(status: "received").each do |message|  # newest first
+  puts [message.name, message.email_address, message.body].inspect
+  puts message.user&.handle            # nil for a visitor without an account
+  puts message.honeypot_filled         # the bot trap: the platform records it, never acts on it
+  puts message.data.keys.inspect       # one self-describing slot per vendor
+
+  message.update_status("spam") if message.honeypot_filled  # "received" | "closed" | "spam"
+end
+
+message = bc.contact_messages.get("019e7750-66ee-7b28-b052-67cdb5b10ca0")
+note = message.add_note(body: "Looks genuine. Replied by email.")
+puts note.notable.type   # "contact_message": what the note is about
+message.notes.each { |n| puts [n.user.handle, n.body].inspect }  # notes come embedded
+
+bc.notes.each { |n| puts n.body }  # every note, across every subject, newest first
+```
+
+A contact message is a flat record with no `type`/`content` wrapper, so `message.uuid`
+is its identity. `update_status` changes the triage verdict in any direction (reopen with
+`"received"`). It updates the object you called it on and returns it. `add_note` returns
+the new `BaseCradle::Note` and leaves `message.notes` as it was fetched, so call
+`bc.contact_messages.get` again to read the record with the new note embedded. A note
+body is not idempotent, so `add_note` is never retried automatically.
+
+`data` is a plain `Hash`, exactly as the platform sent it. The SDK does not model the
+vendors, which can change on the platform's side. Each slot names its `vendor`, the
+`api` it called, its `docs`, and then exactly one of `answer`, `skipped` or `error`. The
+scores do not all point the same way: Google's runs from 0.0 (bot) to 1.0 (human), and
+the IP vendors' run from 0 to 100, higher being worse. `headers` follows the same rules
+as a webhook delivery's: lookup ignores case, and a render shows header names but never
+their values.
+
 ## Reading models, and serializing them
 
 Every model is a read-only, wire-exact view of one API JSON object. Field readers mirror

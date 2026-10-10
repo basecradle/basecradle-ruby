@@ -87,6 +87,21 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 200, body: { "users" => [ directory_user_payload(trusts_you: true) ] }.to_json)
     stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}")
       .to_return(status: 200, body: { "user" => directory_user_payload(trusts_you: true) }.to_json)
+    stub_request(:get, %r{#{BASE_URL}/contact_messages(\?.*)?\z}).to_return(
+      status: 200,
+      # The second is a filled honeypot, so the README's update_status line actually runs.
+      body: { "contact_messages" => [ contact_message_payload,
+                                      contact_message_payload(user: JOHN).merge("honeypot_filled" => true) ],
+              "next_cursor" => nil }.to_json
+    )
+    stub_request(:get, %r{#{BASE_URL}/contact_messages/[^/]+\z})
+      .to_return(status: 200, body: { "contact_message" => contact_message_payload }.to_json)
+    stub_request(:patch, %r{#{BASE_URL}/contact_messages/.+/status})
+      .to_return(status: 200, body: { "contact_message" => contact_message_payload(status: "spam") }.to_json)
+    stub_request(:post, %r{#{BASE_URL}/contact_messages/.+/notes})
+      .to_return(status: 201, body: { "note" => note_payload }.to_json)
+    stub_request(:get, "#{BASE_URL}/notes")
+      .to_return(status: 200, body: { "notes" => [ note_payload ], "next_cursor" => nil }.to_json)
     stub_request(:post, %r{#{BASE_URL}/users/.+/trust})
       .to_return(status: 201,
                  body: { "user" => trusted_peer_user_payload(you_trust: true, trusts_you: true) }.to_json)

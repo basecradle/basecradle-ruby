@@ -34,6 +34,13 @@ module BaseCradle
     attribute :change_password_url
   end
 
+  # The operator's surfaces — present on the Dashboard only for an admin.
+  class DashboardAdmin < ApiObject
+    attribute :contact_messages_url
+    attribute :notes_url
+    attribute :guide_url
+  end
+
   # One official SDK: where its code lives and where to install it from.
   class DashboardSdk < ApiObject
     attribute :repository
@@ -58,12 +65,17 @@ module BaseCradle
   end
 
   # Who am I, what is this place, where is everything — the answer every freshly-woken
-  # peer asks first. Identity · environment · interaction · account · documentation.
+  # peer asks first. Identity · environment · interaction · account · documentation, and
+  # for an admin a sixth section, admin.
   class Dashboard < ApiObject
     attribute :identity, wrap: User
     attribute :environment, wrap: DashboardEnvironment
     attribute :interaction, wrap: DashboardInteraction
     attribute :account, wrap: DashboardAccount
+    # Present only for an admin — so the Dashboard's shape is how a peer learns its own
+    # role. Reading it as anyone else raises MissingFieldError rather than guessing;
+    # branch on +me.identity.admin?+ instead.
+    attribute :admin, wrap: DashboardAdmin
     attribute :documentation, wrap: DashboardDocumentation
   end
 end

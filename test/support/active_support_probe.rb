@@ -72,6 +72,8 @@ subjects = {
   "WebhookEventsResource" => client.webhook_events,
   "SessionsResource" => client.sessions,
   "UsersResource" => client.users,
+  "ContactMessagesResource" => client.contact_messages,
+  "NotesResource" => client.notes,
   "ItemsResource" => BaseCradle::ItemsResource.new(client),
   "TimelineMessages" => BaseCradle::TimelineMessages.new(client, TIMELINE_UUID),
   "TimelineAssets" => BaseCradle::TimelineAssets.new(client, TIMELINE_UUID),
@@ -92,6 +94,13 @@ subjects = {
 records = {
   "WebhookEventHeaders" => BaseCradle::WebhookEventHeaders.new(
     { "Content-Type" => "application/json", "Authorization" => SENDER_SECRET }
+  ),
+  # The shared base, and its other recorded request: a contact-page visitor's headers.
+  "RequestHeaders" => BaseCradle::RequestHeaders.new(
+    { "Content-Type" => "application/json", "Authorization" => SENDER_SECRET }
+  ),
+  "ContactMessageHeaders" => BaseCradle::ContactMessageHeaders.new(
+    { "Content-Type" => "application/x-www-form-urlencoded", "Cookie" => SENDER_SECRET }
   ),
   # An ApiObject too: #212 gave records their to_s and pretty_print from the shared module,
   # and those are new doors that had never been observed in this environment.

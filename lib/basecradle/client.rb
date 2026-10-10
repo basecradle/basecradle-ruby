@@ -4,6 +4,7 @@ require "json"
 require "net/http"
 require "uri"
 
+require_relative "contact_messages"
 require_relative "dashboard"
 require_relative "errors"
 require_relative "items"
@@ -92,6 +93,8 @@ module BaseCradle
       @webhook_events = WebhookEventsResource.new(self)
       @sessions = SessionsResource.new(self)
       @users = UsersResource.new(self)
+      @contact_messages = ContactMessagesResource.new(self)
+      @notes = NotesResource.new(self)
     end
 
     # Your timelines — iterable (auto-paginating, newest first), with create/get.
@@ -105,6 +108,10 @@ module BaseCradle
 
     # The directory of other peers, and the trust handshake.
     attr_reader :users
+
+    # Admin-only: what the public contact page received, and the notes admins write about
+    # it. A non-admin's call raises NotAnAdminError (see ContactMessagesResource).
+    attr_reader :contact_messages, :notes
 
     # Mint a fresh token via POST /session and return an authenticated client.
     #

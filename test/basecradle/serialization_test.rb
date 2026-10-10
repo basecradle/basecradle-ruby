@@ -67,9 +67,9 @@ class SerializationTest < Minitest::Test
     }
   end
 
-  # Every class in the SDK that is Enumerable. WebhookEventHeaders subclasses Hash and
-  # *is* a record (the delivery's headers), so it serializes as one; everything else is a
-  # lazy, client-holding query that must refuse.
+  # Every class in the SDK that is Enumerable. The request-headers classes subclass Hash
+  # and *are* records (a delivery's or a contact submission's headers), so serialize as
+  # one; everything else is a lazy, client-holding query that must refuse.
   def enumerable_classes
     sdk_classes.select { |klass| klass.include?(Enumerable) }
   end
@@ -256,9 +256,9 @@ class SerializationTest < Minitest::Test
   # --- the structural guard ---------------------------------------------------------------
 
   # A collection added later must not re-open the hole by forgetting the include. Every
-  # Enumerable in the SDK is a lazy, client-holding query and must refuse — except
-  # WebhookEventHeaders, which subclasses Hash and *is* a record (the delivery's headers),
-  # so it serializes as one.
+  # Enumerable in the SDK is a lazy, client-holding query and must refuse — except the
+  # recorded request headers (RequestHeaders and its two kinds), which subclass Hash and
+  # *are* records (a delivery's or a contact submission's headers), so serialize as one.
   def test_every_enumerable_resource_refuses_to_serialize
     refute_empty lazy_collection_classes
     lazy_collection_classes.each do |klass|
@@ -267,12 +267,14 @@ class SerializationTest < Minitest::Test
     end
   end
 
-  # The one Enumerable that is exempt, named explicitly so adding a second exemption is
-  # a deliberate edit here rather than a silent gap in the sweep above.
-  def test_the_only_enumerable_that_still_serializes_is_the_headers_hash
+  # The Enumerables that are exempt — the headers hash and its two named kinds — listed
+  # explicitly so adding another exemption is a deliberate edit here rather than a silent
+  # gap in the sweep above.
+  def test_the_only_enumerables_that_still_serialize_are_the_headers_hashes
     records = enumerable_classes.select { |klass| klass <= Hash }
 
-    assert_equal [ BaseCradle::WebhookEventHeaders ], records
+    assert_equal [ BaseCradle::ContactMessageHeaders, BaseCradle::RequestHeaders,
+                   BaseCradle::WebhookEventHeaders ], records.sort_by(&:name)
   end
 
   # And the exemption is pinned by behaviour, not only by that list: a delivery's headers
