@@ -148,6 +148,9 @@ module BaseCradle
   # +payload_too_large+ — webhook ingest: the request body exceeds the maximum size.
   class PayloadTooLargeError < Error; end
 
+  # +binary_payload+ — webhook ingest: the request body is not UTF-8 text (HTTP 415).
+  class BinaryPayloadError < Error; end
+
   # --- the code => class registry ----------------------------------------------------------
 
   # Every API error is an RFC 9457 application/problem+json document with a stable,
@@ -171,7 +174,8 @@ module BaseCradle
     "invalid_cursor" => InvalidCursorError,
     "invalid_filter" => InvalidFilterError,
     "endpoint_disabled" => EndpointDisabledError,
-    "payload_too_large" => PayloadTooLargeError
+    "payload_too_large" => PayloadTooLargeError,
+    "binary_payload" => BinaryPayloadError
   }.freeze
 
   class Error

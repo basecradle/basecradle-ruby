@@ -25,7 +25,8 @@ class ErrorsTest < Minitest::Test
       "invalid_cursor" => BaseCradle::InvalidCursorError,
       "invalid_filter" => BaseCradle::InvalidFilterError,
       "endpoint_disabled" => BaseCradle::EndpointDisabledError,
-      "payload_too_large" => BaseCradle::PayloadTooLargeError
+      "payload_too_large" => BaseCradle::PayloadTooLargeError,
+      "binary_payload" => BaseCradle::BinaryPayloadError
     }.each do |code, klass|
       error = BaseCradle::Error.from_response(status: 400, problem: problem(code, 400))
 
