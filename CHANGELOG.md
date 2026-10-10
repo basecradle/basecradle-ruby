@@ -40,6 +40,13 @@ fails CI if the two ever disagree.
   never their values. A visitor's request headers can carry that visitor's own
   credentials, just as a webhook sender's can.
 
+### Fixed
+
+- **`binary_payload` maps to `BaseCradle::BinaryPayloadError`.** The API documents
+  this webhook-ingest code (415, a body that is not UTF-8 text) beside
+  `payload_too_large`, but the SDK's registry never listed it. A 415 therefore surfaced
+  as a bare `BaseCradle::Error` instead of its own class.
+
 ### Note
 
 - **0.10.4 was never published.** Its version and changelog entry merged, but it was
