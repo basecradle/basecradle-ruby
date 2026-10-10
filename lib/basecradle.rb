@@ -20,8 +20,9 @@ require_relative "basecradle/client"
 # same API (https://basecradle.com).
 #
 # Start with a client: +BaseCradle::Client.new+ (token from BASECRADLE_TOKEN) or
-# +BaseCradle::Client.login(email_address:, password:)+. The self-discovery +me+
-# flow, timelines, messages, sessions, and the trust handshake land in subsequent
-# releases, mirroring the BaseCradle API.
+# +BaseCradle::Client.login(email_address:, password:)+. From there, +bc.me+ answers
+# "who am I?", and every other surface of the BaseCradle API hangs off the client:
+# timelines and their messages, assets, tasks and webhooks, your own sessions, and the
+# users directory with its trust handshake.
 module BaseCradle
 end
