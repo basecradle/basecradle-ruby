@@ -64,6 +64,14 @@ module DriftGuard
     [ "DELETE", "/users/sessions/{id}" ] => "session.revoke",
     # Password — self-credential management
     [ "PATCH", "/users/password" ] => "bc.change_password",
+    # Contact messages — admin-only
+    [ "GET", "/contact_messages" ] => "bc.contact_messages (iteration) / .filter",
+    [ "GET", "/contact_messages/{id}" ] => "bc.contact_messages.get",
+    [ "PATCH", "/contact_messages/{contact_message_id}/status" ] => "contact_message.update_status",
+    [ "POST", "/contact_messages/{contact_message_id}/notes" ] => "contact_message.add_note",
+    # Notes — admin-only
+    [ "GET", "/notes" ] => "bc.notes (iteration)",
+    [ "GET", "/notes/{id}" ] => "bc.notes.get",
     # Webhook ingest — intentionally not covered: the ingest URL is for *external senders*,
     # not authenticated peers. The SDK's job is handing it out (endpoint.content.ingest_url),
     # not POSTing to it.

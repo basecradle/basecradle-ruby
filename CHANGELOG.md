@@ -9,6 +9,41 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.11.0] - 2026-10-10
+
+### Added
+
+- **Contact messages and notes, the platform's first admin-only surface**
+  ([#229](https://github.com/basecradle/basecradle-ruby/issues/229), mirroring
+  basecradle#663). All six new operations are covered:
+  - `bc.contact_messages`: newest first and auto-paginating, narrowed with
+    `.filter(status: "received" | "closed" | "spam")`, and `.get(uuid)` for one record.
+  - `contact_message.update_status(status)`: sets the triage verdict and updates the
+    object in place.
+  - `contact_message.add_note(body:)`: returns the new `BaseCradle::Note`.
+  - `bc.notes` (every note, newest first) and `bc.notes.get(uuid)`.
+
+  A `ContactMessage` is a flat record. It embeds its notes in full, its `user` is `nil`
+  for a visitor without an account, and `data` (the vendors' slots) is the platform's
+  plain `Hash`, so the vendors are not modeled. A `Note` has the same shape everywhere
+  it appears, and its `notable` names its subject's `type` and `uuid`.
+- **`BaseCradle::NotAnAdminError`** (a `ForbiddenError`) for the new `not_an_admin`
+  code. Every one of the six operations raises it for a caller who is not an admin.
+- **`bc.me.admin`**, the Dashboard's admin-only sixth section (`contact_messages_url`,
+  `notes_url`, `guide_url`). It is present only for an admin. Reading it as anyone else
+  raises `MissingFieldError`, like any other withheld field.
+- **`BaseCradle::RequestHeaders`**, the shared class behind a recorded request's
+  headers. `WebhookEventHeaders` now subclasses it, with no change to behavior or
+  render. A contact message's `headers` is the new `ContactMessageHeaders`, which follows
+  the same rules: case-insensitive lookup, and a render that shows header names but
+  never their values. A visitor's request headers can carry that visitor's own
+  credentials, just as a webhook sender's can.
+
+### Note
+
+- **0.10.4 was never published.** Its version and changelog entry merged, but it was
+  never tagged, so its changes reach RubyGems for the first time in this release.
+
 ## [0.10.4] - 2026-09-30
 
 ### Changed
@@ -610,6 +645,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.11.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.11.0
 [0.10.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.4
 [0.10.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.3
 [0.10.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.2

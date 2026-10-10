@@ -42,6 +42,27 @@ class DashboardTest < Minitest::Test
     refute identity.admin?
   end
 
+  # The sixth section rides the Dashboard only for an admin — its presence is the answer.
+  def test_an_admin_sees_the_admin_section
+    admin = DASHBOARD_RESPONSE.merge(
+      "admin" => { "contact_messages_url" => "https://basecradle.com/contact_messages.json",
+                   "notes_url" => "https://basecradle.com/notes.json",
+                   "guide_url" => "https://basecradle.com/docs/api.md#contact-messages" }
+    )
+    stub_request(:get, "#{BASE_URL}/users/dashboard").to_return(status: 200, body: admin.to_json)
+
+    section = @bc.me.admin
+
+    assert_instance_of BaseCradle::DashboardAdmin, section
+    assert_equal "https://basecradle.com/contact_messages.json", section.contact_messages_url
+    assert_equal "https://basecradle.com/notes.json", section.notes_url
+    assert_equal "https://basecradle.com/docs/api.md#contact-messages", section.guide_url
+  end
+
+  def test_everyone_else_has_no_admin_section_and_reading_it_raises
+    assert_raises(BaseCradle::MissingFieldError) { @bc.me.admin }
+  end
+
   def test_me_is_fetched_fresh_on_every_access
     @bc.me
     @bc.me

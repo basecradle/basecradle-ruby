@@ -15,6 +15,7 @@ class ErrorsTest < Minitest::Test
       "not_timeline_owner" => BaseCradle::NotTimelineOwnerError,
       "timeline_locked" => BaseCradle::TimelineLockedError,
       "not_task_author" => BaseCradle::NotTaskAuthorError,
+      "not_an_admin" => BaseCradle::NotAnAdminError,
       "task_not_pending" => BaseCradle::TaskNotPendingError,
       "not_found" => BaseCradle::NotFoundError,
       "validation_failed" => BaseCradle::ValidationError,
