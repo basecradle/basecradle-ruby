@@ -80,6 +80,9 @@ module BaseCradle
   # author (an admin may act on any task).
   class NotTaskAuthorError < ForbiddenError; end
 
+  # +not_an_admin+ — the surface is admin-only (contact messages and notes).
+  class NotAnAdminError < ForbiddenError; end
+
   # --- 404 --------------------------------------------------------------------------------
 
   # +not_found+ — no record exists for the given UUID (or it is hidden from you).
@@ -158,6 +161,7 @@ module BaseCradle
     "not_timeline_owner" => NotTimelineOwnerError,
     "timeline_locked" => TimelineLockedError,
     "not_task_author" => NotTaskAuthorError,
+    "not_an_admin" => NotAnAdminError,
     "not_found" => NotFoundError,
     "task_not_pending" => TaskNotPendingError,
     "validation_failed" => ValidationError,

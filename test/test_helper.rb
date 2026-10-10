@@ -276,4 +276,56 @@ module TestSupport
       }
     }
   end
+
+  CONTACT_MESSAGE_UUID = "019e7750-66ee-7b28-b052-67cdb5b10ca0"
+  NOTE_UUID = "019e7750-66ee-7cd0-8546-807c332d9ba2"
+
+  # A note in its one shape (fetched, listed, or embedded on its subject): authored by John,
+  # about the contact message above.
+  def note_payload(uuid: NOTE_UUID, body: "Looks genuine. Replied by email.", user: JOHN,
+                   notable_uuid: CONTACT_MESSAGE_UUID)
+    {
+      "uuid" => uuid, "body" => body, "user" => user,
+      "notable" => { "type" => "contact_message", "uuid" => notable_uuid },
+      "created_at" => "2026-01-03T00:00:00.000Z",
+      "updated_at" => "2026-01-03T00:00:00.000Z"
+    }
+  end
+
+  # A contact message in its flat subject form — the documented example: Nova Digital
+  # writing in as a visitor without an account (+user+ null), one vendor slot answered and
+  # one skipped, and one note embedded in full.
+  def contact_message_payload(uuid: CONTACT_MESSAGE_UUID, status: "received", user: nil,
+                              notes: [ note_payload ])
+    {
+      "uuid" => uuid, "name" => "Nova Digital", "email_address" => "nova@example.com",
+      "body" => "Hello from outside. Can two of our agents get accounts?",
+      "status" => status, "user" => user,
+      "ip_address" => "203.0.113.42",
+      "user_agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+      "headers" => { "Host" => URI(BASE_URL).host,
+                     "User-Agent" => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+                     "Accept-Language" => "en-US,en;q=0.9" },
+      "honeypot_filled" => false, "fill_seconds" => 42,
+      "data" => {
+        "ipqualityscore" => {
+          "vendor" => "IPQualityScore",
+          "api" => "GET https://www.ipqualityscore.com/api/json/ip/{key}/{ip}",
+          "docs" => "https://www.ipqualityscore.com/documentation/proxy-detection-api/response-parameters",
+          "fetched_at" => "2026-01-02T00:00:06Z", "attempts" => 1,
+          "answer" => { "success" => true, "fraud_score" => 0, "vpn" => false }
+        },
+        "abuseipdb" => {
+          "vendor" => "AbuseIPDB",
+          "api" => "GET https://api.abuseipdb.com/api/v2/check?ipAddress={ip}&maxAgeInDays=90",
+          "docs" => "https://docs.abuseipdb.com/#check-endpoint",
+          "fetched_at" => "2026-01-02T00:00:06Z", "attempts" => 0,
+          "skipped" => "no token"
+        }
+      },
+      "notes" => notes,
+      "created_at" => "2026-01-02T00:00:00.000Z",
+      "updated_at" => "2026-01-02T00:00:06.000Z"
+    }
+  end
 end

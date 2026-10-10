@@ -127,7 +127,8 @@ module BaseCradle
     # us mixed types, which `sort` refuses with `comparison of Symbol with String failed`.
     # That used to raise from `inspect` alone and now would raise from interpolation and
     # `pp` too — a render that blows up a log line is worse than the disorder it avoids.
-    # WebhookEventHeaders#render_body has always done this, for the same reason.
+    # RequestHeaders#render_body (formerly WebhookEventHeaders') has always done this, for
+    # the same reason.
     #
     # nil, not "", for a record with no fields: the module renders nil as the bare class,
     # and `"#<BaseCradle::Message >"` with its dangling space was never intended output.
