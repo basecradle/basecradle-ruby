@@ -270,7 +270,7 @@ class SerializationTest < Minitest::Test
   # The Enumerables that are exempt — the headers hash and its two named kinds — listed
   # explicitly so adding another exemption is a deliberate edit here rather than a silent
   # gap in the sweep above.
-  def test_the_only_enumerable_that_still_serializes_is_the_headers_hash
+  def test_the_only_enumerables_that_still_serialize_are_the_headers_hashes
     records = enumerable_classes.select { |klass| klass <= Hash }
 
     assert_equal [ BaseCradle::ContactMessageHeaders, BaseCradle::RequestHeaders,

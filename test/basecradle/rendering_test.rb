@@ -17,7 +17,7 @@ require "pp"
 # So the rule is one module now, and this file is the thing that looks. The reflective guard
 # below is the point of the file: it walks the SDK's own constants rather than a list
 # somebody has to remember to extend, which is the same stance
-# `test_the_only_enumerable_that_still_serializes_is_the_headers_hash` takes for the sibling
+# `test_the_only_enumerables_that_still_serialize_are_the_headers_hashes` takes for the sibling
 # serialization rule — and the reason a collection added later cannot skip that one.
 class RenderingTest < Minitest::Test
   include TestSupport

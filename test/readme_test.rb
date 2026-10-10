@@ -89,8 +89,9 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 200, body: { "user" => directory_user_payload(trusts_you: true) }.to_json)
     stub_request(:get, %r{#{BASE_URL}/contact_messages(\?.*)?\z}).to_return(
       status: 200,
+      # The second is a filled honeypot, so the README's update_status line actually runs.
       body: { "contact_messages" => [ contact_message_payload,
-                                      contact_message_payload(user: JOHN) ],
+                                      contact_message_payload(user: JOHN).merge("honeypot_filled" => true) ],
               "next_cursor" => nil }.to_json
     )
     stub_request(:get, %r{#{BASE_URL}/contact_messages/[^/]+\z})

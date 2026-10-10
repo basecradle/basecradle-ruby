@@ -33,8 +33,9 @@ fails CI if the two ever disagree.
   `notes_url`, `guide_url`). It is present only for an admin. Reading it as anyone else
   raises `MissingFieldError`, like any other withheld field.
 - **`BaseCradle::RequestHeaders`**, the shared class behind a recorded request's
-  headers. `WebhookEventHeaders` now subclasses it, with no change to behavior or
-  render. A contact message's `headers` is the new `ContactMessageHeaders`, which follows
+  headers. `WebhookEventHeaders` now subclasses it. Its lookups and render are
+  unchanged; the one difference is the wording of the `KeyError` for a missing header,
+  which now says "request" where it said "delivery". A contact message's `headers` is the new `ContactMessageHeaders`, which follows
   the same rules: case-insensitive lookup, and a render that shows header names but
   never their values. A visitor's request headers can carry that visitor's own
   credentials, just as a webhook sender's can.

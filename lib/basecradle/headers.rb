@@ -119,8 +119,9 @@ module BaseCradle
     #
     # +Hash+'s own +inspect+ prints every pair, and these headers are the *sender's*,
     # stored verbatim by the platform: a sender that authenticates its POST to an ingest
-    # URL puts its credential in one of them, so +logger.debug(event.content.headers)+
-    # would write another party's secret into our logs.
+    # URL puts its credential in one of them, and a contact-page visitor's browser may
+    # carry its own cookies or tokens. So +logger.debug(event.content.headers)+ or
+    # +logger.debug(message.headers)+ would write another party's secret into our logs.
     #
     # Only the human-facing render changes. Every *read* is untouched and still
     # wire-exact: lookups, +fetch+, +each+, +keys+, +to_h+, +to_json+, +==+.
