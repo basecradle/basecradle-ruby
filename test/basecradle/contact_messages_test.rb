@@ -136,7 +136,7 @@ class ContactMessagesTest < Minitest::Test
 
   # --- contact messages: the two verbs -----------------------------------------------------
 
-  def test_update_status_patches_and_the_object_reads_the_answer
+  def test_set_status_patches_and_the_object_reads_the_answer
     stub_request(:get, CONTACT_MESSAGE_URL)
       .to_return(status: 200, body: { "contact_message" => contact_message_payload }.to_json)
     stub_request(:patch, "#{CONTACT_MESSAGE_URL}/status")
@@ -144,7 +144,7 @@ class ContactMessagesTest < Minitest::Test
       .to_return(status: 200, body: { "contact_message" => contact_message_payload(status: "closed") }.to_json)
     message = @bc.contact_messages.get(CONTACT_MESSAGE_UUID)
 
-    assert_same message, message.update_status("closed")
+    assert_same message, message.set_status("closed")
     assert_equal "closed", message.status
     assert_requested(:patch, "#{CONTACT_MESSAGE_URL}/status", times: 1)
   end
@@ -158,7 +158,7 @@ class ContactMessagesTest < Minitest::Test
     )
     message = @bc.contact_messages.get(CONTACT_MESSAGE_UUID)
 
-    error = assert_raises(BaseCradle::ValidationError) { message.update_status("archived") }
+    error = assert_raises(BaseCradle::ValidationError) { message.set_status("archived") }
     assert_equal({ "status" => [ "is not included in the list" ] }, error.errors)
     assert_equal "received", message.status # a refused write leaves the record as fetched
   end
@@ -208,7 +208,7 @@ class ContactMessagesTest < Minitest::Test
   def test_a_detached_contact_message_cannot_call_the_api
     detached = BaseCradle::ContactMessage.new(contact_message_payload)
 
-    assert_raises(BaseCradle::Error) { detached.update_status("closed") }
+    assert_raises(BaseCradle::Error) { detached.set_status("closed") }
     assert_raises(BaseCradle::Error) { detached.add_note(body: "x") }
   end
 
@@ -254,7 +254,7 @@ class ContactMessagesTest < Minitest::Test
     [
       -> { @bc.contact_messages.first },
       -> { @bc.contact_messages.get(CONTACT_MESSAGE_UUID) },
-      -> { message.update_status("closed") },
+      -> { message.set_status("closed") },
       -> { message.add_note(body: "x") },
       -> { @bc.notes.first },
       -> { @bc.notes.get(NOTE_UUID) }

@@ -44,14 +44,14 @@ module BaseCradle
   # identity, and it embeds its notes in full.
   #
   # Nothing is ever rejected on a score — the record is the data, and an admin decides,
-  # with +update_status+ and +add_note+.
+  # with +set_status+ and +add_note+.
   class ContactMessage < ApiObject
     attribute :uuid
     attribute :name
     attribute :email_address
     attribute :body
     # "received" (the default) | "closed" | "spam" — the triage verdict, set with
-    # +update_status+. Treat an unrecognized value as forward-compatible, never an error.
+    # +set_status+. Treat an unrecognized value as forward-compatible, never an error.
     attribute :status
     # The signed-in user who submitted it (nested-actor form), or +nil+ for a visitor
     # without an account.
@@ -72,12 +72,12 @@ module BaseCradle
     attribute :updated_at
 
     # Set the triage verdict: +"received"+, +"closed"+ or +"spam"+. It moves in any
-    # direction — reopening a closed message is +update_status("received")+.
+    # direction — reopening a closed message is +set_status("received")+.
     #
     # Live object: the API returns the whole contact message, and this object reads it from
     # here on (+status+ and +updated_at+ included), then returns +self+. Raises
     # +ValidationError+ (422) for a status outside the three.
-    def update_status(status)
+    def set_status(status)
       response = require_client.request("PATCH", "/contact_messages/#{uuid}/status",
                                         json: { "contact_message" => { "status" => status } })
       @data = response.fetch("contact_message")
@@ -106,7 +106,7 @@ module BaseCradle
   # or fetch one by uuid. Admin-only.
   #
   #   bc.contact_messages.filter(status: "received").each do |message|
-  #     message.update_status("spam") if message.honeypot_filled
+  #     message.set_status("spam") if message.honeypot_filled
   #   end
   class ContactMessagesResource
     include Enumerable

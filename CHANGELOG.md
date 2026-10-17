@@ -9,6 +9,25 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.12.0] - 2026-10-17
+
+### Changed
+
+- **Breaking: `contact_message.update_status(status)` is now `contact_message.set_status(status)`**
+  ([#234](https://github.com/basecradle/basecradle-ruby/issues/234)). Same operation
+  (`PATCH /contact_messages/{id}/status`), same argument, same in-place update and
+  `self` return; only the name changes. An operation's verb is part of the SDK
+  contract: one operation, one verb in every SDK, taken from the API documentation's
+  name for it ("Setting a Contact Message's Status"). The Python SDK already says
+  `set_status`; this release brings Ruby to the same word (`@origin`, 2026-10-16;
+  basecradle#691). No alias is kept — the gem is 0.x and the method shipped one
+  release ago.
+
+### Migrating
+
+Rename the call: `message.update_status("spam")` becomes `message.set_status("spam")`.
+Calling the old name raises `NoMethodError`.
+
 ## [0.11.0] - 2026-10-10
 
 ### Added
@@ -653,6 +672,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.12.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.12.0
 [0.11.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.11.0
 [0.10.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.4
 [0.10.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.10.3
