@@ -67,7 +67,7 @@ module DriftGuard
     # Contact messages — admin-only
     [ "GET", "/contact_messages" ] => "bc.contact_messages (iteration) / .filter",
     [ "GET", "/contact_messages/{id}" ] => "bc.contact_messages.get",
-    [ "PATCH", "/contact_messages/{contact_message_id}/status" ] => "contact_message.update_status",
+    [ "PATCH", "/contact_messages/{contact_message_id}/status" ] => "contact_message.set_status",
     [ "POST", "/contact_messages/{contact_message_id}/notes" ] => "contact_message.add_note",
     # Notes — admin-only
     [ "GET", "/notes" ] => "bc.notes (iteration)",

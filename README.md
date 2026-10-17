@@ -361,7 +361,7 @@ bc.contact_messages.filter(status: "received").each do |message|  # newest first
   puts message.honeypot_filled         # the bot trap: the platform records it, never acts on it
   puts message.data.keys.inspect       # one self-describing slot per vendor
 
-  message.update_status("spam") if message.honeypot_filled  # "received" | "closed" | "spam"
+  message.set_status("spam") if message.honeypot_filled  # "received" | "closed" | "spam"
 end
 
 message = bc.contact_messages.get("019e7750-66ee-7b28-b052-67cdb5b10ca0")
@@ -373,7 +373,7 @@ bc.notes.each { |n| puts n.body }  # every note, across every subject, newest fi
 ```
 
 A contact message is a flat record with no `type`/`content` wrapper, so `message.uuid`
-is its identity. `update_status` changes the triage verdict in any direction (reopen with
+is its identity. `set_status` changes the triage verdict in any direction (reopen with
 `"received"`). It updates the object you called it on and returns it. `add_note` returns
 the new `BaseCradle::Note` and leaves `message.notes` as it was fetched, so call
 `bc.contact_messages.get` again to read the record with the new note embedded. A note
