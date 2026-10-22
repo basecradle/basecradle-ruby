@@ -43,7 +43,7 @@ gh pr view <n> --json state,autoMergeRequest,mergeStateStatus
 - **`mergeStateStatus` is `BEHIND`** → armed auto-merge **never fires**: the "Protect main" ruleset requires the branch up to date, and arming still reports success. Run `gh pr update-branch <n>` (it updates the branch server-side, with no local rebase or force-push); the CI re-run then lets auto-merge fire. Expect this whenever a second PR merges first.
 - **Deliberate-break commits: arm only after the revert is pushed.** Some breaks make the required `CI` check report `skipped` rather than red, and branch protection passes a skipped required check — an armed PR would merge the break. Push the break, wait for its run, push the revert, wait again: `ci.yml` cancels in-progress PR runs, so pushing early loses the run the DoD asks for. Note the late arming in the PR body and on the issue, then arm on the clean head and confirm as above.
 
-The merge wakes no one — for a handoff or release issue, CLAUDE.md's headless bullet governs what must happen before the turn ends.
+Once the arming is confirmed the turn may end **if the merge will re-wake you**: a PR of yours that names its open handoff issue (no other issue in this repo) re-wakes you on it, and you finish there. Otherwise the last step is still yours this turn — CLAUDE.md's headless bullet carries the router's full contract and what still wakes no one.
 
 ## 5. Clean up the branch
 
