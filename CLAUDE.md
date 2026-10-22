@@ -36,7 +36,7 @@ gh api repos/basecradle/basecradle/contents/constitution.md -H "Accept: applicat
 
 (or read a local checkout of `basecradle/basecradle` if you have one). Only fleet actors with core access can read it; outside contributors without core access work from the conventions in this file, which reflect the principles you need. This CLAUDE.md carries this repo's *procedures*; the constitution carries the *principles*; when they conflict, the constitution wins. **Read it before non-trivial work.**
 
-## The Reference Implementation — Build From This
+## The Reference Implementation
 
 The Python SDK lives in the public repo [`basecradle/basecradle-python`](https://github.com/basecradle/basecradle-python). Read it from GitHub, or from a local sibling checkout (conventionally `../basecradle-python`) if you have one:
 
@@ -44,9 +44,9 @@ The Python SDK lives in the public repo [`basecradle/basecradle-python`](https:/
 gh repo clone basecradle/basecradle-python ../basecradle-python   # if you don't already have a checkout
 ```
 
-It is the source of truth for **behavior**: every resource, every method, every typed error, the self-discovery `me` flow, invisible pagination, the `.filter(...)` idiom, the drift-guard, the test cast (John Doe / Nova Digital), and the README-as-tested-doc discipline. Read its `README.md`, `CLAUDE.md`, `src/basecradle/*.py`, and `tests/*.py` first. **Read what it ships from its default branch, never from its issue tracker** — an open Python issue says nothing about whether the work already landed. When a decision says both SDKs move in lockstep and the sibling's shipped choice diverges from the decision's literal text, follow the sibling for parity and say so plainly in the PR and on the issue, offering the one-line flip.
+It is the source of truth for **behavior**: every resource, every method, every typed error, the self-discovery `me` flow, invisible pagination, the `.filter(...)` idiom, the drift-guard, the test cast (John Doe / Nova Digital), and the README-as-tested-doc discipline. Before adding or changing a resource, a verb, or a README example here, read how it ships there — its `README.md`, `src/basecradle/*.py`, and `tests/*.py`. **Read what it ships from its default branch, never from its issue tracker** — an open Python issue says nothing about whether the work already landed. When a decision says both SDKs move in lockstep and the sibling's shipped choice diverges from the decision's literal text, follow the sibling for parity and say so plainly in the PR and on the issue, offering the one-line flip.
 
-**The one rule that governs the port: match the Python SDK's *behavior and surface*, not its *syntax*.** This must read as a SDK a senior Rubyist is proud of — not Python transliterated into Ruby. Concretely:
+**The one rule that governs parity: match the Python SDK's *behavior and surface*, not its *syntax*.** This must read as a SDK a senior Rubyist is proud of — not Python transliterated into Ruby. Concretely:
 
 - Ruby naming and idiom: `BaseCradle::Client`, `bc.me`, `bc.timelines.create(name: "…")`, snake_case methods, keyword args, `Enumerable` collections, blocks where they fit.
 - Resources are objects with verbs (`timeline.lock`, not `client.post_timeline_lock(uuid)`) — same as Python, expressed in Ruby.
@@ -63,43 +63,44 @@ The SDK wraps the BaseCradle HTTP API, defined by three public artifacts: the **
 
 ## Stack (omakase — decided once, not relitigated)
 
-Locked with Drawk (the Ruby expert, sovereign over this repo); test framework and HTTP client resolved toward the constitution's defaults.
+Locked (@origin, 2026-06-04); test framework and HTTP client resolved toward the constitution's defaults.
 
 | Concern | Choice | Notes |
 |---|---|---|
 | Ruby | **3.2+** | CI matrix across supported minors (currently 3.2 · 3.3 · 3.4). |
 | Toolchain | **Bundler + Rake** | Standard gem workflow. |
 | Lint + format | **RuboCop (`rubocop-rails-omakase`)** | The constitution's mandated Ruby style; `TargetRubyVersion: 3.2`. |
-| Tests | **Minitest + WebMock** | The constitution's omakase default, in stdlib. The port matches behavior and surface, not tooling, so "Python uses pytest" is no argument for RSpec. WebMock stubs HTTP at the Net::HTTP layer. |
+| Tests | **Minitest + WebMock** | The constitution's omakase default, in stdlib. Parity is behavior and surface, not tooling, so "Python uses pytest" is no argument for RSpec. WebMock stubs HTTP at the Net::HTTP layer. |
 | HTTP | **Net::HTTP** | Zero runtime dependencies; every call funnels through one transport method. |
 | Packaging | **gemspec + Bundler** | `Gemfile.lock` is **gitignored** on purpose — the CI matrix resolves dev deps per Ruby version (reason in `.gitignore`). |
 | Types | **RBS signatures** — deferred | None ship yet. Sorbet is the heavier alternative; not required. |
 
-Runtime dependencies: keep the list at zero or one, and argue every addition in a PR against the constitution's "every dependency is debt" principle.
+Runtime dependencies: keep the list at zero or one, and argue every addition in a PR against the constitution's "every dependency is debt" principle. Dependencies and Actions pins are kept current by the fleet Dependabot program (#124): `.github/dependabot.yml` plus the shared auto-merge stub, whose merge policy is stated once, in Cross-Repo Handoffs → Propagation.
 
 ## Releasing — RubyGems Trusted Publishing (OIDC)
 
 Releases publish to RubyGems via [Trusted Publishing](https://guides.rubygems.org/trusted-publishing/) (GitHub Actions OIDC) on a `v*` tag, with **zero stored credentials** (`.github/workflows/release.yml`). **To cut a release, register/debug the trusted publisher, edit `release.yml`, or re-trigger a failed publish, invoke the `rubygems-release` skill.** The invariants that govern at all times:
 
-- **@origin is out of the publish loop.** The publish job is gated by a GitHub `environment` whose approval is **owned and actuated by the capital, via the capital's operator credential** (`constitution.md` → Earned Autonomy, *"Publishing is the capital's, not @origin's"*). The reviewer-identity named on the gate (currently `drawkkwast`) is the *credential the capital operates*, not @origin's action. The gate is a **training wheel to retire** toward bot-native auto-publish — not a permanent fixture.
-- **Captain vs. capital split.** The captain's (this repo's) release responsibility **ends at the version bump + changelog**. From there the capital takes over: it tags, runs the pipeline, approves the `rubygems` env-gate via its operator credential, verifies the live install, and closes the release issue.
+- **@origin is out of the publish loop.** The publish job is gated by a GitHub `environment` whose approval is **owned and actuated by the capital, via the capital's operator credential** (`constitution.md` → Earned Autonomy, *"Publishing is the capital's, not @origin's"*). The gate's one required reviewer is `drawkkwast` — the *credential the capital operates*, not @origin's action. The constitution names the gate a **training wheel to retire** toward bot-native auto-publish; until it is retired, every publish waits on the capital's approval.
+- **Captain vs. capital split.** The captain's (this repo's) release responsibility **ends at the version bump + changelog**. From there the capital takes over (who tags is settled: the capital — @origin, 2026-10-22, recorded on #240): it tags, runs the pipeline, approves the `rubygems` env-gate via its operator credential, verifies the live install, and closes the release issue.
 - **The workflow filename (`release.yml`) and environment name (`rubygems`) are contractual** — they must match the registered trusted publisher verbatim, or the publish 403s.
 - **Release PRs never carry a closing keyword.** A merged release PR would auto-close the issue *before* the publish is verified, and an issue that closed before its work was proven live is a lie.
 - **Close the release issue by hand, only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` is the real test — the RubyGems JSON API caches and lags. Record version + URL in the closing comment.
 
 ## Conventions
 
-- **Workflow**: branch → PR → CI green → squash-merge → delete the merged branch. Nobody pushes to `main`, human or AI. One concern per PR. PRs reference ordinary in-repo issues with `Closes #N` — NOT handoff or gated (release) issues, which are closed by hand after live verification (see the "Cross-Repo Handoffs" shared block and the Releasing section). Keep the open-branch list equal to the work in flight. A squash-merged branch always refuses `git branch -d`; never force-delete it without first proving its own changes are contained in `main` — unproven means unshipped. **The procedure — local suite, proof runs, arming auto-merge and confirming it will fire, the containment proofs before `git branch -D` — is the `ship-a-pr` skill; invoke it whenever you open, arm, or clean up after a PR.**
-- **A wake on this box is headless — never park on CI.** On the fleet server a session *is* the turn: when it ends the process exits and every watcher, poller and background job dies with it, so "wait for green, then merge" strands the work half-shipped with nobody left to finish it. Arm GitHub to do the merging instead — the moment a PR is open, self-review it (see Fleet Identity), `gh pr merge --auto --squash` it, and **confirm the arming took and will fire** (`ship-a-pr`; if it did not, say so on the issue rather than exiting quietly) — then spend the turn on the next piece of work instead of watching checks. The one exception: **a PR carrying a deliberate-break commit is armed only after its revert is pushed** — some breaks make the required `CI` check report `skipped`, which branch protection passes, so an armed break head merges. But **the merge itself wakes no one**: the router consumes only `issues` (opened/labeled) and `issue_comment` from a trusted, non-self sender on a `handoff`-labeled issue, and ignores PR events and your own comments by design (`basecradle/basecradle-router` → `routes/github.py`). So never end a turn with the last step unowned — an ordinary in-repo issue is closed at merge by its PR's closing keyword, but a **handoff or release issue closes by hand after live verification**, so confirm the merge and do that verification *before* the turn ends, checking back at the polling floor between other work rather than idling in a watch loop. (The "parked on a near-term pollable signal" state in Attended-Session Lifecycle Signal below is the *attended-laptop* case; it never licenses a headless run to hold a watcher open.)
+- **Workflow**: branch → PR → CI green → squash-merge → delete the merged branch — GitHub deletes the remote one at merge (`delete_branch_on_merge`, #154), so only the local delete is manual. Nobody pushes to `main`, human or AI. One concern per PR. PRs reference ordinary in-repo issues with `Closes #N` — NOT handoff or gated (release) issues, which are closed by hand after live verification (see the "Cross-Repo Handoffs" shared block and the Releasing section). Keep the open-branch list equal to the work in flight. A squash-merged branch always refuses `git branch -d`; never force-delete it without first proving its own changes are contained in `main` — unproven means unshipped. **The procedure — local suite, proof runs, arming auto-merge and confirming it will fire, the containment proofs before `git branch -D` — is the `ship-a-pr` skill; invoke it whenever you open, arm, or clean up after a PR.**
+- **A wake on this box is headless — never park on CI.** On the fleet server a session *is* the turn: when it ends the process exits and every watcher, poller and background job dies with it, so "wait for green, then merge" strands the work half-shipped with nobody left to finish it. Arm GitHub to do the merging instead — the moment a PR is open, self-review it (see Fleet Identity), `gh pr merge --auto --squash` it, and **confirm the arming took and will fire** (`ship-a-pr`; if it did not, say so on the issue rather than exiting quietly) — then spend the turn on the next piece of work instead of watching checks. The one exception: **a PR carrying a deliberate-break commit is armed only after its revert is pushed** — some breaks make the required `CI` check report `skipped`, which branch protection passes, so an armed break head merges. But **the merge itself wakes no one**: the router consumes only `issues` (opened/labeled) and `issue_comment` from a trusted, non-self sender on a `handoff`-labeled issue, and ignores PR events and your own comments by design. So never end a turn with the last step unowned — an ordinary in-repo issue is closed at merge by its PR's closing keyword, but a **handoff or release issue closes by hand after live verification**, so confirm the merge and do that verification *before* the turn ends, checking back at the polling floor between other work rather than idling in a watch loop. (The "parked on a near-term pollable signal" state in Attended-Session Lifecycle Signal below is the *attended-laptop* case; it never licenses a headless run to hold a watcher open.)
 - **Reporting upward from here** (Working an Issue, below): this bot can read `basecradle/basecradle` but cannot open issues there, so a report to the capital is an issue **here**, labeled `needs-capital` and naming the target repo.
-- **Cleanup, concretely here** (Working an Issue → *Whatever creates, cleans up*): a test that touches the filesystem cleans up in the same construct that creates — `Tempfile.create` **with a block**, or `Dir.mktmpdir` paired with `FileUtils.remove_entry` in `teardown`; build outputs (`pkg/`, `.gem`) stay gitignored and out of the tree; throwaway files live in `~/scratch`, never loose in the clone or in `$HOME`. And because this repo ships **a library that runs inside somebody else's process**, the same boundary binds the code: the SDK writes nothing to disk, caches no token or config, reads a caller's file only at a path the caller handed it, and closes only the handle it opened itself — a caller-supplied `IO` is the caller's to close (`lib/basecradle/items.rb` → `open_upload`).
+- **Cleanup, concretely here** (Working an Issue → *Whatever creates, cleans up*): a test that touches the filesystem cleans up in the same construct that creates — `Tempfile.create` **with a block**, or `Dir.mktmpdir` paired with `FileUtils.remove_entry` in `teardown`; build outputs (`pkg/`, `.gem`) stay gitignored and out of the tree; nothing a session makes sits loose in the clone. And because this repo ships **a library that runs inside somebody else's process**, the same boundary binds the code: the SDK writes nothing to disk, caches no token or config, reads a caller's file only at a path the caller handed it, and closes only the handle it opened itself — a caller-supplied `IO` is the caller's to close (`lib/basecradle/items.rb` → `open_upload`).
+- **Your home** — what lives in `~/scratch`, `~/workspace`, `~/repos`, `~/scripts`, `~/vault` and `~/wallets`, and where a secret goes — is `~/.claude/CLAUDE.md` → Your Home, NOC-provisioned; this charter never restates it.
 - **Plan first, and read what already ships before building.** For anything non-trivial, plan before you branch — and grep `lib/`, `test/`, `CHANGELOG.md` and `test/support/drift_guard.rb` for the endpoint or verb first: a handoff can ask for something this SDK already carries, and the answer then is evidence on the issue, not a duplicate build or an empty release.
 - **One operation, one verb, in every SDK**: an operation's verb is shared vocabulary across every BaseCradle SDK, taken from the API documentation's name for the operation and named in the capital's handoff, and a keyword argument is the wire field name (`constitution.md` → "The SDKs are one contract in many languages, held at parity").
 - **`.filter(...)` idiom** for every filterable list (messages, assets, tasks, webhooks, contact messages): returns a new lazy, composable, `Enumerable` resource; values may be model objects or uuid strings. Iterating the unfiltered resource lists everything you can see. Match the Python semantics exactly.
 - **Self-credential management is sharp by design** (mirror Python): revoking your *current* session is allowed (self-rotation); a "revoke everything" lever kills every credential including the calling client's token. Document it loudly; never block it — a peer managing its own keys is the platform's autonomy feature.
 - **Tests pin invariants** and read like documentation.
 - **Test data is fabricated, always**: the fictional cast is **John Doe** (`handle: john`, human) and **Nova Digital** (`handle: nova`, AI); emails use `@example.com`; UUIDs are real, well-formed UUIDv7 values (never `1111…` junk); tokens are correctly-shaped fakes (`bc_uat_` + 32 alphanumerics). No real platform data ever appears here.
-- **Tests never hit the live API** — except the **spec drift-guard**: one GET of the public OpenAPI spec that fails CI when the live API has endpoints the SDK doesn't cover. It runs as its own CI job, excluded from the default test run (offline runs stay green). Port this — it is a defining quality bar, not optional.
+- **Tests never hit the live API** — except the **spec drift-guard**: one GET of the public OpenAPI spec that fails CI when the live API has endpoints the SDK doesn't cover. It runs as its own CI job, excluded from the default test run (offline runs stay green). It is a defining quality bar, not optional.
 - **A step only a human can take is asked for as a checklist.** Account or credential setup, anything in a founder's browser or accounts — raised through the capital with `needs-capital` like every other gate, never to a founder directly — is phrased as minimal numbered steps with the exact site, fields, and values to enter, so it can be executed without re-deriving anything. Lead with the wait and keep it unmissable until it is acted on — a waiting agent looks identical to a stalled one. Publish-gate approval is **not** such a step: the capital actuates it (Releasing, above).
 - **Versioning**: semver, `0.x` until the platform owner declares 1.0. The API is additive-only, so SDK minor versions track API additions.
 - **Public gem name**: `basecradle` on RubyGems. Repo: `basecradle-ruby`. Require path: `require "basecradle"`.
@@ -112,6 +113,23 @@ This repo's builder agent — **basecradle-ruby AI** — posts, commits, and ope
 - **Self-review before opening a PR — mandatory, not a backstop.** This repo ships no automated reviewer, and a `[bot]`-authored PR's CI resolves Actions secrets empty, so a secret-dependent reviewer would be skipped anyway. The authoring agent runs `/code-review` on its own diff and addresses the findings **before** opening the PR; that is the only review gate on bot PRs.
 - **Bot commits carry no `Co-Authored-By` trailer.** The author already *is* the agent, so a co-author line would double-count the same actor. This overrides the global "end every commit with `Co-Authored-By: Claude`" default — **including the session's attribution reminder, which restates that default every session** (the PR description still ends with its Claude Code line). Check before pushing: armed auto-merge squashes onto `main` within minutes, and `main` is never force-pushed.
 - **No CI actor-guard is needed here.** `ci.yml` and `release.yml` use **no** Actions secrets — release publishes via RubyGems OIDC and the drift-guard reads only the public spec — so bot PRs run the full CI suite. If a secret-dependent workflow is ever added, add the fleet's bot-PR guard then (`if: ${{ !endsWith(github.actor, '[bot]') }}`).
+
+## Development Commands
+
+Minitest + WebMock, driven by Rake (mirrors the README's Development section):
+
+```bash
+bundle install               # install dev dependencies
+bundle exec rake             # lint + tests (offline — the default)
+bundle exec rake test:live   # the spec drift-guard (one network call to the live spec)
+bundle exec rubocop          # lint only
+gem build basecradle.gemspec # build the gem
+actionlint                   # lint .github/workflows (CI pins the version + SHA256 in ci.yml)
+```
+
+`actionlint` is not a gem and not in the `Gemfile` — install the binary (and `shellcheck`,
+which it shells out to; without it the shell checks are silently skipped). CI's `actionlint`
+job is part of the `CI` gate's `needs`, so a workflow edit that fails it blocks the merge.
 
 ## Polling GitHub (or any shared external API) — rate-limit floor
 
@@ -210,20 +228,3 @@ The ecosystem runs on **constitutional federalism** — the full principle is `c
 ### Propagation
 
 Ten capital-anchored shared artifacts are carried verbatim across the fleet (this paragraph is their one inventory; the NOC's drift guard also carries one NOC-anchored text, the Your Home section of basecradle-noc#832): the **Founder Authority**, **Cross-Repo Handoffs**, **Polling GitHub**, **Attended-Session Lifecycle Signal**, **Memory and Charter Discipline**, **Working an Issue**, and **Laptop Builder Self-Exit** CLAUDE.md blocks, the **`cross-repo-handoffs` skill**, the **needs-human phone-alert stub** (`.github/workflows/needs-human-alert.yml`), and the **Dependabot auto-merge stub** (`.github/workflows/dependabot-auto-merge.yml` — the merge policy itself lives in the one reusable workflow in `basecradle/.github`; patch/minor auto-merge on green, major → `needs-capital`). Carrier sets differ per artifact: every builder repo carries nine of the ten; **Laptop Builder Self-Exit** is carried only by the laptop builders (basecradle-noc, basecradle-harness, basecradle-router) and removed from a repo on its migration to the fleet server; `basecradle/.github` — the org profile repo, which hosts the reusable workflows the stubs call but has no builder agent, hence no CLAUDE.md and no `.claude/` skills — carries only the alert stub (the Dependabot stub is deliberately absent there: the repo has no CI and hosts the fleet paging path, so its bumps stay capital-reviewed). Editing any of them at the capital is a single change-set with two obligations: land the capital edit **and** file the child re-sync handoffs in the same breath — a shared-artifact PR with no accompanying re-syncs is an *unfinished* PR. The NOC runs a standing drift-guard that byte-diffs every shared artifact across its carrier set against the capital canonical every 15 minutes and files a `[DRIFT]` issue when a divergence outlives the ~30-min grace window. A repo missing any artifact it should carry (always true for a brand-new repo) gets them copied from the capital's canonical on GitHub (`gh api repos/basecradle/basecradle/contents/...`, with fleet credentials) — never a machine-local path. Full mechanics and the on-demand audit: the `cross-repo-handoffs` skill.
-
-## Development Commands
-
-Minitest + WebMock, driven by Rake (mirrors the README's Development section):
-
-```bash
-bundle install               # install dev dependencies
-bundle exec rake             # lint + tests (offline — the default)
-bundle exec rake test:live   # the spec drift-guard (one network call to the live spec)
-bundle exec rubocop          # lint only
-gem build basecradle.gemspec # build the gem
-actionlint                   # lint .github/workflows (CI pins the version + SHA256 in ci.yml)
-```
-
-`actionlint` is not a gem and not in the `Gemfile` — install the binary (and `shellcheck`,
-which it shells out to; without it the shell checks are silently skipped). CI's `actionlint`
-job is part of the `CI` gate's `needs`, so a workflow edit that fails it blocks the merge.
