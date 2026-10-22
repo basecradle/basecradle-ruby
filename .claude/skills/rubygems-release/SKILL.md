@@ -1,6 +1,6 @@
 ---
 name: rubygems-release
-description: Step-by-step procedure for releasing the basecradle gem via RubyGems Trusted Publishing (OIDC) — the one-time pending-publisher registration form and its contractual field values, the tag-triggered rehearsal→publish job graph, the tag mechanics, and the re-trigger-after-a-fixed-bug commands. Use when cutting a release, registering or debugging the RubyGems trusted publisher, editing `.github/workflows/release.yml`, or re-triggering a failed publish. The invariants (release PRs never carry a closing keyword; close the release issue by hand after live verify; captain's job ends at the version bump + changelog; the capital actuates the gate; the workflow filename + environment names are contractual) live in CLAUDE.md → Releasing and govern at all times.
+description: Step-by-step procedure for releasing the basecradle gem via RubyGems Trusted Publishing (OIDC) — the one-time pending-publisher registration form and its contractual field values, the tag-triggered rehearsal→publish job graph, the tag mechanics, and the re-trigger-after-a-fixed-bug commands (every tag command is the capital's to run). Use when cutting a release, registering or debugging the RubyGems trusted publisher, editing `.github/workflows/release.yml`, or re-triggering a failed publish. The invariants (release PRs never carry a closing keyword; close the release issue by hand after live verify; captain's job ends at the version bump + changelog; the capital actuates the gate; the workflow filename + environment names are contractual) live in CLAUDE.md → Releasing and govern at all times.
 ---
 
 # Releasing the `basecradle` gem — RubyGems Trusted Publishing (OIDC)
@@ -46,6 +46,8 @@ On a `v*` tag it runs **rehearsal** (refuse a tag that is not on `main`'s tip; b
 
 ## Tagging — derive the version, never type it
 
+**The capital tags** (CLAUDE.md → Releasing, *Captain vs. capital split*; settled by @origin, 2026-10-22). The captain's work ends at the bump + changelog; every tag command in this skill is the capital's to run.
+
 The tag is created on whatever commit you are standing on, so start from an up-to-date `main`, in the repo root:
 
 ```bash
@@ -73,19 +75,19 @@ No guard failing is a workflow bug, and none of them publishes anything. Read wh
 git fetch origin main && git log --oneline "$(git rev-parse <tagged-sha>)..FETCH_HEAD"
 ```
 
-- **The new commits belong in this release** — the usual case, a dependency bump or a doc fix. That is captain work: land a changelog amendment on `main` covering them, then delete the failing tag **by the name the error gave** and tag the new tip with the derived command under **Tagging**: `git push origin ":refs/tags/vFAILED" && git tag -d vFAILED` (remote first — `git tag -d` exits 1 on a tag this clone does not have).
-- **They do not belong in it** — then this release cannot go out from this tree at all, because the guard admits only the tip. The extra work ships in its own release first, or is reverted. Either way `main`'s tip becomes the release commit before you tag again.
+- **The new commits belong in this release** — the usual case, a dependency bump or a doc fix. The changelog amendment covering them is captain work, landed on `main`; then the capital deletes the failing tag **by the name the error gave** and tags the new tip with the derived command under **Tagging**: `git push origin ":refs/tags/vFAILED" && git tag -d vFAILED` (remote first — `git tag -d` exits 1 on a tag this clone does not have).
+- **They do not belong in it** — then this release cannot go out from this tree at all, because the guard admits only the tip. The extra work ships in its own release first, or is reverted. Either way `main`'s tip becomes the release commit before the capital tags again.
 
 In both branches the version is re-decided deliberately rather than inherited from a tag that no longer matches the tree.
 
 **"Tag *v* does not name the version this tree builds"** — the tag and `lib/basecradle/version.rb` disagree. Decide which one is right:
 
-- **The tag was mistyped** (the tree holds the version you meant) → delete it and re-tag with the version the error names, which was computed from the gem CI built at the tagged commit: `git tag -d vWRONG && git push origin :refs/tags/vWRONG && git tag v<built> && git push origin v<built>`.
-- **The bump never landed** (the tag names the version you meant) → that is captain work: a version bump + changelog PR, merged, then re-tag per the section below.
+- **The tag was mistyped** (the tree holds the version you meant) → the capital deletes it and re-tags with the version the error names, which was computed from the gem CI built at the tagged commit: `git tag -d vWRONG && git push origin :refs/tags/vWRONG && git tag v<built> && git push origin v<built>`.
+- **The bump never landed** (the tag names the version you meant) → the version bump + changelog PR is captain work; once it merges, the capital re-tags per **Tagging** above.
 
 **"Version *X* is not a plain X.Y.Z"** — the tag, the tree and `main` all agree, and the thing they agree on is not something this SDK publishes. Almost always a `version.rb` literal that is a prerelease: `Gem::Version#to_s` normalizes `1.0.0-rc1` to `1.0.0.pre.rc1`, which becomes both the gem filename and the derived tag, so every other check passes.
 
-That is captain work, not a re-tag: the version in `lib/basecradle/version.rb` is wrong and has to change on `main` in a version bump + changelog PR. Delete the tag meanwhile — remote ref first — so nothing re-fires on it:
+The fix is captain work, not a re-tag: the version in `lib/basecradle/version.rb` is wrong and has to change on `main` in a version bump + changelog PR. The capital deletes the tag meanwhile — remote ref first — so nothing re-fires on it:
 
 ```bash
 git push origin ":refs/tags/vWRONG" && git tag -d vWRONG
@@ -95,7 +97,7 @@ If a prerelease is *genuinely* what is wanted, this guard is not to be worked ar
 
 ## Re-triggering after a fixed workflow bug
 
-Fix on a PR, merge, then move the tag to the fixed commit. Fetch first — nothing in the chain does it for you, and re-tagging a stale checkout re-tags the *unfixed* commit, whereupon the run fails identically and the fix looks like it did not work:
+The workflow fix is a captain PR; once it merges, the capital moves the tag to the fixed commit. Fetch first — nothing in the chain does it for you, and re-tagging a stale checkout re-tags the *unfixed* commit, whereupon the run fails identically and the fix looks like it did not work:
 
 ```bash
 git fetch origin main && git switch main && git merge --ff-only FETCH_HEAD
