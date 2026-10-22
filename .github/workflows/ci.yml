@@ -55,6 +55,80 @@ jobs:
       - name: Check the SDK covers the live API
         run: bundle exec rake test:live
 
+  # Fleet Identity: a commit authored by this repo's bot carries no Co-Authored-By
+  # trailer — the author already is the agent. The session's attribution reminder restates
+  # the opposite default every session, and armed auto-merge squashes onto main within
+  # minutes, where nothing is ever force-pushed. So the rule is checked here, on the PR,
+  # rather than trusted to memory. Ported from basecradle-python's commit-trailers job,
+  # as dispatched in this repo's #240.
+  trailers:
+    name: commit-trailers
+    runs-on: ubuntu-latest
+    steps:
+      # Both steps are gated on the event rather than the job: a job that *skips* would
+      # fail the CI gate below, which counts a skip as a failure. All-steps-skipped still
+      # reports success.
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          # Walking base..head needs both ends present in the clone.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: No Co-Authored-By on bot commits
+        if: github.event_name == 'pull_request'
+        env:
+          BOT: basecradle-ruby-ai[bot]
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Single source of truth: the identity is CLAUDE.md's to state. If it changes
+          # there and not here, the author filter below would quietly match nothing and
+          # the guard would pass everything — fail instead.
+          grep -qF "$BOT" CLAUDE.md || {
+            echo "::error::$BOT is no longer the commit author in CLAUDE.md -> Fleet Identity. Update this check to match."
+            exit 1
+          }
+
+          # Only the commits this PR contributes: reachable from the head and not from the
+          # base branch. The live base ref is excluded alongside the event's point-in-time
+          # base.sha, so a branch that merged main in never re-litigates main's own commits
+          # — GitHub's squash-merge adds a self-co-author trailer to every one of them, and
+          # they can never be rewritten. For the same reason this must never be widened to
+          # push events.
+          excludes=("$BASE_SHA")
+          if git rev-parse --verify --quiet "refs/remotes/origin/$BASE_REF" >/dev/null; then
+            excludes+=("refs/remotes/origin/$BASE_REF")
+          fi
+
+          bad=()
+          shas=$(git log --format=%H "$HEAD_SHA" --not "${excludes[@]}")
+          for sha in $shas; do
+            # Each git call is its own assignment so that a failure trips set -e; inside a
+            # `case` word or before `||` it would not, and the commit would be skipped
+            # unexamined.
+            author=$(git show -s --format='%an <%ae>' "$sha")
+            # Quoted, so the [bot] brackets stay literal and are not a glob class.
+            case "$author" in *"$BOT"*) ;; *) continue ;; esac
+            # The whole message, not git's %(trailers:...) — that parses only the final
+            # paragraph, so a trailer with any paragraph after it slips through. A
+            # line-anchored scan fails closed instead. A here-string, never a pipe: under
+            # pipefail, `printf | grep -q` fails open — grep exits on its first match, a
+            # message longer than the pipe buffer kills printf with SIGPIPE, and the
+            # pipeline's non-zero reads as "no trailer".
+            message=$(git show -s --format=%B "$sha")
+            if grep -qi '^Co-Authored-By:' <<<"$message"; then
+              bad+=("$(git show -s --format='%h %s' "$sha")")
+            fi
+          done
+
+          for commit in "${bad[@]}"; do
+            echo "::error::Fleet Identity: $commit carries a Co-Authored-By trailer. A commit authored by $BOT carries none — rewrite the message without it."
+          done
+          [ ${#bad[@]} -eq 0 ]
+
   # release.yml runs only on a `v*` tag push, so nothing on a PR ever parses it — and
   # it carries the release guards' shell. actionlint checks every workflow's schema,
   # expressions and action inputs, and runs shellcheck over each `run:` block, so a
@@ -194,7 +268,7 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [lint, test, drift, actionlint]
+    needs: [lint, test, drift, trailers, actionlint]
     if: always()
     steps:
       - name: Fail unless every required job succeeded
