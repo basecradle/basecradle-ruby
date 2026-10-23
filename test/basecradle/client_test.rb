@@ -195,6 +195,16 @@ class ClientTest < Minitest::Test
     assert_requested(:post, "#{BASE_URL}/x", times: 1)
   end
 
+  def test_backoff_doubles_from_the_base_and_caps_at_the_max
+    bc = BaseCradle::Client.new(FAKE_TOKEN)
+    slept = []
+    bc.define_singleton_method(:sleep) { |seconds| slept << seconds }
+
+    (1..10).each { |attempt| bc.send(:backoff, attempt) }
+
+    assert_equal [ 0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0 ], slept # the tenth sleeps 8, not 256
+  end
+
   # --- login -----------------------------------------------------------------------------
 
   def test_login_mints_a_token_and_returns_an_authenticated_client

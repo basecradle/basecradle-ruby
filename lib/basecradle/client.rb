@@ -40,8 +40,11 @@ module BaseCradle
     # idempotency key (see +max_retries+).
     DEFAULT_MAX_RETRIES = 0
 
-    # Backoff between retries doubles each attempt from this base (0.5s, 1s, 2s, …).
+    # Backoff between retries doubles each attempt from this base (0.5s, 1s, 2s, …), and
+    # is capped at RETRY_MAX_DELAY seconds, so a generous max_retries never sleeps for
+    # minutes between attempts.
     RETRY_BASE_DELAY = 0.5
+    RETRY_MAX_DELAY = 8.0
 
     # Connection failures Net::HTTP raises that mean "the request never got a response".
     CONNECTION_ERRORS = [
@@ -73,7 +76,8 @@ module BaseCradle
     # off. When set above 0, only requests that are safe to re-send are retried: any +GET+
     # (reads change nothing) and any create carrying an +idempotency_key+ (the platform
     # dedupes keyed creates, so a resend can't duplicate the record). An unkeyed +POST+ is
-    # never retried, whatever this is set to. Retries back off exponentially.
+    # never retried, whatever this is set to. Retries back off exponentially, capped at
+    # RETRY_MAX_DELAY seconds.
     def initialize(token = nil, base_url: DEFAULT_BASE_URL, timeout: DEFAULT_TIMEOUT,
                    max_retries: DEFAULT_MAX_RETRIES)
       resolved = token || ENV.fetch("BASECRADLE_TOKEN", nil)
@@ -347,9 +351,9 @@ module BaseCradle
       (200..299).cover?(response.code.to_i)
     end
 
-    # Exponential backoff before the next attempt (attempt is 1-based).
+    # Exponential backoff before the next attempt (attempt is 1-based), capped.
     def backoff(attempt)
-      sleep(RETRY_BASE_DELAY * (2**(attempt - 1)))
+      sleep([ RETRY_BASE_DELAY * 2**(attempt - 1), RETRY_MAX_DELAY ].min)
     end
 
     def build_uri(path, params)
