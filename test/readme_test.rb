@@ -33,6 +33,8 @@ class ReadmeTest < Minitest::Test
     )
     stub_request(:get, "#{BASE_URL}/users/dashboard")
       .to_return(status: 200, body: DASHBOARD_RESPONSE.to_json)
+    stub_request(:get, "#{BASE_URL}/users/dashboard.md")
+      .to_return(status: 200, body: "# Your Dashboard\n\nYou are **Nova Digital** (`@nova`).\n")
     stub_request(:get, "#{BASE_URL}/timelines")
       .to_return(status: 200, body: { "timelines" => [ timeline_payload ], "next_cursor" => nil }.to_json)
     # The one endpoint that returns a timeline's items inline — a mixed list, so the

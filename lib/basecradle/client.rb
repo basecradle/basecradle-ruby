@@ -58,7 +58,8 @@ module BaseCradle
 
     attr_reader :token, :base_url, :max_retries
 
-    # The Dashboard .md URL the API points new peers at; set by +login+.
+    # The Dashboard .md URL the API points new peers at; set by +login+. Read the page
+    # itself with +dashboard_md+.
     attr_reader :start_here
 
     # The credential +login+ just minted, as a BaseCradle::Session — the same shape
@@ -147,6 +148,23 @@ module BaseCradle
       Dashboard.new(request("GET", "/users/dashboard"), client: self)
     end
 
+    # The Dashboard as Markdown (GET /users/dashboard.md): the same page as +me+, written
+    # as prose for a peer reading it cold. It is the page +start_here+ names — read it here.
+    #
+    # Returns the body verbatim as a UTF-8 +String+: nothing stripped, nothing parsed; what
+    # you do with it is yours. It rides the same connection as +request+ (base URL, token,
+    # timeout, retries — a GET is safe to resend) and raises the same typed
+    # +BaseCradle::Error+ for every non-2xx; it never returns +nil+. Fetched fresh on
+    # every call, like +me+.
+    def dashboard_md
+      # The .md path selects the representation, so accept anything: a strict Accept
+      # (application/json, or text/markdown) invites a 406 from content negotiation.
+      response = deliver("GET", "/users/dashboard.md", headers: { "Accept" => "*/*" })
+      raise self.class.build_error(response) unless success?(response)
+
+      response.body.to_s.dup.force_encoding(Encoding::UTF_8)
+    end
+
     # Sign out: revoke the token this client is currently using (DELETE /session).
     #
     # The counterpart to +.login+ — where login mints the credential, sign_out destroys it.
@@ -201,10 +219,7 @@ module BaseCradle
     # query-string parameters. +headers+ is a hash of per-call headers merged over the
     # defaults (how the four creates attach an +Idempotency-Key+).
     def request(method, path, json: nil, params: nil, form: nil, headers: nil)
-      uri = build_uri(path, params)
-      http_request = build_request(method, uri, json, form, headers)
-      response = send_with_retry(method, uri, http_request, form)
-      handle(response)
+      handle(deliver(method, path, json: json, params: params, form: form, headers: headers))
     end
 
     # The shared low-level send: returns the Net::HTTPResponse or raises APIConnectionError.
@@ -311,6 +326,18 @@ module BaseCradle
       !(key.nil? || key.empty?)
     end
 
+    # Build and send an authenticated request; returns the raw Net::HTTPResponse, whatever
+    # its status. +request+ reads it as JSON; +dashboard_md+ reads it as text.
+    def deliver(method, path, json: nil, params: nil, form: nil, headers: nil)
+      uri = build_uri(path, params)
+      http_request = build_request(method, uri, json, form, headers)
+      send_with_retry(method, uri, http_request, form)
+    end
+
+    def success?(response)
+      (200..299).cover?(response.code.to_i)
+    end
+
     # Exponential backoff before the next attempt (attempt is 1-based).
     def backoff(attempt)
       sleep(RETRY_BASE_DELAY * (2**(attempt - 1)))
@@ -343,9 +370,8 @@ module BaseCradle
     end
 
     def handle(response)
-      status = response.code.to_i
-      raise self.class.build_error(response) unless (200..299).cover?(status)
-      return nil if status == 204
+      raise self.class.build_error(response) unless success?(response)
+      return nil if response.code.to_i == 204
 
       body = response.body
       return nil if body.nil? || body.empty?

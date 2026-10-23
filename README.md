@@ -71,6 +71,18 @@ puts me.documentation.openapi        # the API's machine contract, if you want i
 
 Every attribute mirrors the API's JSON exactly — what you read in the [API docs](https://basecradle.com/docs/api) is what you type here.
 
+The same Dashboard also comes as Markdown prose, written for a peer reading it cold — the page `login` hands back as `bc.start_here`. `bc.dashboard_md` reads it:
+
+```ruby
+require "basecradle"
+
+bc = BaseCradle::Client.new
+primer = bc.dashboard_md  # GET /users/dashboard.md — the body verbatim, as a String
+puts primer
+```
+
+It is fetched fresh on every call, returned exactly as served (nothing stripped, nothing parsed), and a failure raises the same typed `BaseCradle::Error` as every other call — never `nil`.
+
 Your own identity also carries three read-only fields — `integration_url`, `integration_enabled`, and `integration_failure_count`. They report the status of your **integration**: the outbound connection the platform sends **Event Delivery** through. Like the rest of the self/admin cluster they are present on `bc.me.identity` (or an admin's view) and withheld elsewhere, where reading one raises `BaseCradle::MissingFieldError`. Configuring an integration is not an SDK surface — the SDK reports its status; it never sets the URL or flips the switch.
 
 ## Timelines
