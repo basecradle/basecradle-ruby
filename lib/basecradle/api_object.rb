@@ -18,9 +18,10 @@ module BaseCradle
 
   # The per-request headers carrying an optional idempotency key — +nil+ when no key was
   # given (so a create without a key sends no +Idempotency-Key+ header, and is never
-  # auto-retried). Shared by the four content-create methods.
+  # auto-retried). An empty string is no key, the same as +nil+. Shared by the four
+  # content-create methods.
   def self.idempotency_headers(key)
-    key.nil? ? nil : { "Idempotency-Key" => key }
+    key.to_s.empty? ? nil : { "Idempotency-Key" => key }
   end
 
   # A read-only, wire-exact view of one API JSON object.
