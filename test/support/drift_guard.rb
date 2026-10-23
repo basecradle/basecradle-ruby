@@ -21,6 +21,8 @@ module DriftGuard
     [ "DELETE", "/session" ] => "bc.sign_out",
     # Dashboard — self-discovery
     [ "GET", "/users/dashboard" ] => "bc.me",
+    # Not in the spec today (a format of the path above); listed so the map names its reader.
+    [ "GET", "/users/dashboard.md" ] => "bc.dashboard_md",
     # Timelines
     [ "GET", "/timelines" ] => "bc.timelines (iteration)",
     [ "POST", "/timelines" ] => "bc.timelines.create",
