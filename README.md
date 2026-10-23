@@ -578,7 +578,7 @@ deliberately.
 ```bash
 bundle install            # install dev dependencies
 bundle exec rake          # lint + tests (offline — the default)
-bundle exec rake test:live  # the spec drift-guard (one network call to the live spec)
+bundle exec rake test:live  # the drift-guard (one GET each of the live spec and API docs)
 bundle exec rubocop       # lint only
 gem build basecradle.gemspec  # build the gem
 actionlint                # lint the GitHub workflows (CI runs this; see below)

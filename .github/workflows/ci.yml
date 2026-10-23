@@ -41,8 +41,9 @@ jobs:
       - name: Test
         run: bundle exec rake test
 
-  # The spec drift-guard: fails when the live API has endpoints the SDK doesn't cover.
-  # The one job that touches the network (a single GET of the public OpenAPI spec).
+  # The drift-guard: fails when the live API has an endpoint the SDK doesn't cover, or
+  # documents an error code with no typed exception. The one job that touches the network
+  # (one GET each of the public OpenAPI spec and the prose API docs).
   drift:
     name: drift-guard
     runs-on: ubuntu-latest
@@ -52,7 +53,7 @@ jobs:
         with:
           ruby-version: "3.4"
           bundler-cache: true
-      - name: Check the SDK covers the live API
+      - name: Check the SDK covers the live API and its error codes
         run: bundle exec rake test:live
 
   # Fleet Identity: a commit authored by this repo's bot carries no Co-Authored-By

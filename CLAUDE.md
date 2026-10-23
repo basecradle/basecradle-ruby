@@ -59,7 +59,7 @@ When in doubt about *what* a method should do, the Python SDK and the API docs d
 
 ## The API — Source of Truth
 
-The SDK wraps the BaseCradle HTTP API, defined by three public artifacts: the **OpenAPI 3 spec** at https://basecradle.com/docs/api.yaml (generated from the platform's test suite, so it cannot drift — the machine contract, and what the SDK's drift-guard checks), the prose documentation at https://basecradle.com/docs/api.md (semantics, policies, worked examples), and the interactive reference at https://basecradle.com/docs/api/reference. The API is **unversioned and additive-only**: what works keeps working, so the SDK never needs a breaking change to track it. Its wire conventions — `bc_uat_` Bearer tokens minted via `POST /session`, RFC 9457 `problem+json` errors with a stable `code`, `RateLimit-*` headers with `429` + `Retry-After`, cursor pagination newest-first, responses enveloped under the resource name — are documented in `api.md` and implemented once in `lib/basecradle/`.
+The SDK wraps the BaseCradle HTTP API, defined by three public artifacts: the **OpenAPI 3 spec** at https://basecradle.com/docs/api.yaml (generated from the platform's test suite, so it cannot drift — the machine contract, and what the SDK's drift-guard checks for endpoints), the prose documentation at https://basecradle.com/docs/api.md (semantics, policies, worked examples, and the Error Codes table the drift-guard holds the typed errors to), and the interactive reference at https://basecradle.com/docs/api/reference. The API is **unversioned and additive-only**: what works keeps working, so the SDK never needs a breaking change to track it. Its wire conventions — `bc_uat_` Bearer tokens minted via `POST /session`, RFC 9457 `problem+json` errors with a stable `code`, `RateLimit-*` headers with `429` + `Retry-After`, cursor pagination newest-first, responses enveloped under the resource name — are documented in `api.md` and implemented once in `lib/basecradle/`.
 
 ## Stack (omakase — decided once, not relitigated)
 
@@ -100,7 +100,7 @@ Releases publish to RubyGems via [Trusted Publishing](https://guides.rubygems.or
 - **Self-credential management is sharp by design** (mirror Python): revoking your *current* session is allowed (self-rotation); a "revoke everything" lever kills every credential including the calling client's token. Document it loudly; never block it — a peer managing its own keys is the platform's autonomy feature.
 - **Tests pin invariants** and read like documentation.
 - **Test data is fabricated, always**: the fictional cast is **John Doe** (`handle: john`, human) and **Nova Digital** (`handle: nova`, AI); emails use `@example.com`; UUIDs are real, well-formed UUIDv7 values (never `1111…` junk); tokens are correctly-shaped fakes (`bc_uat_` + 32 alphanumerics). No real platform data ever appears here.
-- **Tests never hit the live API** — except the **spec drift-guard**: one GET of the public OpenAPI spec that fails CI when the live API has endpoints the SDK doesn't cover. It runs as its own CI job, excluded from the default test run (offline runs stay green). It is a defining quality bar, not optional.
+- **Tests never hit the live API** — except the **drift-guard**: one GET each of the public OpenAPI spec and the prose API docs, failing CI when the live API has an endpoint the SDK doesn't cover or documents an error code with no typed exception. It runs as its own CI job, excluded from the default test run (offline runs stay green). It is a defining quality bar, not optional.
 - **A step only a human can take is asked for as a checklist.** Account or credential setup, anything in a founder's browser or accounts — raised through the capital with `needs-capital` like every other gate, never to a founder directly — is phrased as minimal numbered steps with the exact site, fields, and values to enter, so it can be executed without re-deriving anything. Lead with the wait and keep it unmissable until it is acted on — a waiting agent looks identical to a stalled one. Publish-gate approval is **not** such a step: the capital actuates it (Releasing, above).
 - **Versioning**: semver, `0.x` until the platform owner declares 1.0. The API is additive-only, so SDK minor versions track API additions.
 - **Public gem name**: `basecradle` on RubyGems. Repo: `basecradle-ruby`. Require path: `require "basecradle"`.
@@ -112,7 +112,7 @@ This repo's builder agent — **basecradle-ruby AI** — posts, commits, and ope
 - **Setup (git author + auth routing) lives in the `bot-auth-setup` skill.** Invoke it to configure a fresh clone's local (never-committed) author or to mint an installation token and route `gh`/`git push` through it. The one invariant to remember unaided: the git author is set **local-only** (`git config --local`) and **must never be staged**.
 - **Self-review before opening a PR — mandatory, not a backstop.** This repo ships no automated reviewer, and a `[bot]`-authored PR's CI resolves Actions secrets empty, so a secret-dependent reviewer would be skipped anyway. The authoring agent runs `/code-review` on its own diff and addresses the findings **before** opening the PR; that is the only review gate on bot PRs.
 - **Bot commits carry no `Co-Authored-By` trailer.** The author already *is* the agent, so a co-author line would double-count the same actor. This overrides the global "end every commit with `Co-Authored-By: Claude`" default — **including the session's attribution reminder, which restates that default every session** (the PR description still ends with its Claude Code line). Check before pushing: armed auto-merge squashes onto `main` within minutes, and `main` is never force-pushed. CI's `commit-trailers` job refuses a PR that contributes a bot-authored commit carrying one.
-- **No CI actor-guard is needed here.** `ci.yml` and `release.yml` use **no** Actions secrets — release publishes via RubyGems OIDC and the drift-guard reads only the public spec — so bot PRs run the full CI suite. If a secret-dependent workflow is ever added, add the fleet's bot-PR guard then (`if: ${{ !endsWith(github.actor, '[bot]') }}`).
+- **No CI actor-guard is needed here.** `ci.yml` and `release.yml` use **no** Actions secrets — release publishes via RubyGems OIDC and the drift-guard reads only the public spec and docs — so bot PRs run the full CI suite. If a secret-dependent workflow is ever added, add the fleet's bot-PR guard then (`if: ${{ !endsWith(github.actor, '[bot]') }}`).
 
 ## Development Commands
 
@@ -121,7 +121,7 @@ Minitest + WebMock, driven by Rake (mirrors the README's Development section):
 ```bash
 bundle install               # install dev dependencies
 bundle exec rake             # lint + tests (offline — the default)
-bundle exec rake test:live   # the spec drift-guard (one network call to the live spec)
+bundle exec rake test:live   # the drift-guard (one GET each of the live spec and API docs)
 bundle exec rubocop          # lint only
 gem build basecradle.gemspec # build the gem
 actionlint                   # lint .github/workflows (CI pins the version + SHA256 in ci.yml)

@@ -2,32 +2,44 @@
 
 require "test_helper"
 
+# The catalog below mirrors the API docs (Errors → Error Codes) and is pinned to the SDK's
+# registry, so a mapping removed, or added without a test, fails here. A code the platform
+# *documents* after this release is the live drift-guard's to catch: it holds the docs' Error
+# Codes table to the same registry (test/live/drift_guard_live_test.rb). Until the code is
+# mapped, it reads as a bare BaseCradle::Error.
 class ErrorsTest < Minitest::Test
   include TestSupport
 
+  ERROR_CATALOG = {
+    "unauthorized" => BaseCradle::UnauthorizedError,
+    "invalid_credentials" => BaseCradle::InvalidCredentialsError,
+    "invalid_signature" => BaseCradle::InvalidSignatureError,
+    "account_suspended" => BaseCradle::AccountSuspendedError,
+    "not_a_viewer" => BaseCradle::NotAViewerError,
+    "not_timeline_owner" => BaseCradle::NotTimelineOwnerError,
+    "timeline_locked" => BaseCradle::TimelineLockedError,
+    "not_task_author" => BaseCradle::NotTaskAuthorError,
+    "not_an_admin" => BaseCradle::NotAnAdminError,
+    "task_not_pending" => BaseCradle::TaskNotPendingError,
+    "not_found" => BaseCradle::NotFoundError,
+    "validation_failed" => BaseCradle::ValidationError,
+    "current_password_incorrect" => BaseCradle::CurrentPasswordIncorrectError,
+    "password_confirmation_mismatch" => BaseCradle::PasswordConfirmationMismatchError,
+    "rate_limited" => BaseCradle::RateLimitedError,
+    "invalid_cursor" => BaseCradle::InvalidCursorError,
+    "invalid_filter" => BaseCradle::InvalidFilterError,
+    "endpoint_disabled" => BaseCradle::EndpointDisabledError,
+    "payload_too_large" => BaseCradle::PayloadTooLargeError,
+    "binary_payload" => BaseCradle::BinaryPayloadError
+  }.freeze
+
+  def test_the_catalog_is_exactly_the_registry
+    # Every mapped code has a row here, and every row is mapped — no count to keep in step.
+    assert_equal BaseCradle::CODE_TO_ERROR.keys.sort, ERROR_CATALOG.keys.sort
+  end
+
   def test_every_known_code_maps_to_its_class
-    {
-      "unauthorized" => BaseCradle::UnauthorizedError,
-      "invalid_credentials" => BaseCradle::InvalidCredentialsError,
-      "invalid_signature" => BaseCradle::InvalidSignatureError,
-      "account_suspended" => BaseCradle::AccountSuspendedError,
-      "not_a_viewer" => BaseCradle::NotAViewerError,
-      "not_timeline_owner" => BaseCradle::NotTimelineOwnerError,
-      "timeline_locked" => BaseCradle::TimelineLockedError,
-      "not_task_author" => BaseCradle::NotTaskAuthorError,
-      "not_an_admin" => BaseCradle::NotAnAdminError,
-      "task_not_pending" => BaseCradle::TaskNotPendingError,
-      "not_found" => BaseCradle::NotFoundError,
-      "validation_failed" => BaseCradle::ValidationError,
-      "current_password_incorrect" => BaseCradle::CurrentPasswordIncorrectError,
-      "password_confirmation_mismatch" => BaseCradle::PasswordConfirmationMismatchError,
-      "rate_limited" => BaseCradle::RateLimitedError,
-      "invalid_cursor" => BaseCradle::InvalidCursorError,
-      "invalid_filter" => BaseCradle::InvalidFilterError,
-      "endpoint_disabled" => BaseCradle::EndpointDisabledError,
-      "payload_too_large" => BaseCradle::PayloadTooLargeError,
-      "binary_payload" => BaseCradle::BinaryPayloadError
-    }.each do |code, klass|
+    ERROR_CATALOG.each do |code, klass|
       error = BaseCradle::Error.from_response(status: 400, problem: problem(code, 400))
 
       assert_instance_of klass, error
