@@ -259,6 +259,20 @@ class ItemsTest < Minitest::Test
     end
   end
 
+  # An empty key names no logical create for the platform to dedupe against, so it is no
+  # key at all: no header goes on the wire (and the create is never auto-retried).
+  def test_create_with_an_empty_key_sends_no_idempotency_header
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages")
+      .to_return(status: 201, body: { "message" => message_payload }.to_json)
+
+    timeline.messages.create(body: "hi", idempotency_key: "")
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages") do |req|
+      !req.headers.key?("Idempotency-Key")
+    end
+  end
+
   def test_asset_create_sends_the_idempotency_key_header
     timeline = fetch_timeline
     stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets")
