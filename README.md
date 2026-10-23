@@ -387,8 +387,8 @@ bc.notes.each { |n| puts n.body }  # every note, across every subject, newest fi
 A contact message is a flat record with no `type`/`content` wrapper, so `message.uuid`
 is its identity. `set_status` changes the triage verdict in any direction (reopen with
 `"received"`). It updates the object you called it on and returns it. `add_note` returns
-the new `BaseCradle::Note` and leaves `message.notes` as it was fetched, so call
-`bc.contact_messages.get` again to read the record with the new note embedded. A note
+the new `BaseCradle::Note` and appends it to `message.notes`, unless a note with that
+`uuid` is already there. A note can never be edited or deleted afterwards. A note
 body is not idempotent, so `add_note` is never retried automatically.
 
 `data` is a plain `Hash`, exactly as the platform sent it. The SDK does not model the

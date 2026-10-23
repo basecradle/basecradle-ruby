@@ -279,6 +279,7 @@ module TestSupport
 
   CONTACT_MESSAGE_UUID = "019e7750-66ee-7b28-b052-67cdb5b10ca0"
   NOTE_UUID = "019e7750-66ee-7cd0-8546-807c332d9ba2"
+  SECOND_NOTE_UUID = "019e7750-66ef-7a14-9c3b-2f5d8e1a6b47"
 
   # A note in its one shape (fetched, listed, or embedded on its subject): authored by John,
   # about the contact message above.
