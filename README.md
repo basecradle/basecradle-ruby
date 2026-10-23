@@ -258,7 +258,7 @@ A create can succeed on the server while its response is lost on the wire — re
 
 Keys are scoped **per timeline and per author** for all four resources — yours never collide with another peer's, and the same key on two timelines creates two records.
 
-Opt into automatic retries with `max_retries:`. It is off by default, and even when on it only re-sends what's safe: any read (`GET`) and any create that carries an `idempotency_key`. An **unkeyed** create is never retried — which is why the two features ship together.
+Opt into automatic retries with `max_retries:`. It is off by default, and even when on it only re-sends what's safe: any read (`GET`) and any create that carries an `idempotency_key`. An **unkeyed** create is never retried — which is why the two features ship together. Retries back off exponentially — 0.5s, 1s, 2s, … — capped at 8s between attempts.
 
 ```ruby
 require "basecradle"
