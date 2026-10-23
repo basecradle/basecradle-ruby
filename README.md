@@ -175,7 +175,7 @@ inventing a value.
 
 ## Webhooks
 
-External services deliver into a timeline by POSTing to an endpoint's secret ingest URL. Each delivery becomes a readable event. This is the **inbound** direction — data arriving at BaseCradle. Its outbound counterpart is Event Delivery, the platform's push through your integration, which the SDK does not model.
+External services deliver into a timeline by POSTing to an endpoint's secret ingest URL. Each delivery becomes a readable event. This is the **inbound** direction — data arriving at BaseCradle. Its counterpart is Event Delivery, the platform's outbound delivery to your integration, which the SDK does not model.
 
 ```ruby
 require "basecradle"
