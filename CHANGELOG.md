@@ -593,7 +593,7 @@ enrichments come with them — but three things that worked on a `Hash` no longe
   header. The platform stores **at most one record per key** (scoped per timeline + author;
   per timeline for authorless webhook endpoints), so a replayed keyed create returns the
   **original record** — no duplicate record, no second **Event Delivery** event, no task
-  activation. (Event Delivery is the platform's *outbound* push through your integration;
+  activation. (Event Delivery is the platform's *outbound* delivery to your integration;
   the webhook endpoints named above are the *inbound* feature the SDK models — opposite
   directions, different features.) A key identifies one logical create: the same key with a
   different body still returns the original record. Keys never expire and never appear in a
