@@ -163,35 +163,75 @@ class ContactMessagesTest < Minitest::Test
     assert_equal "received", message.status # a refused write leaves the record as fetched
   end
 
-  def test_add_note_posts_the_body_and_returns_the_note
+  def test_add_note_posts_the_body_returns_the_note_and_appends_it
     stub_request(:get, CONTACT_MESSAGE_URL)
-      .to_return(status: 200, body: { "contact_message" => contact_message_payload(notes: []) }.to_json)
+      .to_return(status: 200, body: { "contact_message" => contact_message_payload }.to_json)
     stub_request(:post, "#{CONTACT_MESSAGE_URL}/notes")
       .with(body: { "note" => { "body" => "Replied by email." } }.to_json)
-      .to_return(status: 201, headers: { "Location" => "/notes/#{NOTE_UUID}" },
-                 body: { "note" => note_payload(body: "Replied by email.") }.to_json)
+      .to_return(status: 201, headers: { "Location" => "/notes/#{SECOND_NOTE_UUID}" },
+                 body: { "note" => note_payload(uuid: SECOND_NOTE_UUID, body: "Replied by email.",
+                                                user: NOVA) }.to_json)
     message = @bc.contact_messages.get(CONTACT_MESSAGE_UUID)
 
     note = message.add_note(body: "Replied by email.")
 
     assert_instance_of BaseCradle::Note, note
+    assert_equal SECOND_NOTE_UUID, note.uuid
     assert_equal "Replied by email.", note.body
+    assert_equal "nova", note.user.handle
     assert_equal "contact_message", note.notable.type
-    assert_empty message.notes # the record as fetched — re-fetch to read it with the note
+    assert_equal [ NOTE_UUID, SECOND_NOTE_UUID ], message.notes.map(&:uuid) # appended, in order
   end
 
-  def test_a_blank_note_is_a_validation_error
+  def test_add_note_appends_to_a_record_fetched_with_no_notes
+    stub_request(:post, "#{CONTACT_MESSAGE_URL}/notes")
+      .to_return(status: 201, body: { "note" => note_payload }.to_json)
+
+    # An empty list, and a record built without the field at all.
+    [ contact_message_payload(notes: []), contact_message_payload.except("notes") ].each do |payload|
+      message = BaseCradle::ContactMessage.new(payload, client: @bc)
+
+      message.add_note(body: "Looks genuine. Replied by email.")
+
+      assert_equal [ NOTE_UUID ], message.notes.map(&:uuid)
+    end
+  end
+
+  def test_add_note_never_appends_a_note_already_present
+    message = BaseCradle::ContactMessage.new(contact_message_payload, client: @bc)
+    stub_request(:post, "#{CONTACT_MESSAGE_URL}/notes")
+      .to_return(status: 201, body: { "note" => note_payload }.to_json) # the uuid it already holds
+
+    note = message.add_note(body: "Looks genuine. Replied by email.")
+
+    assert_equal NOTE_UUID, note.uuid
+    assert_equal [ NOTE_UUID ], message.notes.map(&:uuid)
+  end
+
+  def test_add_note_leaves_the_callers_hash_untouched
+    payload = contact_message_payload
+    message = BaseCradle::ContactMessage.new(payload, client: @bc)
+    stub_request(:post, "#{CONTACT_MESSAGE_URL}/notes")
+      .to_return(status: 201, body: { "note" => note_payload(uuid: SECOND_NOTE_UUID) }.to_json)
+
+    message.add_note(body: "Looks genuine. Replied by email.")
+
+    assert_equal [ NOTE_UUID ], payload["notes"].map { |n| n["uuid"] }
+    assert_equal 2, message.notes.size
+  end
+
+  def test_a_blank_note_is_a_validation_error_and_appends_nothing
     stub_request(:get, CONTACT_MESSAGE_URL)
       .to_return(status: 200, body: { "contact_message" => contact_message_payload }.to_json)
     stub_request(:post, "#{CONTACT_MESSAGE_URL}/notes").to_return(
       status: 422, headers: { "Content-Type" => "application/problem+json" },
       body: problem("validation_failed", 422, errors: { "body" => [ "can't be blank" ] }).to_json
     )
+    message = @bc.contact_messages.get(CONTACT_MESSAGE_UUID)
 
-    error = assert_raises(BaseCradle::ValidationError) do
-      @bc.contact_messages.get(CONTACT_MESSAGE_UUID).add_note(body: "")
-    end
+    error = assert_raises(BaseCradle::ValidationError) { message.add_note(body: "") }
     assert_equal({ "body" => [ "can't be blank" ] }, error.errors)
+    assert_equal [ NOTE_UUID ], message.notes.map(&:uuid)
   end
 
   # The notes endpoint takes no Idempotency-Key, so a resend after a lost response could

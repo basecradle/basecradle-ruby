@@ -85,18 +85,23 @@ module BaseCradle
     end
 
     # Write a note about this contact message, and return it as a +Note+ (you are its
-    # author). Raises +ValidationError+ (422) for a blank body.
+    # author). A note can never be edited or deleted afterwards, by anyone. Raises
+    # +ValidationError+ (422) for a blank body, and appends nothing.
     #
-    # This object's own +notes+ is not touched: it is the record as fetched, and the API
-    # answers with the note alone. Fetch the contact message again
-    # (+bc.contact_messages.get(uuid)+) to read it with the new note embedded.
+    # The API answers with the note alone, in full, and this object appends it to its own
+    # +notes+ — unless a note with that +uuid+ is already there.
     #
     # Never auto-retried — the notes endpoint takes no +Idempotency-Key+, so a resend after
     # a lost response could write the note twice.
     def add_note(body:)
       response = require_client.request("POST", "/contact_messages/#{uuid}/notes",
                                         json: { "note" => { "body" => body } })
-      Note.new(response.fetch("note"), client: @client)
+      note = response.fetch("note")
+      notes = @data["notes"] || []
+      unless notes.any? { |existing| existing["uuid"] == note["uuid"] }
+        @data = @data.merge("notes" => notes + [ note ])
+      end
+      Note.new(note, client: @client)
     end
   end
 
