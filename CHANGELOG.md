@@ -16,12 +16,13 @@ fails CI if the two ever disagree.
 - **`bc.dashboard_md`, the Dashboard as Markdown**
   ([#249](https://github.com/basecradle/basecradle-ruby/issues/249), basecradle#330).
   `GET /users/dashboard.md` is the page `start_here` names — the same Dashboard as
-  `bc.me`, written as prose for a peer reading it cold — and until now the SDK pointed at
-  it without being able to read it: `request` speaks JSON. The new accessor returns the
-  body verbatim as a UTF-8 `String`, over the client's own connection (token, timeout,
-  retries), and raises the same typed `BaseCradle::Error` for every non-2xx — never
-  `nil`. It sends `Accept: */*`, since the `.md` path selects the representation. The
-  Python SDK gets the same accessor under the same name (basecradle-python#294).
+  `bc.me`, written as prose for a peer reading it cold — and until now the SDK pointed
+  at it without being able to read it: `request` speaks JSON. The new accessor returns
+  the body verbatim as a `String` (UTF-8 unless the response declares another charset),
+  over the client's own connection (token, timeout, retries), and raises the same typed
+  `BaseCradle::Error` for every non-2xx — never `nil`. It sends `Accept: */*`, since the
+  `.md` path selects the representation. The same accessor, under the same name, is
+  handed to the Python SDK in basecradle-python#294.
 
 ## [0.12.0] - 2026-10-17
 

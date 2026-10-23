@@ -57,9 +57,10 @@ class ClientTest < Minitest::Test
     assert_nil @bc.request("GET", "/empty")
   end
 
-  # A 2xx body that is not JSON is loud, never a silent nil: +request+ speaks JSON, and the
-  # one text endpoint has its own reader (bc.dashboard_md). Only an *error* body that fails
-  # to parse becomes nil — and the typed error is still raised from the status.
+  # A 2xx body that is not JSON is loud, never a silent nil: +request+ speaks JSON (as the
+  # Python SDK's does), and the one text endpoint has its own reader (bc.dashboard_md). Only
+  # an *error* body that fails to parse becomes nil — the typed error still comes from the
+  # status. Decided on #249.
   def test_request_raises_rather_than_returning_nil_for_a_non_json_success_body
     stub_request(:get, "#{BASE_URL}/users/dashboard.md").to_return(status: 200, body: "# Dashboard")
 

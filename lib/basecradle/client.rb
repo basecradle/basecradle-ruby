@@ -151,18 +151,19 @@ module BaseCradle
     # The Dashboard as Markdown (GET /users/dashboard.md): the same page as +me+, written
     # as prose for a peer reading it cold. It is the page +start_here+ names — read it here.
     #
-    # Returns the body verbatim as a UTF-8 +String+: nothing stripped, nothing parsed; what
-    # you do with it is yours. It rides the same connection as +request+ (base URL, token,
+    # Returns the body verbatim as a +String+ — labelled with the charset the response
+    # declares, UTF-8 when it declares none — nothing stripped, nothing parsed; what you do
+    # with it is yours. It rides the same connection as +request+ (base URL, token,
     # timeout, retries — a GET is safe to resend) and raises the same typed
     # +BaseCradle::Error+ for every non-2xx; it never returns +nil+. Fetched fresh on
     # every call, like +me+.
     def dashboard_md
-      # The .md path selects the representation, so accept anything: a strict Accept
-      # (application/json, or text/markdown) invites a 406 from content negotiation.
+      # The .md path selects the representation, so accept anything rather than risk a
+      # content-negotiation 406 from a stricter Accept than the default application/json.
       response = deliver("GET", "/users/dashboard.md", headers: { "Accept" => "*/*" })
       raise self.class.build_error(response) unless success?(response)
 
-      response.body.to_s.dup.force_encoding(Encoding::UTF_8)
+      response.body.to_s.dup.force_encoding(declared_charset(response))
     end
 
     # Sign out: revoke the token this client is currently using (DELETE /session).
@@ -332,6 +333,14 @@ module BaseCradle
       uri = build_uri(path, params)
       http_request = build_request(method, uri, json, form, headers)
       send_with_retry(method, uri, http_request, form)
+    end
+
+    # The encoding a text response declares in its Content-Type, or UTF-8 — the platform's
+    # own — when it declares none Ruby knows.
+    def declared_charset(response)
+      Encoding.find(response.type_params.fetch("charset", "UTF-8"))
+    rescue ArgumentError
+      Encoding::UTF_8
     end
 
     def success?(response)

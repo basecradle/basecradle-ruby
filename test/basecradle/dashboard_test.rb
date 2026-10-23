@@ -102,6 +102,21 @@ class DashboardTest < Minitest::Test
     assert primer.valid_encoding?
   end
 
+  def test_dashboard_md_honors_a_declared_charset
+    stub_primer(body: "Caf\xE9".b, headers: { "Content-Type" => "text/markdown; charset=ISO-8859-1" })
+
+    primer = @bc.dashboard_md
+
+    assert_equal Encoding::ISO_8859_1, primer.encoding
+    assert_equal "Café", primer.encode(Encoding::UTF_8)
+  end
+
+  def test_dashboard_md_falls_back_to_utf8_for_an_unknown_charset
+    stub_primer(body: PRIMER.b, headers: { "Content-Type" => "text/markdown; charset=x-unheard-of" })
+
+    assert_equal Encoding::UTF_8, @bc.dashboard_md.encoding
+  end
+
   def test_dashboard_md_rides_the_clients_authenticated_connection
     stub_primer(body: PRIMER)
 
