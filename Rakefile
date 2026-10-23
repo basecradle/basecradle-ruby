@@ -7,7 +7,7 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 
-# The offline default suite. Every test except the live spec drift-guard, which
+# The offline default suite. Every test except the live drift-guard, which
 # lives under test/live/ and opts back into the network explicitly.
 Rake::TestTask.new(:test) do |t|
   t.libs << "test"
@@ -17,9 +17,9 @@ Rake::TestTask.new(:test) do |t|
 end
 
 namespace :test do
-  # The spec drift-guard — the ONE networked test. Excluded from the default run
-  # (offline runs stay green); CI runs it as its own job. Populated by the
-  # drift-guard issue; defined here so `rake test:live` always exists.
+  # The drift-guard — the ONLY networked tests (one GET each of the public spec and
+  # API docs). Excluded from the default run (offline runs stay green); CI runs it as
+  # its own job.
   Rake::TestTask.new(:live) do |t|
     t.libs << "test"
     t.libs << "lib"

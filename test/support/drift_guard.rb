@@ -10,8 +10,14 @@ require "set"
 # the SDK the reverse guarantee: every live endpoint must appear in COVERAGE, or CI fails.
 # When the platform adds an endpoint, the live check fails → file an issue → add SDK
 # coverage → extend COVERAGE. That is the intended workflow.
+#
+# Endpoints are half of the surface. The other half is the error codes: a code the platform
+# documents with no typed class here reaches callers as a bare BaseCradle::Error, and no
+# endpoint check notices (binary_payload did exactly that). So the prose docs' Error Codes
+# table is held to BaseCradle::CODE_TO_ERROR the same way.
 module DriftGuard
   LIVE_SPEC_URL = "https://basecradle.com/docs/api.yaml"
+  LIVE_DOCS_URL = "https://basecradle.com/docs/api.md"
 
   # Every (METHOD, path) the live API exposes → the SDK feature that covers it. This is
   # the contract the drift-guard enforces, and documentation of what implements what.
@@ -82,6 +88,17 @@ module DriftGuard
 
   HTTP_METHODS = %w[get post put patch delete head options].freeze
 
+  ERROR_CODES_HEADING = "### Error Codes"
+  ERROR_CODES_HEADER_ROW = "| Code | Status | When |"
+  ERROR_CODES_SEPARATOR = /\A\|(?: *:?-+:? *\|){3}\z/
+  # A row: the code in backticks, optionally followed by its `{:#error-…}` anchor, then a
+  # three-digit status and a non-empty description. The description may hold an escaped
+  # `\|` but no bare pipe, so a row that grows a column fails rather than parsing.
+  ERROR_CODE_ROW = /\A\| `([a-z0-9_]+)`(?:\{:#[^}]*\})? \| [0-9]{3} \| (?:[^|\\\s]|\\.)(?:[^|\\]|\\.)* \|\z/
+  # The section ends at the next heading of the same or a higher level, outside a code fence.
+  SECTION_END = /\A\#{1,3} /
+  FENCE = /\A {0,3}(```|~~~)/
+
   module_function
 
   # Every (METHOD, path) pair in the spec. A constrained parser for the platform's
@@ -113,5 +130,77 @@ module DriftGuard
   # The endpoints the live API has that the coverage map doesn't account for.
   def uncovered(live_pairs, coverage)
     live_pairs - coverage.keys
+  end
+
+  # Every code in the prose docs' "### Error Codes" table.
+  #
+  # The prose docs, not the spec: the table is the platform's one complete list, while the
+  # spec's problem+json examples can only carry codes some contract test exercises.
+  #
+  # A constrained parser for the table's current shape. Unlike the spec, the table is
+  # hand-written, so the guards are stricter than endpoint_pairs's: every table line in the
+  # section must parse, or the whole read fails. A row reshaped so it no longer matches
+  # would otherwise drop out silently, and its code would never be checked.
+  def documented_error_codes(docs_text)
+    lines = docs_text.lines.map(&:rstrip)
+    starts = lines.each_index.select { |i| lines[i] == ERROR_CODES_HEADING }
+    unless starts.size == 1
+      raise "Found #{starts.size} '#{ERROR_CODES_HEADING}' headings in the docs, expected " \
+            "exactly 1 — the docs format has likely changed and this parser needs updating. " \
+            "Never ignore this."
+    end
+
+    # Every line in the section, outside a code fence, that holds a pipe — indented, or
+    # missing GFM's optional leading pipe. The row pattern is anchored at a leading `|`, so
+    # such a row fails loudly instead of being skipped. Collecting too much is the safe
+    # direction: an extra line can only fail the read, never pass it.
+    table_lines = []
+    in_fence = false
+    lines.drop(starts.first + 1).each do |line|
+      if line.match?(FENCE)
+        in_fence = !in_fence
+      elsif in_fence
+        next
+      elsif line.match?(SECTION_END)
+        break
+      elsif line.include?("|")
+        table_lines << line
+      end
+    end
+
+    # Format-drift guards: if the table changes shape, fail loudly here rather than letting
+    # the comparison pass vacuously or on a partial read.
+    if table_lines.size < 2 || table_lines.first != ERROR_CODES_HEADER_ROW
+      raise "The Error Codes table does not start with #{ERROR_CODES_HEADER_ROW.inspect} — " \
+            "the docs format has likely changed and this parser needs updating. Never ignore this."
+    end
+    unless table_lines[1].match?(ERROR_CODES_SEPARATOR)
+      raise "The Error Codes table's second line is #{table_lines[1].inspect}, not a separator " \
+            "row — the docs format has likely changed and this parser needs updating. " \
+            "Never ignore this."
+    end
+    codes = table_lines.drop(2).to_set do |line|
+      match = line.match(ERROR_CODE_ROW)
+      unless match
+        raise "Unparseable Error Codes row #{line.inspect} — the docs format has likely " \
+              "changed and this parser needs updating. Never ignore this."
+      end
+      match[1]
+    end
+
+    if codes.size < 15
+      raise "Parsed only #{codes.size} error codes from the docs — the docs format has " \
+            "likely changed and this parser needs updating. Never ignore this."
+    end
+    unless codes.include?("not_found")
+      raise "not_found is missing from the parsed error codes — the docs format has likely " \
+            "changed and this parser needs updating. Never ignore this."
+    end
+    codes
+  end
+
+  # The error codes the docs list that the SDK has no typed exception for.
+  def untyped(documented, registry)
+    documented - registry.keys
   end
 end
