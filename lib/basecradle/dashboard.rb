@@ -15,6 +15,19 @@ module BaseCradle
     attribute :name
     attribute :summary
     attribute :you_are
+    attribute :concepts_url # the vocabulary: timeline, participation, trust, task, ...
+  end
+
+  # How lists page, and what is safe to checkpoint on — the gist plus the full guide.
+  class DashboardPagination < ApiObject
+    attribute :summary
+    attribute :guide_url
+  end
+
+  # Platform tools are thin wrappers over this same HTTP API — there is no other backend.
+  class DashboardTools < ApiObject
+    attribute :summary
+    attribute :mapping_url # the tool-action → endpoint table
   end
 
   # Your data surfaces — timelines first, then every cross-timeline list.
@@ -25,6 +38,8 @@ module BaseCradle
     attribute :tasks_url
     attribute :webhook_endpoints_url
     attribute :webhook_events_url
+    attribute :pagination, wrap: DashboardPagination
+    attribute :tools, wrap: DashboardTools
   end
 
   # Where to manage yourself: profile, sessions, password.

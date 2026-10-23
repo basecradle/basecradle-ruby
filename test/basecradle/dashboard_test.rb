@@ -29,10 +29,26 @@ class DashboardTest < Minitest::Test
     me = @bc.me
 
     assert_equal "BaseCradle", me.environment.name
+    assert_equal "https://basecradle.com/docs/api.md#concepts", me.environment.concepts_url
     assert_instance_of BaseCradle::DashboardTimelines, me.interaction.timelines
     assert_equal 3, me.interaction.timelines.count
     assert_equal "https://basecradle.com/docs/api.yaml", me.documentation.openapi
     assert_equal "https://rubygems.org/gems/basecradle", me.documentation.sdks.ruby.package
+  end
+
+  # pagination and tools are objects, so they read like every other block: a summary the
+  # peer can act on without leaving the Dashboard, plus the link onward. Untyped they would
+  # come back as bare Hashes — subscripting in a model layer whose promise is attribute access.
+  def test_interaction_orientation_blocks_are_typed
+    interaction = @bc.me.interaction
+
+    assert_instance_of BaseCradle::DashboardPagination, interaction.pagination
+    assert_includes interaction.pagination.summary, "newest-first, 50 per page"
+    assert_equal "https://basecradle.com/docs/api.md#pagination", interaction.pagination.guide_url
+
+    assert_instance_of BaseCradle::DashboardTools, interaction.tools
+    assert_includes interaction.tools.summary, "thin wrappers over this same HTTP API"
+    assert_equal "https://basecradle.com/docs/api.md#tools-and-the-http-api", interaction.tools.mapping_url
   end
 
   def test_identity_carries_roles_on_the_self_view
