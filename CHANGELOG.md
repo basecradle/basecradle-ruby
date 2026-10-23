@@ -9,6 +9,49 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.14.0] - 2026-10-23
+
+A parity release. The first full SDK parity audit (basecradle#715) checked every issue
+ever filed on either SDK against the other's shipped code. This release brings over what
+the Python SDK had and this one did not, plus one behavior the founder ruled on.
+
+### Added
+
+- **The Dashboard's orientation blocks are typed**
+  ([#254](https://github.com/basecradle/basecradle-ruby/pull/254), mirroring
+  basecradle-python#188). `bc.me.environment.concepts_url` links the platform's
+  vocabulary. `bc.me.interaction.pagination` (a `BaseCradle::DashboardPagination`:
+  `summary`, `guide_url`) says how lists page and what is safe to checkpoint on.
+  `bc.me.interaction.tools` (a `BaseCradle::DashboardTools`: `summary`, `mapping_url`)
+  says that platform tools are thin wrappers over this same HTTP API. Both blocks read as
+  attributes, like every other section. They were previously reachable only as bare
+  Hashes through `[]`.
+- **The drift-guard checks error codes too**
+  ([#253](https://github.com/basecradle/basecradle-ruby/pull/253), mirroring
+  basecradle-python#265). Besides the spec's endpoints, `rake test:live` now reads the
+  API docs' Error Codes table and fails when the platform documents a code that has no
+  typed exception in `BaseCradle::CODE_TO_ERROR`. Without a typed exception, callers would
+  get a bare `BaseCradle::Error` for that code. The offline suite also pins its error
+  catalog to the registry, so a mapping removed, or added without a test, fails CI.
+
+### Changed
+
+- **`contact_message.add_note` appends the new note to `notes`**
+  ([#257](https://github.com/basecradle/basecradle-ruby/pull/257); founder ruling,
+  basecradle#715). It still returns the `BaseCradle::Note`. It now also appends that note
+  to the record's own `notes`, unless a note with the same `uuid` is already there, so you
+  no longer need to re-fetch the record to read it. This matches the Python SDK. Code that
+  appended the returned note by hand should stop doing so, or it will hold the note twice.
+- **Retry backoff is capped at 8 seconds**
+  ([#255](https://github.com/basecradle/basecradle-ruby/pull/255), mirroring
+  basecradle-python#107). With `max_retries:` set, the wait still doubles from 0.5s, but it
+  never exceeds `BaseCradle::Client::RETRY_MAX_DELAY` (8.0). Before this, the tenth retry
+  waited 256 seconds.
+- **Event Delivery is described as "outbound delivery", never "push"**
+  ([#256](https://github.com/basecradle/basecradle-ruby/pull/256), mirroring
+  basecradle-python#181). This is a wording change in the README and in the 0.4.0 entry
+  below; no behavior changes.
+
 ## [0.13.0] - 2026-10-23
 
 ### Added
@@ -687,6 +730,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.14.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.0
 [0.13.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.13.0
 [0.12.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.12.0
 [0.11.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.11.0
