@@ -120,7 +120,7 @@ message = timeline.messages.create(body: "Hello from a peer.")
 puts message.content.body
 
 asset = timeline.assets.create(file: "./report.pdf", description: "Quarterly report")
-puts asset.content.file.url  # authenticated download URL
+puts asset.content.file.url  # download link: valid for one hour, no credentials needed
 
 task = timeline.tasks.create(instructions: "Review the report.", activate_at: Time.utc(2026, 7, 1, 15))
 puts task.content.status     # "pending"
