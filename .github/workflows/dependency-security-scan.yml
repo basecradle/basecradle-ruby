@@ -1,0 +1,151 @@
+name: Dependency Security Scan
+
+# The clock on this repository's dependencies (#267, after basecradle/basecradle#750). Nothing
+# else audits them: CI never runs bundler-audit, and Dependabot's alerts stayed silent through
+# the advisories that left a Rails security release unnoticed in the core repository for 23
+# hours. This resolves what the Gemfile and the gemspec allow under every Ruby CI tests, every
+# day, audits it against a refreshed advisory database, and files what it finds as one [SECURITY] issue. An advisory
+# rated High or Critical carries needs-human, which pages @origin through the needs-human
+# alert stub (his ruling, 2026-11-05); anything lower carries needs-capital. No model is
+# called.
+#
+# The decisions live in script/dependency_security_scan.rb, with tests. This file only runs
+# it and applies its plan.
+
+on:
+  schedule:
+    - cron: "37 14 * * *" # daily, 14:37 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+concurrency:
+  group: dependency-security-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      # Not in the Gemfile, so a Gemfile that cannot resolve is a verdict the scan files
+      # rather than a bundle install that dies before it. Dependabot cannot see this pin; it
+      # is this repo's captain to bump. A stale one fails loudly, never quietly: an advisory
+      # database it cannot read is a scan that reached no verdict.
+      BUNDLER_AUDIT_VERSION: "0.9.3"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Every Ruby the CI matrix tests, because each resolves its own versions (no lockfile is
+      # committed): the scan resolves once per Ruby, with that Ruby's own bundler, and audits
+      # every resolution. A test keeps this list equal to ci.yml's matrix. No bundler-cache:
+      # the scan resolves the Gemfile itself, so a resolution that fails is filed. The last one
+      # set up is the one on PATH, which runs the scan and bundler-audit.
+      - name: Set up Ruby 3.2
+        id: ruby-3-2
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Set up Ruby 3.3
+        id: ruby-3-3
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Set up Ruby 3.4
+        id: ruby-3-4
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Install bundler-audit
+        run: gem install bundler-audit --version "$BUNDLER_AUDIT_VERSION" --no-document
+
+      # The issue and its label must come from the basecradle-ai App, never GITHUB_TOKEN:
+      # GitHub starts no workflow for an event GITHUB_TOKEN caused, so a needs-human label it
+      # applied would page nobody. Scoped to issues.
+      - name: Mint basecradle-ai App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.BASECRADLE_AI_APP_ID }}
+          private-key: ${{ secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}
+          permission-issues: write
+
+      - name: Read the open issues
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh issue list --state open --limit 1000 --json number,title,body,author > "$RUNNER_TEMP/open-issues.json"
+
+      - name: Scan
+        env:
+          RUBY_3_2: ${{ steps.ruby-3-2.outputs.ruby-prefix }}
+          RUBY_3_3: ${{ steps.ruby-3-3.outputs.ruby-prefix }}
+          RUBY_3_4: ${{ steps.ruby-3-4.outputs.ruby-prefix }}
+        run: >-
+          script/dependency-security-scan --open-issues "$RUNNER_TEMP/open-issues.json" --plan "$RUNNER_TEMP/plan.json"
+          --ruby "$RUBY_3_2" --ruby "$RUBY_3_3" --ruby "$RUBY_3_4"
+
+      # A label rides its message: on a new issue the body is the message; on an open one the
+      # comment is posted before the label is applied. The label is removed and re-added
+      # because adding one already present is no event, so no page. The body is written last:
+      # it carries what the next run compares against, so a step that fails midway is repeated
+      # tomorrow, never lost.
+      - name: File what the scan found
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          jq -c '.plans[]' "$RUNNER_TEMP/plan.json" | while read -r plan; do
+            number="$(jq -r '.number' <<<"$plan")"
+            jq -r '.body // ""' <<<"$plan" > "$RUNNER_TEMP/body.md"
+            jq -r '.comment // ""' <<<"$plan" > "$RUNNER_TEMP/comment.md"
+            case "$(jq -r '.action' <<<"$plan")" in
+              create)
+                gh issue create --title "$(jq -r '.title' <<<"$plan")" --body-file "$RUNNER_TEMP/body.md" --label "$(jq -r '.labels | join(",")' <<<"$plan")"
+                ;;
+              update)
+                gh issue comment "$number" --body-file "$RUNNER_TEMP/comment.md"
+                jq -r '.labels[]' <<<"$plan" | while read -r label; do
+                  gh issue edit "$number" --remove-label "$label"
+                  gh issue edit "$number" --add-label "$label"
+                done
+                gh issue edit "$number" --body-file "$RUNNER_TEMP/body.md"
+                ;;
+              close)
+                gh issue close "$number" --comment "$(cat "$RUNNER_TEMP/comment.md")"
+                ;;
+              *)
+                echo "Unknown plan action" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+      # The heartbeat answers one question: did this repository's dependency scan reach a
+      # verdict today? Pinged after the plan is applied, on a clean scan and on advisories
+      # alike, and withheld when the scanner could not reach a verdict: a check that could not
+      # answer never answers yes. A run that dies before this step pings nothing, and Better
+      # Stack pages when the day and the grace pass.
+      - name: Ping the basecradle-ruby Dependency Scan heartbeat
+        if: ${{ success() }}
+        env:
+          HEARTBEAT_URL: ${{ secrets.DEPENDENCY_SCAN_HEARTBEAT_URL }}
+        run: |
+          test -n "$HEARTBEAT_URL" || { echo "::error::No DEPENDENCY_SCAN_HEARTBEAT_URL in the repository's secrets, so the heartbeat cannot be pinged."; exit 1; }
+          if [ "$(jq -r '.verdict' "$RUNNER_TEMP/plan.json")" = "error" ]; then
+            echo "a scanner reached no verdict: the heartbeat is withheld"
+          else
+            curl -fsS --retry 3 --max-time 15 -o /dev/null "$HEARTBEAT_URL"
+          fi
+
+      # A run that found something, or could not look, is red.
+      - name: Fail unless main is clean
+        run: test "$(jq -r '.verdict' "$RUNNER_TEMP/plan.json")" = "clean"
