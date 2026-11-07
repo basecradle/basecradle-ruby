@@ -1,0 +1,77 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The daily dependency security scan (script/dependency_security_scan.rb): resolves what the
+# Gemfile and the gemspec allow today, under each Ruby it is given, audits every resolution
+# against a refreshed advisory database, and writes what to do on GitHub as a JSON plan. It never calls GitHub itself; the
+# workflow applies the plan (.github/workflows/dependency-security-scan.yml).
+#
+#   script/dependency-security-scan --open-issues open.json --plan plan.json [--ruby PREFIX ...]
+#
+# Each --ruby is a Ruby installation's prefix (setup-ruby's `ruby-prefix` output); its own
+# bundler resolves, since each Ruby resolves its own versions. With none, the `bundle` on PATH.
+#
+# Needs `bundle-audit` on PATH (the workflow installs it; it is not in the Gemfile, so a
+# Gemfile that cannot resolve is still reported, not fatal before the scan starts). Writes
+# nothing in the clone: the resolution goes to a temporary directory, so a developer's own
+# Gemfile.lock is never touched.
+require "json"
+require "open3"
+require "optparse"
+require "tmpdir"
+require_relative "dependency_security_scan"
+
+options = {}
+OptionParser.new do |parser|
+  parser.on("--open-issues FILE", "Open issues, from `gh issue list --json number,title,body`") { |file| options[:open_issues] = file }
+  parser.on("--plan FILE", "Where to write the plan") { |file| options[:plan] = file }
+  parser.on("--ruby PREFIX", "Also resolve with the Ruby installed at PREFIX") { |prefix| (options[:rubies] ||= []) << prefix }
+end.parse!
+abort "usage: script/dependency-security-scan --open-issues FILE --plan FILE" unless options[:open_issues] && options[:plan]
+
+root = File.expand_path("..", __dir__)
+bundles = options.fetch(:rubies, [ nil ]).map { |prefix| prefix ? File.join(prefix, "bin", "bundle") : "bundle" }
+advisories = []
+errors = {}
+
+scanners = {
+  "gem" => lambda do
+    Dir.mktmpdir("dependency-security-scan") do |tmp|
+      found = bundles.each_with_index.flat_map do |bundle, index|
+        dir = File.join(tmp, index.to_s)
+        Dir.mkdir(dir)
+
+        # --update resolves from scratch: without it, bundler starts from a Gemfile.lock lying
+        # in the clone, and would audit a developer's stale resolution instead of today's.
+        puts "Resolving with #{bundle}"
+        log, status = Open3.capture2e({ "BUNDLE_GEMFILE" => File.join(root, "Gemfile") },
+          bundle, "lock", "--update", "--lockfile", File.join(dir, "Gemfile.lock"), chdir: root)
+        puts log
+        DependencySecurityScan.check_resolution(status.exitstatus, bundle:)
+
+        # bundler-audit reads the lockfile from the directory it is given, and its ignore list
+        # from this repository's .bundler-audit.yml, when there is one.
+        report = File.join(dir, "bundler-audit.json")
+        log, status = Open3.capture2e("bundle-audit", "check", dir, "--update", "--format", "json", "--output", report,
+          "--config", File.join(root, ".bundler-audit.yml"), chdir: root)
+        puts log
+        DependencySecurityScan.parse_bundler_audit(File.exist?(report) ? File.read(report) : "", status.exitstatus)
+      end
+      DependencySecurityScan.merge(found)
+    end
+  end
+}
+
+scanners.each do |ecosystem, scanner|
+  advisories.concat(scanner.call)
+rescue StandardError => error
+  # Whatever stopped a scanner, it reached no verdict, and that is filed, never lost in a red run.
+  errors[ecosystem] = error.is_a?(DependencySecurityScan::ScanError) ? error.message : "#{error.class}: #{error.message}"
+end
+
+run_url = "#{ENV.fetch("GITHUB_SERVER_URL", "https://github.com")}/#{ENV.fetch("GITHUB_REPOSITORY", "local")}/actions/runs/#{ENV.fetch("GITHUB_RUN_ID", "0")}"
+scan = DependencySecurityScan.new(advisories:, errors:, ref: ENV.fetch("GITHUB_REF_NAME", "local"), sha: ENV.fetch("GITHUB_SHA", "local"), run_url:)
+plans = scan.plans(JSON.parse(File.read(options[:open_issues])))
+
+File.write(options[:plan], JSON.pretty_generate("verdict" => scan.verdict, "plans" => plans.map(&:to_h)))
+puts "verdict: #{scan.verdict} (#{advisories.size} advisories, #{errors.size} scan errors, #{plans.size} GitHub actions planned)"
