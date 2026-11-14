@@ -27,7 +27,7 @@ class DependencySecurityScanWorkflowTest < Minitest::Test
     mint = steps.find { |step| step["id"] == "app-token" }
 
     assert_match %r{\Aactions/create-github-app-token@}, mint["uses"]
-    assert_equal({ "client-id" => "${{ secrets.BASECRADLE_AI_CLIENT_ID }}",
+    assert_equal({ "app-id" => "${{ secrets.BASECRADLE_AI_APP_ID }}",
                    "private-key" => "${{ secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}",
                    "permission-issues" => "write" }, mint["with"])
   end

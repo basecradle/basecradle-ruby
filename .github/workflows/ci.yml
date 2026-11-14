@@ -140,8 +140,7 @@ jobs:
   # project's own quick-start suggests. Nothing bumps this for us: dependabot's
   # github-actions ecosystem reads `uses:` refs and cannot see an `env:` version, so
   # the pin is this repo's captain to bump, on the occasion of any release-pipeline
-  # work or a workflow feature the pinned linter does not know — and on any bump,
-  # check whether .github/actionlint.yaml's ignores can go. shellcheck, by
+  # work or a workflow feature the pinned linter does not know. shellcheck, by
   # contrast, is the runner image's: it moves when the image does, which can surface a
   # new finding on a PR that changed nothing — accepted, the same bet `ubuntu-latest`
   # already is everywhere else in this file.
