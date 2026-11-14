@@ -1,0 +1,15 @@
+# actionlint checks a popular action's inputs against a data set compiled into the
+# binary. actions/create-github-app-token deprecated `app-id` for `client-id` at
+# v3.3.0 (#270), but the data set in the pinned 1.7.12 — and on actionlint's main
+# when this was written — still lists `app-id` as required and does not know
+# `client-id`. So the scan's mint step draws two false findings, and each is ignored
+# here by its exact message, for that one file only: any other input error on that
+# step, or anywhere else, still fails the job.
+#
+# Remove this file when an actionlint release knows `client-id` and the pin in
+# ci.yml moves to it.
+paths:
+  .github/workflows/dependency-security-scan.yml:
+    ignore:
+      - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
+      - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
