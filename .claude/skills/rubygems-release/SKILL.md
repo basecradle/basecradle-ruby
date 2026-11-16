@@ -131,3 +131,11 @@ V=X.Y.Z  # the release tag, without its v
 ```
 
 `gem "basecradle", "$V"` activates exactly that version or raises, so a pass names the version installed. The chain is `&&`, not `set -e`, which a calling `if` or `||` silently switches off; the subshell keeps the trap and `$d` out of your shell. A version not on the registry fails the install (`Could not find a valid gem`) — but so does one published moments ago that the index has not caught up with: wait a few minutes and re-run before reading a failure as a publish that never happened. Record version + URL in the closing comment.
+
+Then confirm the release carries its sigstore attestation. If signing fails, release-gem logs `WARNING: Failed to push with attestation, retrying without attestation.` and pushes the gem unattested, and the job stays green. 0.14.2 shipped that way (#286), so a green run is no proof:
+
+```bash
+ruby -rjson -rnet/http -e 'v = ARGV[0]; r = Net::HTTP.get_response(URI("https://rubygems.org/api/v1/attestations/basecradle-#{v}.json")); abort "basecradle #{v}: HTTP #{r.code}, the registry does not know this version yet" unless r.is_a?(Net::HTTPSuccess); n = JSON.parse(r.body).size; abort "basecradle #{v} has NO attestation" if n.zero?; puts "basecradle #{v}: #{n} attestation(s)"' "$V"
+```
+
+Run it after the pinned install passes. An HTTP error then means the registry is still catching up: wait and re-run. An empty list means the gem went out unsigned. Signing happens before the push, so the attestation arrives with the gem, never after it (0.14.0 and 0.14.1 carry theirs). Report it on the release issue. The version is immutable, so the fix ships with the next release.
