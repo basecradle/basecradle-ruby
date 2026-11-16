@@ -95,6 +95,13 @@ git push origin ":refs/tags/vWRONG" && git tag -d vWRONG
 
 If a prerelease is *genuinely* what is wanted, this guard is not to be worked around with a hand-cut tag: widen its regex in the same PR that plans the prerelease, so the decision is recorded where the check is.
 
+## When the publish job is red, read whether it pushed
+
+A red publish job does not mean nothing was published. `release-gem` runs steps after the push. Start with the publish job's log, at the **Run release rake task** step:
+
+- **It logged `Successfully registered gem: basecradle (X.Y.Z)`** → the version is on RubyGems, and RubyGems versions are immutable. Do not re-trigger and do not move the tag. RubyGems refuses a second push of the same version, and a moved tag would stop naming the commit that was published. Verify the gem live (**Verifying live**, below) and read which later step failed. Usually it is *Wait for release to propagate* (`gem exec rubygems-await`), which resolves its tools at release time. 0.14.1 went red there because a new Bundler broke rubygems-await (rubygems/release-gem#46, #287). Report that kind of defect upstream. Switching the step off (`await-release: false`) is a decision for the capital, not a fix.
+- **It did not log that line** → nothing was published. Fix the cause, then re-trigger as below.
+
 ## Re-triggering after a fixed workflow bug
 
 The workflow fix is a captain PR; once it merges, the capital moves the tag to the fixed commit. Fetch first — nothing in the chain does it for you, and re-tagging a stale checkout re-tags the *unfixed* commit, whereupon the run fails identically and the fix looks like it did not work:
