@@ -66,6 +66,12 @@ jobs:
         with:
           ruby-version: "3.4"
 
+      - name: Set up Ruby 4.0
+        id: ruby-4-0
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+
       - name: Install bundler-audit
         run: gem install bundler-audit --version "$BUNDLER_AUDIT_VERSION" --no-document
 
@@ -90,9 +96,10 @@ jobs:
           RUBY_3_2: ${{ steps.ruby-3-2.outputs.ruby-prefix }}
           RUBY_3_3: ${{ steps.ruby-3-3.outputs.ruby-prefix }}
           RUBY_3_4: ${{ steps.ruby-3-4.outputs.ruby-prefix }}
+          RUBY_4_0: ${{ steps.ruby-4-0.outputs.ruby-prefix }}
         run: >-
           script/dependency-security-scan --open-issues "$RUNNER_TEMP/open-issues.json" --plan "$RUNNER_TEMP/plan.json"
-          --ruby "$RUBY_3_2" --ruby "$RUBY_3_3" --ruby "$RUBY_3_4"
+          --ruby "$RUBY_3_2" --ruby "$RUBY_3_3" --ruby "$RUBY_3_4" --ruby "$RUBY_4_0"
 
       # A label rides its message: on a new issue the body is the message; on an open one the
       # comment is posted before the label is applied. The label is removed and re-added

@@ -15,7 +15,7 @@ git switch -c <branch>
 bundle exec rake    # rubocop + the offline suite; run it before every push
 ```
 
-CI is the 3.2 · 3.3 · 3.4 matrix plus `actionlint`; the local run is the fast first check, not a substitute.
+CI is the 3.2 · 3.3 · 3.4 · 4.0 matrix plus `actionlint`; the local run is the fast first check, not a substitute.
 
 ## 2. Proof runs — when the rigor asks for them
 
