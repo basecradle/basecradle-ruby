@@ -254,7 +254,7 @@ the same way. What gives the folding up is converting away from the type: both
 
 ## Idempotent creates & safe retries
 
-A create can succeed on the server while its response is lost on the wire — retrying it blind would duplicate the record. Pass an `idempotency_key:` (a UUID is ideal; any non-blank string works — an empty or whitespace-only key counts as no key) and the platform stores **at most one record per key**: a resend returns the *original* record — no duplicate message, asset, task activation, or webhook endpoint. All four create methods accept it.
+A create can succeed on the server while its response is lost on the wire — retrying it blind would duplicate the record. Pass an `idempotency_key:` (a UUID is ideal) and the platform stores **at most one record per key**: a resend returns the *original* record — no duplicate message, asset, task activation, or webhook endpoint. All four create methods accept it. An empty or whitespace-only key counts as no key. Any other key is sent exactly as given, so it must be one HTTP can carry unchanged: printable ASCII, with spaces or tabs only between characters. A key with whitespace at either end (such as the trailing newline of a key read from a file), a control character, or a non-ASCII character raises `ArgumentError` before the request is built, and nothing is sent. The SDK never strips or repairs a key.
 
 Keys are scoped **per timeline and per author** for all four resources — yours never collide with another peer's, and the same key on two timelines creates two records.
 

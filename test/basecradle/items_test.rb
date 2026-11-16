@@ -287,13 +287,110 @@ class ItemsTest < Minitest::Test
     end
   end
 
-  # The edges of "blank": surrounding whitespace leaves a key a key, and so does a key
-  # with invalid bytes (it must not raise out of the check).
-  def test_a_key_is_blank_only_when_it_is_nil_empty_or_whitespace
-    [ nil, "", " ", "\t\n" ].each { |key| assert BaseCradle.blank_idempotency_key?(key), key.inspect }
-    [ KEY, " k ", " \xff".dup.force_encoding("UTF-8") ].each do |key|
+  # The edges of "blank": only ASCII's six whitespace characters make a key blank. NUL is
+  # not whitespace (Ruby's +strip+ would drop it), so a NUL key is not blank, and neither is
+  # a key with surrounding whitespace or invalid bytes (it must not raise out of the check).
+  def test_a_key_is_blank_only_when_it_is_nil_empty_or_ascii_whitespace
+    [ nil, "", " ", "\t\n", " \r\n\v\f " ].each { |key| assert BaseCradle.blank_idempotency_key?(key), key.inspect }
+    [ KEY, " k ", "\0", " \0 ", "\u00a0", " \xff".dup.force_encoding("UTF-8") ].each do |key|
       refute BaseCradle.blank_idempotency_key?(key), key.inspect
     end
+  end
+
+  # --- a key HTTP cannot carry is the caller's error (#295) ---------------------------------
+  #
+  # One meaning in every SDK: a key that is not blank must be sendable exactly as given —
+  # printable ASCII, with spaces or tabs only between characters. Anything else raises
+  # ArgumentError before any request is built. No POST is stubbed in these tests, so a
+  # request that went out would fail them twice over: WebMock refuses it, and
+  # +assert_nothing_posted+ checks.
+
+  # Rule 2: a sendable key goes out exactly as given, inner spaces and tabs included.
+  def test_a_sendable_key_is_sent_exactly_as_given
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages")
+      .to_return(status: 201, body: { "message" => message_payload }.to_json)
+    keys = [ "!~", "order 42\tretry", "a  b", "019f5e48-87c6-7d1e-9a48-7a701e8bd5bb".b ]
+
+    keys.each { |key| timeline.messages.create(body: "hi", idempotency_key: key) }
+
+    keys.each do |key|
+      assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages") do |req|
+        req.headers["Idempotency-Key"] == key
+      end
+    end
+  end
+
+  # Rule 3, whitespace: a key with whitespace at either end — the trailing newline of a key
+  # read from a file or an environment variable — is refused, never stripped. Net::HTTP
+  # sent a padded key as given (a hop strips it, so the platform stored a different key)
+  # and raised its own unlabelled ArgumentError on a CR or LF.
+  def test_a_key_with_whitespace_at_either_end_raises_and_sends_nothing
+    timeline = fetch_timeline
+
+    [ " key-1 ", "key-1 ", "\tkey-1", "key-1\n", "key-1\r\n", "\vkey-1" ].each do |key|
+      error = assert_raises(ArgumentError, key.inspect) do
+        timeline.messages.create(body: "hi", idempotency_key: key)
+      end
+      assert_match(/\Aidempotency_key cannot be sent as an HTTP header: /, error.message)
+      assert_match(/Nothing was sent\.\z/, error.message)
+    end
+    assert_nothing_posted
+  end
+
+  # Rule 3, control characters: NUL is not blank (it used to be, via +strip+, and the
+  # create went out unkeyed), and every other control character is refused too, though
+  # Net::HTTP sent them unchanged.
+  def test_a_key_with_a_control_character_raises_and_sends_nothing
+    timeline = fetch_timeline
+    keys = [ "\0", "\0\0", "a\0b", "a\x01b", "a\x1fb", "a\x7fb", "a\rb", "a\nb", "a\vb", "a\fb" ]
+
+    keys.each do |key|
+      error = assert_raises(ArgumentError, key.inspect) do
+        timeline.messages.create(body: "hi", idempotency_key: key)
+      end
+      assert_includes error.message, "is a control character", key.inspect
+    end
+    assert_nothing_posted
+  end
+
+  # Rule 3, non-ASCII: Net::HTTP sent the raw bytes. A non-ASCII character and an invalid
+  # byte are both refused, and the message says where.
+  def test_a_non_ascii_key_raises_and_sends_nothing
+    timeline = fetch_timeline
+
+    error = assert_raises(ArgumentError) { timeline.messages.create(body: "hi", idempotency_key: "clé-1") }
+    assert_equal 'idempotency_key cannot be sent as an HTTP header: "é" at index 2 is not ASCII. ' \
+                 "A key must be printable ASCII, with spaces or tabs only between characters. " \
+                 "Nothing was sent.", error.message
+
+    [ "a\xffb".dup.force_encoding("UTF-8"), "a\xffb".b ].each do |key|
+      error = assert_raises(ArgumentError) { timeline.messages.create(body: "hi", idempotency_key: key) }
+      assert_includes error.message, "at index 1 is not ASCII"
+    end
+    assert_nothing_posted
+  end
+
+  # The check lives in the one header builder, so every create refuses the same keys. An
+  # asset upload checks the key before it opens the file: a missing path cannot hide the
+  # key's error, and a bad key opens nothing.
+  def test_every_create_refuses_a_key_http_cannot_carry
+    timeline = fetch_timeline
+    creates = {
+      "messages" => ->(key) { timeline.messages.create(body: "hi", idempotency_key: key) },
+      "assets" => ->(key) { timeline.assets.create(file: "/nonexistent/report.pdf", idempotency_key: key) },
+      "tasks" => lambda { |key|
+        timeline.tasks.create(instructions: "Review", activate_at: "2026-07-01T15:00:00Z", idempotency_key: key)
+      },
+      "webhook_endpoints" => ->(key) { timeline.webhook_endpoints.create(description: "CI", idempotency_key: key) }
+    }
+
+    creates.each do |name, create|
+      [ " key-1 ", "\0", "clé-1" ].each do |key|
+        assert_raises(ArgumentError, "#{name} #{key.inspect}") { create.call(key) }
+      end
+    end
+    assert_nothing_posted
   end
 
   def test_asset_create_sends_the_idempotency_key_header
@@ -353,6 +450,10 @@ class ItemsTest < Minitest::Test
   end
 
   private
+
+  def assert_nothing_posted
+    assert_not_requested(:post, /#{Regexp.escape(BASE_URL)}/)
+  end
 
   def fetch_task
     stub_request(:get, "#{BASE_URL}/tasks/#{TASK_UUID}")

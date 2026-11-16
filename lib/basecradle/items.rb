@@ -208,12 +208,15 @@ module BaseCradle
     # platform stores at most one asset per key, so a resend returns the original asset
     # instead of uploading a second one. See +BaseCradle::Client#max_retries+.
     def create(file:, description: nil, idempotency_key: nil)
+      # The key is checked before the file is opened: a bad key opens nothing, and a
+      # missing path cannot hide the key's error.
+      headers = BaseCradle.idempotency_headers(idempotency_key)
       filename, io, opened = open_upload(file)
       parts = [ [ "asset[file]", io, { filename: filename } ] ]
       parts << [ "asset[description]", description ] unless description.nil?
       begin
         response = @client.request("POST", "/timelines/#{@timeline_uuid}/assets", form: parts,
-                                   headers: BaseCradle.idempotency_headers(idempotency_key))
+                                   headers: headers)
       ensure
         io.close if opened
       end
