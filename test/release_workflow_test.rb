@@ -215,19 +215,16 @@ class ReleaseWorkflowTest < Minitest::Test
                  "teach this test which scope and why."
   end
 
-  # Every action the publish job runs is pinned to a full commit SHA (#284). The job holds
-  # `id-token: write`, so whatever a `uses:` ref points at when a tag is pushed runs with the
-  # power to mint a RubyGems push credential for this gem — and a tag or branch is a ref its
-  # owner can move. `@v1` on setup-ruby and release-gem is each project's *branch*. A SHA is
-  # the only ref nobody can move under us. Dependabot bumps the SHA and its `# vX.Y.Z`
-  # comment, so the pin is kept current rather than frozen.
+  # Every action the publish job runs is pinned to a full commit SHA (#284). Why the pin
+  # exists is said once, in release.yml's comment above the job's steps; this holds the form.
   #
-  # Forty hex characters, because GitHub resolves a *short* SHA too, and an attacker can
-  # publish a branch or tag named like one. A local action (`./…`) or a `docker://` image
-  # would need its own rule; neither is used here, so either fails and asks for one.
+  # Forty lowercase hex characters: GitHub resolves a *short* SHA too, and anyone can name a
+  # branch or tag after one, so only the full canonical form is a ref nobody can move. A local
+  # action (`./…`) or a `docker://` image would need its own rule; neither is used here, so
+  # either fails and asks for one.
   def test_every_action_in_the_publish_job_is_pinned_to_a_full_commit_sha
     unpinned = Array(jobs.fetch(publish_key)["steps"]).filter_map { |step| step["uses"] }
-                 .grep_v(%r{\A[\w.-]+/[\w.-]+(/[^@]+)?@\h{40}\z})
+                 .grep_v(%r{\A[\w.-]+/[\w.-]+(/[^@]+)?@[0-9a-f]{40}\z})
 
     assert_empty unpinned,
                  "the #{publish_key} job runs #{unpinned.join(', ')} by a movable ref. That " \
