@@ -215,6 +215,26 @@ class ReleaseWorkflowTest < Minitest::Test
                  "teach this test which scope and why."
   end
 
+  # Every action the publish job runs is pinned to a full commit SHA (#284). Why the pin
+  # exists is said once, in release.yml's comment above the job's steps; this holds the form.
+  #
+  # Forty lowercase hex characters: GitHub resolves a *short* SHA too, and anyone can name a
+  # branch or tag after one, so only the full canonical form is a ref nobody can move. A local
+  # action (`./…`) or a `docker://` image would need its own rule; neither is used here, so
+  # either fails and asks for one.
+  def test_every_action_in_the_publish_job_is_pinned_to_a_full_commit_sha
+    unpinned = Array(jobs.fetch(publish_key)["steps"]).filter_map { |step| step["uses"] }
+                 .grep_v(%r{\A[\w.-]+/[\w.-]+(/[^@]+)?@[0-9a-f]{40}\z})
+
+    assert_empty unpinned,
+                 "the #{publish_key} job runs #{unpinned.join(', ')} by a movable ref. That " \
+                 "job can mint a RubyGems push credential for this gem, so a tag or branch " \
+                 "moved by the action's owner — or by whoever compromises it — runs with " \
+                 "the power to publish. Pin each to its full 40-character commit SHA with " \
+                 "the version in a comment (`uses: owner/repo@<sha> # vX.Y.Z`); Dependabot " \
+                 "keeps that form current."
+  end
+
   private
     def workflow_path
       File.join(WORKFLOWS, FILENAME)

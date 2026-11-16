@@ -125,12 +125,20 @@ jobs:
     permissions:
       contents: write
       id-token: write
+    # Every action in this job is pinned to a full commit SHA, never a tag or branch (#284).
+    # The job can mint a RubyGems push credential for `basecradle`, so whatever a moving ref
+    # points at when a tag is pushed runs with the power to publish this gem — and `@v1` on
+    # setup-ruby and release-gem is each project's *branch*, not a tag. RubyGems' own action
+    # READMEs recommend the SHA pin. Dependabot's github-actions entry bumps the SHA and
+    # rewrites the version comment, and its PRs merge under the fleet auto-merge policy.
+    # release-gem must stay at v1.4.1 or later: earlier releases recurse forever against
+    # RubyGems 4.1+ (rubygems/release-gem#42), which a newer Ruby here would bundle.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "3.4"
           bundler-cache: true
-      - uses: rubygems/release-gem@v1
+      - uses: rubygems/release-gem@7f9650160c1a4e7989fdc9855807bdbd421d8b6b # v1.4.1
