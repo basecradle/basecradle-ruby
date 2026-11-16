@@ -9,6 +9,49 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.14.1] - 2026-11-16
+
+A patch release. It carries one behavior fix brought over from the Python SDK and a
+corrected description of an asset's download link. No method is added or removed, and no
+calling code needs to change.
+
+### Fixed
+
+- **An empty `idempotency_key` sends no header**
+  ([#260](https://github.com/basecradle/basecradle-ruby/pull/260), mirroring Python
+  0.16.0). Passing `idempotency_key: ""` to `timeline.messages.create`,
+  `timeline.assets.create`, `timeline.tasks.create` or `timeline.webhook_endpoints.create`
+  used to send an empty `Idempotency-Key` header. An empty string now counts as no key,
+  the same as `nil`: no header is sent. Retries are unchanged: a create without a key was
+  never auto-retried, and an empty key was already treated that way.
+
+### Changed
+
+- **An asset's `file.url` is described as a one-hour link**
+  ([#266](https://github.com/basecradle/basecradle-ruby/pull/266)). Since 2026-11-06 the
+  platform's download link is valid for one hour from the response that carried it, and
+  needs no credentials while it is valid. The README's example called it an
+  authenticated download URL, and the `BaseCradle::AssetFile` documentation called it a
+  dereferenceable one. Both now say what it is: treat the link like a secret, do not store
+  it, and read the asset again for a fresh one. The SDK's behavior is unchanged; it returns `url` as the platform sends
+  it.
+- **Ruby 4.0 is tested in CI**
+  ([#280](https://github.com/basecradle/basecradle-ruby/pull/280)). The gemspec already
+  allowed it (`>= 3.2`). Every change is now tested on Ruby 3.2, 3.3, 3.4 and 4.0. The
+  floor stays at 3.2.
+
+### Security
+
+- **The release workflow's publish job runs actions pinned to commit SHAs**
+  ([#285](https://github.com/basecradle/basecradle-ruby/pull/285)). The publish job is
+  the one that can push this gem to RubyGems. It used `actions/checkout`,
+  `ruby/setup-ruby` and `rubygems/release-gem` by tag or branch, so a change to one of
+  those references upstream would have run in it. Each is now pinned to a full commit
+  SHA, and 0.14.1 is the first release published that way. The rehearsal job before it
+  and the CI jobs still use version tags; that is tracked in
+  [#286](https://github.com/basecradle/basecradle-ruby/issues/286). Nothing in the gem
+  itself changes.
+
 ## [0.14.0] - 2026-10-23
 
 A parity release. The first full SDK parity audit (basecradle#715) checked every issue
@@ -730,6 +773,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.14.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.1
 [0.14.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.0
 [0.13.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.13.0
 [0.12.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.12.0
