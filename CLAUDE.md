@@ -85,7 +85,7 @@ Releases publish to RubyGems via [Trusted Publishing](https://guides.rubygems.or
 - **Captain vs. capital split.** The captain's (this repo's) release responsibility **ends at the version bump + changelog**. From there the capital takes over (who tags is settled: the capital — @origin, 2026-10-22, recorded on #240): it tags, runs the pipeline, approves the `rubygems` env-gate via its operator credential, verifies the live install, and closes the release issue.
 - **The workflow filename (`release.yml`) and environment name (`rubygems`) are contractual** — they must match the registered trusted publisher verbatim, or the publish 403s.
 - **Release PRs never carry a closing keyword.** A merged release PR would auto-close the issue *before* the publish is verified, and an issue that closed before its work was proven live is a lie.
-- **Close the release issue by hand, only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` is the real test — the RubyGems JSON API caches and lags. Record version + URL in the closing comment.
+- **Close the release issue by hand, only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` **pinned to the version the release tag names** is the real test — the RubyGems JSON API caches and lags, and an unpinned install proves only that the version the registry calls newest installs (recipe: the `rubygems-release` skill). Record version + URL in the closing comment.
 
 ## The Daily Dependency Security Scan
 
