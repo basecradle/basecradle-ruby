@@ -1,0 +1,41 @@
+# TEMPORARY proof for #297, reverted before this PR is armed. Runs the publish job's
+# attestation check exactly as release.yml does, on a real runner, with a planted fake key.
+name: proof-attestation-check
+on: pull_request
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: "3.4"
+      - name: Install the bundle fresh
+        run: |
+          bundle config set --local path vendor/bundle
+          bundle install
+      - name: Plant a fake push key the way configure-rubygems-credentials exports it
+        run: |
+          for k in RUBYGEMS_API_KEY GEM_HOST_API_KEY BUNDLE_GEM__PUSH_KEY; do echo "$k=rubygems_fakeproofkey0000" >> "$GITHUB_ENV"; done
+      - name: The key is in the job's environment, and env -i keeps it out
+        run: |
+          test "$GEM_HOST_API_KEY" = rubygems_fakeproofkey0000
+          env -i PATH="$PATH" ruby -e 'leaked = ENV.keys.grep(/KEY|TOKEN/); abort "leaked: #{leaked}" unless leaked.empty?; puts "env under env -i: #{ENV.keys.sort.join(" ")}"'
+      - name: A signed release passes (0.14.1)
+        run: |
+          GITHUB_REF_NAME=v0.14.1
+          version="${GITHUB_REF_NAME#v}"
+          env -i PATH="$PATH" ruby script/check-release-attestation basecradle "$version"
+      - name: An unsigned release fails (0.14.2)
+        run: |
+          set +e
+          GITHUB_REF_NAME=v0.14.2
+          version="${GITHUB_REF_NAME#v}"
+          env -i PATH="$PATH" ruby script/check-release-attestation basecradle "$version"
+          status=$?
+          echo "exit status: $status"
+          test "$status" = 1
