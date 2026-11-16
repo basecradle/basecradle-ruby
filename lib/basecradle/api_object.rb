@@ -16,21 +16,66 @@ module BaseCradle
     data["uuid"] || data.fetch("content")["uuid"]
   end
 
+  # The whitespace a blank key is made of: ASCII's six (space, tab, LF, VT, FF, CR), as the
+  # one meaning every SDK shares names them (#295). NUL is not whitespace, though Ruby's
+  # +strip+ removes it: a key made of NUL is not blank, it is a key HTTP cannot carry.
+  IDEMPOTENCY_KEY_WHITESPACE = " \t\n\v\f\r"
+  private_constant :IDEMPOTENCY_KEY_WHITESPACE
+
   # A key the platform cannot deduplicate on is no key at all: +nil+, an empty string, or
-  # a string of only whitespace — the platform reads the header with Rails' +presence+,
-  # which takes a blank value for none. Both places that read a key (the header a create
-  # sends, and whether a request may be retried) ask this one question (#288). +scrub+
-  # keeps a key with invalid bytes a key, rather than raising out of +strip+.
+  # a string of only ASCII whitespace — the platform reads the header with Rails'
+  # +presence+, which takes a blank value for none. Both places that read a key (the
+  # header a create sends, and whether a request may be retried) ask this one question
+  # (#288). It reads bytes, so a key with invalid bytes is answered rather than raised on.
+  # A key that is not blank is not always one HTTP can carry; that is the second question,
+  # +unsendable_idempotency_key_reason+.
   def self.blank_idempotency_key?(key)
-    key.to_s.scrub.strip.empty?
+    key.to_s.b.delete(IDEMPOTENCY_KEY_WHITESPACE).empty?
+  end
+
+  # Why HTTP cannot carry this key exactly as given, or +nil+ when it can (#295). A key is
+  # sent as given and never repaired, so it must be a header value no hop can change:
+  # printable ASCII (+!+ to +~+), with spaces or tabs allowed only between those
+  # characters. Net::HTTP refuses only CR and LF; it sends NUL, every other control
+  # character and non-ASCII bytes, and a hop that receives whitespace at either end of a
+  # value strips it, so the platform would store a different key. The one meaning every
+  # SDK shares refuses all of them, not whatever one HTTP library tolerates. A string in
+  # an encoding that is not ASCII-compatible (UTF-16, say) is refused as a whole: its
+  # bytes are not the characters it holds.
+  def self.unsendable_idempotency_key_reason(key)
+    unless key.encoding.ascii_compatible?
+      return "its encoding, #{key.encoding}, is not ASCII-compatible; pass an ASCII or UTF-8 string"
+    end
+
+    key.each_char.with_index do |char, index|
+      return "#{char.inspect} at index #{index} is not ASCII" unless char.ascii_only?
+      unless char == " " || char == "\t" || (0x21..0x7E).cover?(char.ord)
+        return "#{char.inspect} at index #{index} is a control character"
+      end
+    end
+    return unless key.start_with?(" ", "\t") || key.end_with?(" ", "\t")
+
+    "it begins or ends with whitespace, which a header value cannot"
   end
 
   # The per-request headers carrying an optional idempotency key — +nil+ when no key was
   # given (so a create without a key sends no +Idempotency-Key+ header, and is never
-  # auto-retried). A blank key is no key, the same as +nil+. Shared by the four
-  # content-create methods.
+  # auto-retried). A blank key is no key, the same as +nil+. Any other key HTTP cannot
+  # carry exactly as given raises ArgumentError here, before any request is built: it is
+  # the caller's error, never stripped or repaired. A key that is not a String is read as
+  # its +to_s+, and that string is both the one checked and the one sent. Shared by the
+  # four content-create methods, so the header name and the check live in one place.
   def self.idempotency_headers(key)
-    blank_idempotency_key?(key) ? nil : { "Idempotency-Key" => key }
+    return nil if blank_idempotency_key?(key)
+
+    key = key.to_s
+    reason = unsendable_idempotency_key_reason(key)
+    if reason
+      raise ArgumentError, "idempotency_key cannot be sent as an HTTP header: #{reason}. A key " \
+                           "must be printable ASCII, with spaces or tabs only between characters. Nothing was sent."
+    end
+
+    { "Idempotency-Key" => key }
   end
 
   # A read-only, wire-exact view of one API JSON object.
