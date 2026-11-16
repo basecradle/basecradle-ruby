@@ -131,3 +131,11 @@ V=X.Y.Z  # the release tag, without its v
 ```
 
 `gem "basecradle", "$V"` activates exactly that version or raises, so a pass names the version installed. The chain is `&&`, not `set -e`, which a calling `if` or `||` silently switches off; the subshell keeps the trap and `$d` out of your shell. A version not on the registry fails the install (`Could not find a valid gem`) — but so does one published moments ago that the index has not caught up with: wait a few minutes and re-run before reading a failure as a publish that never happened. Record version + URL in the closing comment.
+
+Then confirm the release carries its sigstore attestation. If signing fails, release-gem logs `WARNING: Failed to push with attestation, retrying without attestation.` and pushes the gem unattested, and the job stays green. 0.14.2 shipped that way (#286), so a green run is no proof:
+
+```bash
+curl -fsS "https://rubygems.org/api/v1/attestations/basecradle-$V.json" | ruby -rjson -e 'n = JSON.parse($stdin.read).size; abort "basecradle #{ARGV[0]} has NO attestation" if n.zero?; puts "#{n} attestation(s)"' "$V"
+```
+
+An empty list is a defect in the publish job, not the registry lagging; 0.14.0 and 0.14.1 carry attestations. Report it on the release issue. The version is immutable, so the fix ships with the next release.

@@ -265,7 +265,7 @@ class ReleaseWorkflowTest < Minitest::Test
   # has actuated the gate.
   def test_the_publish_job_installs_its_bundle_before_release_gem
     steps = Array(jobs.fetch(publish_key)["steps"])
-    install = steps.index { |step| step["run"].to_s.match?(/\Abundle install\b/) }
+    install = steps.index { |step| step["run"].to_s.match?(/^bundle install\b/) }
     release = steps.index { |step| step["uses"].to_s.split("@").first == PUBLISH_ACTION }
 
     assert install, "the #{publish_key} job installs no bundle, and #{PUBLISH_ACTION} runs " \
@@ -274,6 +274,29 @@ class ReleaseWorkflowTest < Minitest::Test
     assert_operator install, :<, release,
                     "the #{publish_key} job installs its bundle after #{PUBLISH_ACTION}, which " \
                     "has already run `bundle exec rake release` by then."
+  end
+
+  # The publish's bundle stays out of Ruby's system gems. release-gem signs the gem with
+  # `gem exec sigstore-cli` in an unbundled environment, which sees every system gem; the
+  # bundle's json 3.1 installed there broke sigstore's protobug 0.1.0, and release-gem fell
+  # back to pushing 0.14.2 with no attestation while the job stayed green (#286). A
+  # checkout-relative `path`, set before the install, is what kept 0.14.1's signer clean.
+  def test_the_publish_job_installs_its_bundle_inside_the_checkout
+    run = Array(jobs.fetch(publish_key)["steps"]).map { |step| step["run"].to_s }
+                                                 .find { |text| text.match?(/^bundle install\b/) }
+    flunk "the #{publish_key} job installs no bundle" unless run
+
+    lines = run.lines.map(&:strip)
+    install = lines.index { |line| line.match?(/\Abundle install\b/) }
+    path = lines.index { |line| line.match?(%r{\Abundle config set --local path (?![/~$])\S+\z}) }
+
+    assert path && path < install,
+           "the #{publish_key} job's `bundle install` is not preceded by `bundle config set " \
+           "--local path` to a directory inside the checkout. Installed into Ruby's system " \
+           "gems, the bundle is visible to release-gem's sigstore signer, and a gem it carries " \
+           "can break signing — release-gem then pushes the gem unattested on a green job."
+    refute_match(/--system\b/, lines[install],
+                 "the #{publish_key} job's `bundle install` asks for system gems")
   end
 
   private
