@@ -43,6 +43,9 @@ class ReleaseWorkflowTest < Minitest::Test
   # edit that actually 403s — must not.
   PUBLISH_ACTION = "rubygems/release-gem"
 
+  # What fails the publish job when the gem went out without its sigstore attestation (#297).
+  ATTESTATION_CHECK = "script/check-release-attestation"
+
   # The publish job's permissions, exhaustively — what it grants today, not a floor.
   #
   # `id-token: write` is the whole of this gem's authentication: it is what
@@ -307,6 +310,48 @@ class ReleaseWorkflowTest < Minitest::Test
     assert_empty envs.grep(/\ABUNDLE_PATH/),
                  "the #{publish_key} job sets the bundle's path in `env:`, where it overrides " \
                  "the checkout path the install step sets"
+  end
+
+  # A release that loses its sigstore attestation must be a red job (#297). release-gem
+  # pushes the gem unsigned whenever signing fails, and its own step stays green: 0.14.2 went
+  # out that way (#286). The check is script/check-release-attestation, whose verdicts
+  # test/release_attestation_test.rb pins; this pins that the publish job runs it, and how:
+  #
+  # - after release-gem, since before it there is nothing on the registry to read;
+  # - with no `if:` and no step-level `continue-on-error`, either of which can keep a failure
+  #   off the job (`continue-on-error` reports `success` however the step exits);
+  # - under `env -i` with only PATH and HOME, because the RubyGems push key release-gem minted
+  #   is still in the job's environment, and the check needs no credential to read a public
+  #   endpoint;
+  # - for this gem by its gemspec name, and for the version the tag names.
+  def test_the_publish_job_checks_the_attestation_after_release_gem
+    steps = Array(jobs.fetch(publish_key)["steps"])
+    release = steps.index { |step| step["uses"].to_s.split("@").first == PUBLISH_ACTION }
+    checks = steps.each_index.select { |index| steps[index]["run"].to_s.include?(ATTESTATION_CHECK) }
+
+    assert_equal 1, checks.size,
+                 "the #{publish_key} job must run #{ATTESTATION_CHECK} exactly once (found " \
+                 "#{checks.size}). Without it, a release that release-gem pushed unsigned stays " \
+                 "a green job, and the version can never be signed afterwards."
+    check = steps[checks.first]
+
+    assert_operator checks.first, :>, release,
+                    "#{ATTESTATION_CHECK} runs before #{PUBLISH_ACTION}, when there is nothing " \
+                    "on the registry to read yet."
+    assert_nil check["if"], "the attestation check carries `if: #{check['if']}`, which can skip it"
+    refute check["continue-on-error"],
+           "the attestation check carries `continue-on-error`, so it reports success however " \
+           "it exits, and an unsigned release stays green"
+
+    gem_name = Gem::Specification.load(File.expand_path("../basecradle.gemspec", __dir__)).name
+    commands = check["run"].lines.map(&:strip).reject(&:empty?)
+    assert_equal [ %(version="${GITHUB_REF_NAME#v}"),
+                   %(env -i PATH="$PATH" HOME="$HOME" ruby #{ATTESTATION_CHECK} #{gem_name} "$version") ],
+                 commands,
+                 "the attestation check must run as written: under `env -i`, so the RubyGems push " \
+                 "key still in the job's environment never reaches it; with plain `ruby`, so the " \
+                 "bundle is not loaded; for #{gem_name}, at the version the tag names"
+    assert File.exist?(File.expand_path("../#{ATTESTATION_CHECK}", __dir__)), "#{ATTESTATION_CHECK} is missing"
   end
 
   private

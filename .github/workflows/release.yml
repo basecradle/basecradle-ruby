@@ -163,3 +163,22 @@ jobs:
           bundle config set --local path vendor/bundle
           bundle install
       - uses: rubygems/release-gem@5c53f5308233b7c0f47411f0471b3faae6fa57b2 # v1.4.2
+      # A release that lost its attestation fails here (#297). When signing fails for any
+      # reason, release-gem pushes the gem unsigned and its step stays green: 0.14.2 went out
+      # that way (#286). This step cannot un-publish anything — a RubyGems version is
+      # immutable — but it turns that miss into a red job at the moment of the release.
+      #
+      # It holds no credential. release-gem's cleanup clears only git's credential cache: the
+      # RubyGems push key it minted stays in this job's environment (RUBYGEMS_API_KEY,
+      # GEM_HOST_API_KEY, BUNDLE_GEM__PUSH_KEY), beside the runner's OIDC request token. So
+      # the check runs under `env -i`, with only PATH (to find this job's Ruby) and HOME. It
+      # needs nothing else: the attestations endpoint is public. Plain `ruby`, never `bundle
+      # exec`, so the bundle installed above is not loaded either.
+      #
+      # The version is the tag's, which the rehearsal has already proved is the version this
+      # tree built and a plain X.Y.Z. It is read from the environment, never interpolated into
+      # the script: a tag name is attacker-supplied.
+      - name: The release must carry its attestation
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          env -i PATH="$PATH" HOME="$HOME" ruby script/check-release-attestation basecradle "$version"
