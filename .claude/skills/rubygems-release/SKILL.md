@@ -110,4 +110,13 @@ A pending (or permanent) trusted publisher is **not** consumed by a failed run.
 
 ## Verifying live
 
-Close the release issue by hand **only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` is the real test — the RubyGems JSON API caches and lags. Record version + URL in the closing comment.
+Close the release issue by hand **only after the gem is verified live** at https://rubygems.org/gems/basecradle. A clean `gem install` pinned to the released version is the real test — the RubyGems JSON API caches and lags. Pin it: an unpinned `gem install basecradle` installs whichever version the registry calls newest, so it succeeds cleanly when the release never landed, or when the registry names an older version as newest while the new one is published (PyPI did exactly that to basecradle-harness for 15 hours — basecradle/basecradle-noc#1514, #277). Set `V` to the version the release tag names, never one derived from a local tree: a clone that has not pulled the bump derives the *previous* release, which is already live, and passes. Into a throwaway gem home:
+
+```bash
+V=X.Y.Z  # the release tag, without its v
+( d="$(mktemp -d)" && trap 'rm -rf "$d"' EXIT &&
+  GEM_HOME="$d" GEM_PATH="$d" gem install basecradle -v "$V" --no-document &&
+  GEM_HOME="$d" GEM_PATH="$d" ruby -e 'gem "basecradle", ARGV[0]; require "basecradle"; puts "basecradle #{BaseCradle::VERSION} is live"' "$V" )
+```
+
+`gem "basecradle", "$V"` activates exactly that version or raises, so a pass names the version installed. The chain is `&&`, not `set -e`, which a calling `if` or `||` silently switches off; the subshell keeps the trap and `$d` out of your shell. A version not on the registry fails the install (`Could not find a valid gem`) — but so does one published moments ago that the index has not caught up with: wait a few minutes and re-run before reading a failure as a publish that never happened. Record version + URL in the closing comment.
