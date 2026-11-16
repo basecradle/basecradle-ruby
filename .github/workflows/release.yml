@@ -20,9 +20,11 @@ jobs:
   rehearsal:
     name: rehearsal (build + clean install)
     runs-on: ubuntu-latest
-    # Pinned to full commit SHAs like the publish job's (#286): the capital approves the gate
-    # on this job's word, so the `gem` and `ruby` that run its guards must not come from a
-    # ref someone else can move. The reason is said once, above the publish job's steps.
+    # Pinned to full commit SHAs like the publish job's, and restoring no cache (#286): the
+    # capital approves the gate on this job's word, so the `gem` and `ruby` that run its
+    # guards must not come from a ref someone else can move, nor from a bundle a CI job saved
+    # on main. No step here uses the bundle anyway (`gem build`, `gem install`, `ruby -e`).
+    # Why each rule exists is said once, above the publish job's steps.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +67,6 @@ jobs:
       - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "3.2"
-          bundler-cache: true
       - name: Build the gem
         run: gem build basecradle.gemspec
       # Nothing derives the *version* from the tag: `gem build` above, and `rake

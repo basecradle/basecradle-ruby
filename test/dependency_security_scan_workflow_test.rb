@@ -79,7 +79,7 @@ class DependencySecurityScanWorkflowTest < Minitest::Test
   # commit SHA (#286), held by the same rule as the release's (test/support/action_pins.rb).
   def test_every_action_in_the_scan_is_pinned_to_a_full_commit_sha
     workflow["jobs"].each do |key, job|
-      unpinned = ActionPins.unpinned(job["steps"])
+      unpinned = ActionPins.unpinned(job)
 
       assert_empty unpinned, ActionPins.message(key, unpinned, "That job holds the capital's App private key")
     end

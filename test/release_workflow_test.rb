@@ -226,7 +226,7 @@ class ReleaseWorkflowTest < Minitest::Test
   # ref under the rehearsal can fake that green as surely as one under the publish can push.
   def test_every_action_in_every_release_job_is_pinned_to_a_full_commit_sha
     jobs.each do |key, job|
-      unpinned = ActionPins.unpinned(job["steps"])
+      unpinned = ActionPins.unpinned(job)
       holder =
         if key == publish_key
           "That job can mint a RubyGems push credential for this gem"
@@ -238,27 +238,42 @@ class ReleaseWorkflowTest < Minitest::Test
     end
   end
 
-  # The publish job restores no cache (#286). A tag-ref run can restore a cache saved on
-  # main, and ci.yml saves the Ruby 3.4 bundle there from jobs whose actions float, so a
-  # restored `vendor/bundle` is code someone else can move, loaded by `bundle exec rake
-  # release` while the push credential is live. setup-ruby's `bundler-cache` is the one cache
-  # this workflow could use; `actions/cache` in any form would be the same hole, so both fail.
-  def test_the_publish_job_restores_no_cache
-    steps = Array(jobs.fetch(publish_key)["steps"])
-    caching = steps.select do |step|
-      step.dig("with", "bundler-cache") || step["uses"].to_s.start_with?("actions/cache")
-    end
+  # No job in the release restores a cache (#286). A tag-ref run can restore a cache saved on
+  # main, and ci.yml saves Ruby bundles there from jobs whose actions float, so a restored
+  # `vendor/bundle` is code someone else can move: in the publish, loaded by `bundle exec
+  # rake release` while the push credential is live; in the rehearsal, beside the guards the
+  # capital approves the gate on. setup-ruby's `bundler-cache` is the one cache this workflow
+  # could use; `actions/cache` in any form would be the same hole, so both fail.
+  def test_no_release_job_restores_a_cache
+    jobs.each do |key, job|
+      caching = Array(job["steps"]).select do |step|
+        [ true, "true" ].include?(step.dig("with", "bundler-cache")) || step["uses"].to_s.start_with?("actions/cache")
+      end
 
-    assert_empty caching.map { |step| step["uses"] },
-                 "the #{publish_key} job restores a cache. A tag-ref run can restore one saved " \
-                 "on main by a CI job whose actions float, and `bundle exec rake release` then " \
-                 "loads it while holding the push credential — no SHA pin in this job comes " \
-                 "into it. Resolve the bundle fresh instead (a `bundle install` step before " \
-                 "release-gem, which never installs the bundle itself)."
-    assert(steps.any? { |step| step["run"].to_s.match?(/\Abundle install\b/) },
-           "the #{publish_key} job installs no bundle, and release-gem runs `bundle exec rake " \
-           "release` without one — the Rakefile's rubocop task is a Gemfile gem, so the " \
-           "publish would die after the gate has been actuated.")
+      assert_empty caching.map { |step| step["uses"] },
+                   "the #{key} job restores a cache. A tag-ref run can restore one saved on " \
+                   "main by a CI job whose actions float, so the bundle it loads is code someone " \
+                   "else can move — beside the push credential in the publish, beside the gate's " \
+                   "guards in the rehearsal — and no SHA pin in this file comes into it. Resolve " \
+                   "the bundle fresh instead."
+    end
+  end
+
+  # With no cache, the publish installs its own bundle, and must do it before release-gem:
+  # the action runs `bundle exec rake release` but never `bundle install`, and the Rakefile's
+  # rubocop task is a Gemfile gem. Missing or misplaced, the publish dies after the capital
+  # has actuated the gate.
+  def test_the_publish_job_installs_its_bundle_before_release_gem
+    steps = Array(jobs.fetch(publish_key)["steps"])
+    install = steps.index { |step| step["run"].to_s.match?(/\Abundle install\b/) }
+    release = steps.index { |step| step["uses"].to_s.split("@").first == PUBLISH_ACTION }
+
+    assert install, "the #{publish_key} job installs no bundle, and #{PUBLISH_ACTION} runs " \
+                    "`bundle exec rake release` without one — the publish would die after the " \
+                    "gate has been actuated."
+    assert_operator install, :<, release,
+                    "the #{publish_key} job installs its bundle after #{PUBLISH_ACTION}, which " \
+                    "has already run `bundle exec rake release` by then."
   end
 
   private

@@ -13,9 +13,11 @@
 module ActionPins
   PINNED = %r{\A[\w.-]+/[\w.-]+(/[^@]+)?@[0-9a-f]{40}\z}
 
-  # The `uses:` refs among +steps+ that are not pinned to a full commit SHA.
-  def self.unpinned(steps)
-    Array(steps).filter_map { |step| step["uses"] }.grep_v(PINNED)
+  # The `uses:` refs in +job+ that are not pinned to a full commit SHA: each step's action,
+  # and the job's own `uses:` when it calls a reusable workflow, which has no steps here and
+  # runs with whatever secrets the job hands it.
+  def self.unpinned(job)
+    [ job["uses"], *Array(job["steps"]).map { |step| step["uses"] } ].compact.grep_v(PINNED)
   end
 
   # The failure message, said once: why the pin matters, given what +holder+ holds.
