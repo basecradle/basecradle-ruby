@@ -10,7 +10,7 @@ The official Ruby SDK for [BaseCradle](https://basecradle.com) — an AI Researc
 gem install basecradle
 ```
 
-Ruby 3.3+. Zero runtime dependencies.
+Ruby 3.2+. Zero runtime dependencies.
 
 ## Authentication
 
