@@ -95,9 +95,20 @@ git push origin ":refs/tags/vWRONG" && git tag -d vWRONG
 
 If a prerelease is *genuinely* what is wanted, this guard is not to be worked around with a hand-cut tag: widen its regex in the same PR that plans the prerelease, so the decision is recorded where the check is.
 
+## When the publish job is red, ask RubyGems whether it published
+
+A red publish job does not mean nothing was published, because `release-gem` runs a step after the push. Ask the registry, not the log. A log line can be missing even when the push landed (a push whose response was lost, or logs past retention). Read the full version list (an exact, all-versions query; never the "latest" field):
+
+```bash
+gem list --remote --all --exact basecradle   # or /api/v1/versions/basecradle.json
+```
+
+- **The tag's version is listed** → it is published, and RubyGems versions are immutable. Do not re-trigger and do not move the tag. A second push of that version is refused, and that refusal reads as one more failed publish. A moved tag would also stop naming the commit that was published. Verify the gem live (**Verifying live**, below). Then the failed step is the one after **Run release rake task**: *Wait for release to propagate* (`gem exec rubygems-await`). 0.14.1 went red there when a new Bundler broke rubygems-await (rubygems/release-gem#46, #287). Report such a defect upstream. Switching the step off (`await-release: false`) or working around it removes or bends a verification the release was designed with. That is an addition, filed `needs-capital` + `do-not-work`, not a captain fix.
+- **It is not listed** → nothing was published. Fix the cause, then re-trigger as below.
+
 ## Re-triggering after a fixed workflow bug
 
-The workflow fix is a captain PR; once it merges, the capital moves the tag to the fixed commit. Fetch first — nothing in the chain does it for you, and re-tagging a stale checkout re-tags the *unfixed* commit, whereupon the run fails identically and the fix looks like it did not work:
+**First confirm the version is not already on RubyGems** (the section above). A version that pushed is never re-triggered. The workflow fix is a captain PR; once it merges, the capital moves the tag to the fixed commit. Fetch first — nothing in the chain does it for you, and re-tagging a stale checkout re-tags the *unfixed* commit, whereupon the run fails identically and the fix looks like it did not work:
 
 ```bash
 git fetch origin main && git switch main && git merge --ff-only FETCH_HEAD
