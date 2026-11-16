@@ -7,6 +7,7 @@ require "uri"
 require_relative "contact_messages"
 require_relative "dashboard"
 require_relative "errors"
+require_relative "header_value"
 require_relative "items"
 require_relative "rendering"
 require_relative "serialization"
@@ -78,13 +79,20 @@ module BaseCradle
     # dedupes keyed creates, so a resend can't duplicate the record). An unkeyed +POST+ is
     # never retried, whatever this is set to — and a blank key (empty, or only ASCII
     # whitespace) is no key. Retries back off exponentially, capped at RETRY_MAX_DELAY seconds.
+    #
+    # The token is sent exactly as given, so it must be one HTTP can carry: a token with a
+    # control character (the trailing newline of one read from a file or an env file), a
+    # non-ASCII character, or whitespace at either end raises ArgumentError here, before
+    # any request. The SDK never strips or repairs it, and the error never shows it.
     def initialize(token = nil, base_url: DEFAULT_BASE_URL, timeout: DEFAULT_TIMEOUT,
                    max_retries: DEFAULT_MAX_RETRIES)
       resolved = token || ENV.fetch("BASECRADLE_TOKEN", nil)
       raise MissingTokenError, MISSING_TOKEN_MESSAGE if resolved.nil? || resolved.empty?
       self.class.refuse_negative_max_retries(max_retries)
 
-      @token = resolved
+      # The one string checked is the one sent: "Bearer #{@token}" interpolates it as is.
+      @token = resolved.to_s
+      refuse_unsendable_token(@token)
       @base_url = base_url
       @timeout = timeout
       @max_retries = max_retries
@@ -299,6 +307,30 @@ module BaseCradle
       "bc.base_url to name the connection itself. Marshal and YAML reach a client " \
       "through anything holding one, models included, so dump the wire record rather " \
       "than the object: model.to_h holds no client."
+    end
+
+    # Refuse a token HTTP cannot carry exactly as given, when the client is built (#301).
+    # The idempotency key's rule (BaseCradle.header_value_defect), applied to the token: the
+    # caller's error, never stripped or repaired. Without it, a token read with its trailing
+    # newline built a client that failed every request with Net::HTTP's own ArgumentError,
+    # and every other such token was sent: a hop strips whitespace at either end, and the
+    # platform received the rest as given. The message says where the fault is and never
+    # shows the token, not even the character at fault.
+    def refuse_unsendable_token(token)
+      index, reason = BaseCradle.header_value_defect(token)
+      return if reason.nil?
+
+      where = index.nil? ? reason : "the character at index #{index} #{reason}"
+      # A token ending in CR or LF is the newline a file or an env file keeps (CRLF from
+      # Windows too); for any other fault, the token's source has to say. Read as bytes, so
+      # a token in an encoding that is not ASCII-compatible is answered rather than raised on.
+      hint = if token.b.end_with?("\n", "\r")
+        "A token read from a file or an env file often keeps its trailing newline."
+      else
+        "Check where the token was read from."
+      end
+      raise ArgumentError, "The token cannot be sent in an HTTP header: #{where}. It is not shown " \
+                           "here, as it is a credential. #{hint} Pass it exactly as minted."
     end
 
     # Record what the mint response said about the credential just issued. Private: only
