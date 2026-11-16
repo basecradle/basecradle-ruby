@@ -273,6 +273,29 @@ class ItemsTest < Minitest::Test
     end
   end
 
+  # A whitespace-only key is blank, and the platform reads a blank header as no key (Rails'
+  # +presence+), so it is no key here too: no header goes on the wire (#288).
+  def test_create_with_a_whitespace_only_key_sends_no_idempotency_header
+    timeline = fetch_timeline
+    stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages")
+      .to_return(status: 201, body: { "message" => message_payload }.to_json)
+
+    [ " ", "\t", " \r\n " ].each { |key| timeline.messages.create(body: "hi", idempotency_key: key) }
+
+    assert_requested(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/messages", times: 3) do |req|
+      !req.headers.key?("Idempotency-Key")
+    end
+  end
+
+  # The edges of "blank": surrounding whitespace leaves a key a key, and so does a key
+  # with invalid bytes (it must not raise out of the check).
+  def test_a_key_is_blank_only_when_it_is_nil_empty_or_whitespace
+    [ nil, "", " ", "\t\n" ].each { |key| assert BaseCradle.blank_idempotency_key?(key), key.inspect }
+    [ KEY, " k ", " \xff".dup.force_encoding("UTF-8") ].each do |key|
+      refute BaseCradle.blank_idempotency_key?(key), key.inspect
+    end
+  end
+
   def test_asset_create_sends_the_idempotency_key_header
     timeline = fetch_timeline
     stub_request(:post, "#{BASE_URL}/timelines/#{TIMELINE_UUID}/assets")

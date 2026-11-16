@@ -195,6 +195,20 @@ class ClientTest < Minitest::Test
     assert_requested(:post, "#{BASE_URL}/x", times: 1)
   end
 
+  # A whitespace-only key is no key — the platform cannot dedupe on it — so the POST it
+  # rides is as unsafe to resend as an unkeyed one (#288).
+  def test_never_retries_a_post_whose_key_is_only_whitespace
+    bc = BaseCradle::Client.new(FAKE_TOKEN, max_retries: 3)
+    stub_request(:post, "#{BASE_URL}/x").to_timeout
+
+    stub_method(bc, :backoff, nil) do
+      assert_raises(BaseCradle::APIConnectionError) do
+        bc.request("POST", "/x", json: { "a" => 1 }, headers: { "Idempotency-Key" => " \t " })
+      end
+    end
+    assert_requested(:post, "#{BASE_URL}/x", times: 1)
+  end
+
   def test_backoff_doubles_from_the_base_and_caps_at_the_max
     bc = BaseCradle::Client.new(FAKE_TOKEN)
     slept = []

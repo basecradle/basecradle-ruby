@@ -76,8 +76,8 @@ module BaseCradle
     # off. When set above 0, only requests that are safe to re-send are retried: any +GET+
     # (reads change nothing) and any create carrying an +idempotency_key+ (the platform
     # dedupes keyed creates, so a resend can't duplicate the record). An unkeyed +POST+ is
-    # never retried, whatever this is set to. Retries back off exponentially, capped at
-    # RETRY_MAX_DELAY seconds.
+    # never retried, whatever this is set to — and a blank key (empty, or only whitespace)
+    # is no key. Retries back off exponentially, capped at RETRY_MAX_DELAY seconds.
     def initialize(token = nil, base_url: DEFAULT_BASE_URL, timeout: DEFAULT_TIMEOUT,
                    max_retries: DEFAULT_MAX_RETRIES)
       resolved = token || ENV.fetch("BASECRADLE_TOKEN", nil)
@@ -323,12 +323,12 @@ module BaseCradle
 
     # A request is safe to auto-retry only when re-sending it can't create a duplicate: a
     # +GET+ (reads change nothing), or any request carrying an +Idempotency-Key+ (the
-    # platform dedupes keyed creates). An unkeyed write is never retried.
+    # platform dedupes keyed creates). An unkeyed write is never retried, and a blank key
+    # (empty or only whitespace) is no key: the platform cannot dedupe on it.
     def retryable?(method, http_request)
       return true if method.to_s.upcase == "GET"
 
-      key = http_request["Idempotency-Key"]
-      !(key.nil? || key.empty?)
+      !BaseCradle.blank_idempotency_key?(http_request["Idempotency-Key"])
     end
 
     # Build and send an authenticated request; returns the raw Net::HTTPResponse, whatever
