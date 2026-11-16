@@ -26,9 +26,11 @@ require "yaml"
 # runs on every PR and every push to main rather than a few tags a year, and deleting the
 # block left a green tree. The two tests after the gate's hold it.
 #
-# The last pin is not about the gate either: the supported Ruby versions are kept by hand in
-# three places — the gemspec's floor, the test matrix here, and the README's "Ruby X.Y+" —
-# with nothing holding them equal (#281; basecradle-python#336 found its own copies apart).
+# The last pin is not about the gate either: the gemspec's Ruby floor, the test matrix here
+# and the README's "Ruby X.Y+" are kept by hand with nothing holding them equal (#281;
+# basecradle-python#336 found its own copies apart). The floor has other hand-kept copies
+# this test does not hold — ci.yml's lint job, release.yml's rehearsal, .rubocop.yml's
+# TargetRubyVersion, and CLAUDE.md — so a floor raise still moves those by hand.
 #
 # The limit of this file: it proves ci.yml is internally consistent. The other half of the
 # gate — that the "Protect main" ruleset requires this workflow's context and no other —
@@ -284,18 +286,19 @@ class CiWorkflowTest < Minitest::Test
   # all three in one PR — the scan's setups follow the matrix by their own test.
   def test_the_matrix_and_the_readme_start_at_the_gemspecs_ruby_floor
     requirement = Gem::Specification.load(GEMSPEC).required_ruby_version
-    operator, floor = requirement.requirements.first
     assert_equal [ ">=" ], requirement.requirements.map(&:first),
                  "basecradle.gemspec's required_ruby_version is #{requirement}; this test reads " \
                  "a single `>=` floor. Teach it the new shape before changing that one."
+    floor = requirement.requirements.first.last
 
-    matrix = Array(jobs.dig("test", "strategy", "matrix", "ruby-version")).map { |v| Gem::Version.new(v.to_s) }
-    refute_empty matrix, "ci.yml's test job names no ruby-version matrix"
-    below = matrix.reject { |version| requirement.satisfied_by?(version) }
-    assert_empty below, "ci.yml tests Ruby #{below.join(', ')}, below the gemspec's #{operator} #{floor}: " \
-                        "the gem refuses to install there. Drop it from the matrix, or lower the floor."
-    assert_equal floor, matrix.min, "ci.yml's lowest Ruby is #{matrix.min}, but the gemspec's floor is " \
-                                    "#{floor}: the floor the gem promises is a Ruby nothing tests."
+    entries = Array(jobs.dig("test", "strategy", "matrix", "ruby-version"))
+    refute_empty entries, "ci.yml's test job names no ruby-version matrix"
+    unquoted = entries.reject { |entry| entry.is_a?(String) }
+    assert_empty unquoted, "ci.yml's matrix has unquoted Rubies #{unquoted.inspect}: YAML reads 3.10 " \
+                           "as the number 3.1, so setup-ruby gets the wrong Ruby. Quote every entry."
+    lowest = entries.map { |entry| Gem::Version.new(entry) }.min
+    assert_equal floor, lowest, "ci.yml's lowest Ruby is #{lowest}, but the gemspec's floor is #{floor}: " \
+                                "below it the gem refuses to install, above it the promised floor goes untested."
 
     stated = File.read(README)[/^Ruby (\d+(?:\.\d+)*)\+/, 1]
     assert stated, "README.md no longer states a minimum as a line beginning \"Ruby X.Y+\"; this test reads it there."
