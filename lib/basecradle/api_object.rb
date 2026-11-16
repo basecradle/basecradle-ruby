@@ -16,12 +16,21 @@ module BaseCradle
     data["uuid"] || data.fetch("content")["uuid"]
   end
 
+  # A key the platform cannot deduplicate on is no key at all: +nil+, an empty string, or
+  # a string of only whitespace — the platform reads the header with Rails' +presence+,
+  # which takes a blank value for none. Both places that read a key (the header a create
+  # sends, and whether a request may be retried) ask this one question (#288). +scrub+
+  # keeps a key with invalid bytes a key, rather than raising out of +strip+.
+  def self.blank_idempotency_key?(key)
+    key.to_s.scrub.strip.empty?
+  end
+
   # The per-request headers carrying an optional idempotency key — +nil+ when no key was
   # given (so a create without a key sends no +Idempotency-Key+ header, and is never
-  # auto-retried). An empty string is no key, the same as +nil+. Shared by the four
+  # auto-retried). A blank key is no key, the same as +nil+. Shared by the four
   # content-create methods.
   def self.idempotency_headers(key)
-    key.to_s.empty? ? nil : { "Idempotency-Key" => key }
+    blank_idempotency_key?(key) ? nil : { "Idempotency-Key" => key }
   end
 
   # A read-only, wire-exact view of one API JSON object.
