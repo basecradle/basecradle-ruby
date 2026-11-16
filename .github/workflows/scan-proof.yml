@@ -1,0 +1,51 @@
+name: Scan proof (temporary, reverted before merge)
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Ruby 3.2
+        id: ruby-3-2
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+      - name: Set up Ruby 3.3
+        id: ruby-3-3
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - name: Set up Ruby 3.4
+        id: ruby-3-4
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+      - name: Set up Ruby 4.0
+        id: ruby-4-0
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+      - name: Install bundler-audit
+        run: gem install bundler-audit --version 0.9.3 --no-document
+      - name: Scan, with no open issues and no GitHub writes
+        env:
+          RUBY_3_2: ${{ steps.ruby-3-2.outputs.ruby-prefix }}
+          RUBY_3_3: ${{ steps.ruby-3-3.outputs.ruby-prefix }}
+          RUBY_3_4: ${{ steps.ruby-3-4.outputs.ruby-prefix }}
+          RUBY_4_0: ${{ steps.ruby-4-0.outputs.ruby-prefix }}
+        run: |
+          ruby -v
+          bundle -v
+          echo '[]' > "$RUNNER_TEMP/open-issues.json"
+          script/dependency-security-scan --open-issues "$RUNNER_TEMP/open-issues.json" --plan "$RUNNER_TEMP/plan.json" \
+            --ruby "$RUBY_3_2" --ruby "$RUBY_3_3" --ruby "$RUBY_3_4" --ruby "$RUBY_4_0"
+          jq '{verdict, plans: [.plans[] | {action, title, labels}]}' "$RUNNER_TEMP/plan.json"
+          [ "$(jq -r .verdict "$RUNNER_TEMP/plan.json")" != "error" ]
