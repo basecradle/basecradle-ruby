@@ -9,6 +9,27 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.14.2] - 2026-11-16
+
+A patch release with one behavior fix. No verb is added or removed, and no signature
+changes. The one caller it affects passes an `idempotency_key` made only of whitespace:
+that create is now sent without a key and is no longer auto-retried.
+
+### Fixed
+
+- **A whitespace-only `idempotency_key` is no key**
+  ([#292](https://github.com/basecradle/basecradle-ruby/pull/292),
+  [#288](https://github.com/basecradle/basecradle-ruby/issues/288)). A key made only of
+  whitespace (`" "`, `"\t"`) used to go out as an `Idempotency-Key` header. A client built
+  with `max_retries:` would also re-send that create after a lost connection. The platform
+  reads a blank header as no key, so it could not deduplicate that create, and a retry
+  could post a duplicate. A key that is `nil`, empty, or only spaces, tabs and line breaks
+  now counts as no key on `timeline.messages.create`, `timeline.assets.create`,
+  `timeline.tasks.create` and `timeline.webhook_endpoints.create`: no header is sent, and
+  the create is never auto-retried. Use a fresh UUID per logical create. The Python SDK
+  is making the same change
+  ([basecradle-python#349](https://github.com/basecradle/basecradle-python/issues/349)).
+
 ## [0.14.1] - 2026-11-16
 
 A patch release. It carries one behavior fix brought over from the Python SDK and a
@@ -773,6 +794,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.14.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.2
 [0.14.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.1
 [0.14.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.0
 [0.13.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.13.0
