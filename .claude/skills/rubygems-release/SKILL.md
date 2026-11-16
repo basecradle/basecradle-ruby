@@ -135,7 +135,7 @@ V=X.Y.Z  # the release tag, without its v
 Then confirm the release carries its sigstore attestation. If signing fails, release-gem logs `WARNING: Failed to push with attestation, retrying without attestation.` and pushes the gem unattested, and the job stays green. 0.14.2 shipped that way (#286), so a green run is no proof:
 
 ```bash
-curl -fsS "https://rubygems.org/api/v1/attestations/basecradle-$V.json" | ruby -rjson -e 'n = JSON.parse($stdin.read).size; abort "basecradle #{ARGV[0]} has NO attestation" if n.zero?; puts "#{n} attestation(s)"' "$V"
+ruby -rjson -rnet/http -e 'v = ARGV[0]; r = Net::HTTP.get_response(URI("https://rubygems.org/api/v1/attestations/basecradle-#{v}.json")); abort "basecradle #{v}: HTTP #{r.code}, the registry does not know this version yet" unless r.is_a?(Net::HTTPSuccess); n = JSON.parse(r.body).size; abort "basecradle #{v} has NO attestation" if n.zero?; puts "basecradle #{v}: #{n} attestation(s)"' "$V"
 ```
 
-An empty list is a defect in the publish job, not the registry lagging; 0.14.0 and 0.14.1 carry attestations. Report it on the release issue. The version is immutable, so the fix ships with the next release.
+Run it after the pinned install passes. An HTTP error then means the registry is still catching up: wait and re-run. An empty list means the gem went out unsigned. Signing happens before the push, so the attestation arrives with the gem, never after it (0.14.0 and 0.14.1 carry theirs). Report it on the release issue. The version is immutable, so the fix ships with the next release.

@@ -279,24 +279,34 @@ class ReleaseWorkflowTest < Minitest::Test
   # The publish's bundle stays out of Ruby's system gems. release-gem signs the gem with
   # `gem exec sigstore-cli` in an unbundled environment, which sees every system gem; the
   # bundle's json 3.1 installed there broke sigstore's protobug 0.1.0, and release-gem fell
-  # back to pushing 0.14.2 with no attestation while the job stayed green (#286). A
-  # checkout-relative `path`, set before the install, is what kept 0.14.1's signer clean.
+  # back to pushing 0.14.2 with no attestation while the job stayed green (#286). 0.14.1's
+  # signer stayed clean because setup-ruby's bundler-cache set `path` to the checkout's
+  # `vendor/bundle` before installing. The job's commands are read in order, across steps,
+  # so the path may be set in any earlier step; anything that sends the bundle back to the
+  # system gems fails.
   def test_the_publish_job_installs_its_bundle_inside_the_checkout
-    run = Array(jobs.fetch(publish_key)["steps"]).map { |step| step["run"].to_s }
-                                                 .find { |text| text.match?(/^bundle install\b/) }
-    flunk "the #{publish_key} job installs no bundle" unless run
+    job = jobs.fetch(publish_key)
+    steps = Array(job["steps"])
+    commands = steps.flat_map { |step| step["run"].to_s.lines.map(&:strip) }
 
-    lines = run.lines.map(&:strip)
-    install = lines.index { |line| line.match?(/\Abundle install\b/) }
-    path = lines.index { |line| line.match?(%r{\Abundle config set --local path (?![/~$])\S+\z}) }
+    install = commands.index { |line| line.match?(/\Abundle install\b/) }
+    flunk "the #{publish_key} job installs no bundle" unless install
 
+    inside = %r{\Abundle config set --local path ["']?(?:\$PWD/|\$\{\{\s*github\.workspace\s*\}\}/)?(?![/~$.])\S+?["']?\z}
+    path = commands.index { |line| line.match?(inside) }
     assert path && path < install,
-           "the #{publish_key} job's `bundle install` is not preceded by `bundle config set " \
-           "--local path` to a directory inside the checkout. Installed into Ruby's system " \
+           "the #{publish_key} job's first `bundle install` is not preceded by `bundle config " \
+           "set --local path` to a directory inside the checkout. Installed into Ruby's system " \
            "gems, the bundle is visible to release-gem's sigstore signer, and a gem it carries " \
            "can break signing — release-gem then pushes the gem unattested on a green job."
-    refute_match(/--system\b/, lines[install],
-                 "the #{publish_key} job's `bundle install` asks for system gems")
+
+    undoing = commands.grep(/\Abundle (?:install\b.*--system\b|config (?:set (?:--\S+ )*path\.system\b|unset (?:--\S+ )*path\b))/)
+    assert_empty undoing, "the #{publish_key} job sends its bundle back to the system gems"
+
+    envs = [ job["env"], *steps.map { |step| step["env"] } ].compact.flat_map(&:keys)
+    assert_empty envs.grep(/\ABUNDLE_PATH/),
+                 "the #{publish_key} job sets the bundle's path in `env:`, where it overrides " \
+                 "the checkout path the install step sets"
   end
 
   private
