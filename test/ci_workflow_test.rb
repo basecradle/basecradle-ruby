@@ -24,7 +24,11 @@ require "yaml"
 # One pin here is not about the gate: the token every job runs with (#218). release.yml's
 # workflow-level `permissions:` was pinned in #208; ci.yml carries the identical block,
 # runs on every PR and every push to main rather than a few tags a year, and deleting the
-# block left a green tree. The last two tests below hold it, after the gate's.
+# block left a green tree. The two tests after the gate's hold it.
+#
+# The last pin is not about the gate either: the supported Ruby versions are kept by hand in
+# three places — the gemspec's floor, the test matrix here, and the README's "Ruby X.Y+" —
+# with nothing holding them equal (#281; basecradle-python#336 found its own copies apart).
 #
 # The limit of this file: it proves ci.yml is internally consistent. The other half of the
 # gate — that the "Protect main" ruleset requires this workflow's context and no other —
@@ -36,6 +40,8 @@ require "yaml"
 # readme_test.rb do: it tests a repo-level file, not a file under lib/basecradle/.
 class CiWorkflowTest < Minitest::Test
   WORKFLOW = File.expand_path("../.github/workflows/ci.yml", __dir__)
+  GEMSPEC = File.expand_path("../basecradle.gemspec", __dir__)
+  README = File.expand_path("../README.md", __dir__)
 
   # The gate is found by the *check context* branch protection names, not by its job key:
   # the ruleset requires the context "CI", and for a non-matrix job the context is the
@@ -269,6 +275,32 @@ class CiWorkflowTest < Minitest::Test
                  "gets more than the default without touching the default. No CI job " \
                  "writes to the repo. If one genuinely needs a scope, decide it in the PR " \
                  "that adds it and teach this test which scope and why."
+  end
+
+  # The gemspec's `required_ruby_version` is the floor and the one source of truth; the test
+  # matrix and the README follow it. A matrix entry below the floor tests a Ruby the gem
+  # refuses to install on; a matrix that starts above it ships a floor nothing tests; a README
+  # that names another minimum tells a reader the wrong thing. Raising the floor means moving
+  # all three in one PR — the scan's setups follow the matrix by their own test.
+  def test_the_matrix_and_the_readme_start_at_the_gemspecs_ruby_floor
+    requirement = Gem::Specification.load(GEMSPEC).required_ruby_version
+    operator, floor = requirement.requirements.first
+    assert_equal [ ">=" ], requirement.requirements.map(&:first),
+                 "basecradle.gemspec's required_ruby_version is #{requirement}; this test reads " \
+                 "a single `>=` floor. Teach it the new shape before changing that one."
+
+    matrix = Array(jobs.dig("test", "strategy", "matrix", "ruby-version")).map { |v| Gem::Version.new(v.to_s) }
+    refute_empty matrix, "ci.yml's test job names no ruby-version matrix"
+    below = matrix.reject { |version| requirement.satisfied_by?(version) }
+    assert_empty below, "ci.yml tests Ruby #{below.join(', ')}, below the gemspec's #{operator} #{floor}: " \
+                        "the gem refuses to install there. Drop it from the matrix, or lower the floor."
+    assert_equal floor, matrix.min, "ci.yml's lowest Ruby is #{matrix.min}, but the gemspec's floor is " \
+                                    "#{floor}: the floor the gem promises is a Ruby nothing tests."
+
+    stated = File.read(README)[/^Ruby (\d+(?:\.\d+)*)\+/, 1]
+    assert stated, "README.md no longer states a minimum as a line beginning \"Ruby X.Y+\"; this test reads it there."
+    assert_equal floor, Gem::Version.new(stated),
+                 "README.md says \"Ruby #{stated}+\", but the gemspec's floor is #{floor}."
   end
 
   private
