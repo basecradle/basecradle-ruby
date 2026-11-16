@@ -335,6 +335,13 @@ class ItemsTest < Minitest::Test
       assert_match(/\Aidempotency_key cannot be sent as an HTTP header: /, error.message)
       assert_match(/Nothing was sent\.\z/, error.message)
     end
+
+    # A space or tab at either end is the whitespace case proper (a line break or vertical
+    # tab is a control character, above), so it names the edge rather than a character.
+    [ " key-1", "key-1 ", "\tkey-1", "key-1\t" ].each do |key|
+      error = assert_raises(ArgumentError) { timeline.messages.create(body: "hi", idempotency_key: key) }
+      assert_includes error.message, ": it begins or ends with whitespace, which a header value cannot.", key.inspect
+    end
     assert_nothing_posted
   end
 
@@ -368,6 +375,11 @@ class ItemsTest < Minitest::Test
       error = assert_raises(ArgumentError) { timeline.messages.create(body: "hi", idempotency_key: key) }
       assert_includes error.message, "at index 1 is not ASCII"
     end
+
+    error = assert_raises(ArgumentError) do
+      timeline.messages.create(body: "hi", idempotency_key: "key-1".encode("UTF-16LE"))
+    end
+    assert_includes error.message, "its encoding, UTF-16LE, is not ASCII-compatible"
     assert_nothing_posted
   end
 

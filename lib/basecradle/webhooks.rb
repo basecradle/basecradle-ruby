@@ -160,6 +160,8 @@ module BaseCradle
     # platform stores at most one endpoint per key — scoped per timeline and author, like
     # the other three creates — so a resend returns the original endpoint. See
     # +BaseCradle::Client#max_retries+.
+    # A key HTTP cannot carry exactly as given raises ArgumentError before anything is
+    # sent (see BaseCradle.idempotency_headers).
     def create(description:, idempotency_key: nil)
       response = @client.request("POST", "/timelines/#{@timeline_uuid}/webhook_endpoints",
                                  json: { "webhook_endpoint" => { "description" => description } },

@@ -39,8 +39,14 @@ module BaseCradle
   # characters. Net::HTTP refuses only CR and LF; it sends NUL, every other control
   # character and non-ASCII bytes, and a hop that receives whitespace at either end of a
   # value strips it, so the platform would store a different key. The one meaning every
-  # SDK shares refuses all of them, not whatever one HTTP library tolerates.
+  # SDK shares refuses all of them, not whatever one HTTP library tolerates. A string in
+  # an encoding that is not ASCII-compatible (UTF-16, say) is refused as a whole: its
+  # bytes are not the characters it holds.
   def self.unsendable_idempotency_key_reason(key)
+    unless key.encoding.ascii_compatible?
+      return "its encoding, #{key.encoding}, is not ASCII-compatible; pass an ASCII or UTF-8 string"
+    end
+
     key.each_char.with_index do |char, index|
       return "#{char.inspect} at index #{index} is not ASCII" unless char.ascii_only?
       unless char == " " || char == "\t" || (0x21..0x7E).cover?(char.ord)
@@ -56,8 +62,9 @@ module BaseCradle
   # given (so a create without a key sends no +Idempotency-Key+ header, and is never
   # auto-retried). A blank key is no key, the same as +nil+. Any other key HTTP cannot
   # carry exactly as given raises ArgumentError here, before any request is built: it is
-  # the caller's error, never stripped or repaired. Shared by the four content-create
-  # methods, so the header name and the check live in one place.
+  # the caller's error, never stripped or repaired. A key that is not a String is read as
+  # its +to_s+, and that string is both the one checked and the one sent. Shared by the
+  # four content-create methods, so the header name and the check live in one place.
   def self.idempotency_headers(key)
     return nil if blank_idempotency_key?(key)
 

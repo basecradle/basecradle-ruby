@@ -180,6 +180,8 @@ module BaseCradle
     # platform stores at most one message per key, so a resend returns the original message
     # instead of posting a second one. See +BaseCradle::Client#max_retries+ for automatic
     # retries.
+    # A key HTTP cannot carry exactly as given raises ArgumentError before anything is
+    # sent (see BaseCradle.idempotency_headers).
     def create(body:, idempotency_key: nil)
       response = @client.request("POST", "/timelines/#{@timeline_uuid}/messages",
                                  json: { "message" => { "body" => body } },
@@ -207,6 +209,8 @@ module BaseCradle
     # +idempotency_key+ (optional, a UUID recommended) makes the upload safe to retry: the
     # platform stores at most one asset per key, so a resend returns the original asset
     # instead of uploading a second one. See +BaseCradle::Client#max_retries+.
+    # A key HTTP cannot carry exactly as given raises ArgumentError before anything is
+    # sent (see BaseCradle.idempotency_headers).
     def create(file:, description: nil, idempotency_key: nil)
       # The key is checked before the file is opened: a bad key opens nothing, and a
       # missing path cannot hide the key's error.
@@ -256,6 +260,8 @@ module BaseCradle
     # +idempotency_key+ (optional, a UUID recommended) makes the create safe to retry: the
     # platform stores at most one task per key — so a resend returns the original task and
     # never schedules a second activation. See +BaseCradle::Client#max_retries+.
+    # A key HTTP cannot carry exactly as given raises ArgumentError before anything is
+    # sent (see BaseCradle.idempotency_headers).
     def create(instructions:, activate_at:, idempotency_key: nil)
       activate_at = activate_at.iso8601 if activate_at.respond_to?(:iso8601)
       response = @client.request(
