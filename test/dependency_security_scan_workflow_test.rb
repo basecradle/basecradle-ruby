@@ -16,7 +16,7 @@ class DependencySecurityScanWorkflowTest < Minitest::Test
   WORKFLOWS = File.expand_path("../.github/workflows", __dir__)
   APP_TOKEN = "${{ steps.app-token.outputs.token }}"
 
-  def test_every_step_that_talks_to_github_acts_as_the_basecradle_ai_app
+  def test_every_step_that_talks_to_github_acts_as_the_minted_app
     talking = steps.select { |step| step["run"].to_s.match?(/\bgh /) }
 
     assert_equal [ "Read the open issues", "File what the scan found" ], talking.map { |step| step["name"] }
@@ -24,12 +24,16 @@ class DependencySecurityScanWorkflowTest < Minitest::Test
     refute_match(/secrets\.GITHUB_TOKEN|github\.token/, File.read(workflow_path))
   end
 
-  def test_the_app_token_is_minted_from_the_org_secrets_and_scoped_to_issues
+  # This repository's own bot (basecradle/basecradle#870), from the FLEET_BOT_* pair, with
+  # the capital's App as the bridge until the pair is placed here. Each half of the pair
+  # falls back to the matching half of the old one.
+  def test_the_app_token_is_minted_from_this_repositorys_bot_and_scoped_to_issues
     mint = steps.find { |step| step["id"] == "app-token" }
 
     assert_match %r{\Aactions/create-github-app-token@}, mint["uses"]
-    assert_equal({ "app-id" => "${{ secrets.BASECRADLE_AI_APP_ID }}",
-                   "private-key" => "${{ secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}",
+    assert_equal "Mint this repository's bot token", mint["name"]
+    assert_equal({ "client-id" => "${{ secrets.FLEET_BOT_CLIENT_ID || secrets.BASECRADLE_AI_CLIENT_ID }}",
+                   "private-key" => "${{ secrets.FLEET_BOT_APP_PRIVATE_KEY || secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}",
                    "permission-issues" => "write" }, mint["with"])
   end
 

@@ -15,6 +15,9 @@ require_relative "../script/dependency_security_scan"
 # script/, not the SDK under lib/basecradle/.
 class DependencySecurityScanTest < Minitest::Test
   Scan = DependencySecurityScan
+  # As `gh issue list --json author` names them: written out, so a typo in the script fails here.
+  OWN_BOT = "app/basecradle-ruby-ai"
+  CAPITAL_APP = "app/basecradle-ai"
 
   # --- reading bundler-audit -------------------------------------------------------------
 
@@ -215,6 +218,26 @@ class DependencySecurityScanTest < Minitest::Test
     assert_empty scan_of(errors: { "gem" => "no verdict" }).plans([ issue(Scan::ERROR_TITLE, "", author: "someone"), open_issue(sole(scan_of(errors: { "gem" => "no verdict" }).plans([]))) ])
   end
 
+  # The scan runs as this repository's own bot (basecradle/basecradle#870). It ran as the
+  # capital's App before, and an issue that App filed is still open when the handover lands:
+  # the first run as the new bot updates it, never files a second beside it.
+  def test_the_scans_issues_are_its_own_bots_and_the_capitals_app_it_ran_as_before
+    assert_equal [ CAPITAL_APP, OWN_BOT ], Scan::AUTHORS.sort
+  end
+
+  def test_an_issue_the_capitals_app_filed_before_the_handover_is_still_the_scans
+    filed = sole(scan_of(advisory("rack", "GHSA-4444-5555-6666", "low")).plans([]))
+    before = open_issue(filed, author: CAPITAL_APP)
+
+    assert_empty scan_of(advisory("rack", "GHSA-4444-5555-6666", "low")).plans([ before ]), "a standing finding stays quiet"
+
+    plan = sole(scan_of(advisory("rack", "GHSA-4444-5555-6666", "critical")).plans([ before ]))
+    assert_equal [ "update", 812 ], [ plan.action, plan.number ]
+
+    failing = sole(scan_of(errors: { "gem" => "no verdict" }).plans([]))
+    assert_equal "close", sole(scan_of.plans([ open_issue(failing, author: CAPITAL_APP) ])).action
+  end
+
   def test_an_issue_with_no_author_is_not_the_scans
     filed = sole(scan_of(advisory("rack", "GHSA-4444-5555-6666", "low")).plans([]))
 
@@ -346,11 +369,11 @@ class DependencySecurityScanTest < Minitest::Test
       Scan.new(advisories:, errors:, ref: "main", sha: "0123abc", run_url: "https://github.com/basecradle/basecradle-ruby/actions/runs/1", now: Time.utc(2026, 11, 7, 14, 37))
     end
 
-    def open_issue(plan, body: plan.body, author: Scan::AUTHOR)
+    def open_issue(plan, body: plan.body, author: OWN_BOT)
       issue(plan.title, body, author:)
     end
 
-    def issue(title, body, author: Scan::AUTHOR, number: 812)
+    def issue(title, body, author: OWN_BOT, number: 812)
       { "number" => number, "title" => title, "body" => body, "author" => { "login" => author, "is_bot" => true } }
     end
 

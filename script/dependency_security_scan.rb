@@ -32,10 +32,16 @@ class DependencySecurityScan
   ECOSYSTEM_NAMES = { "gem" => "Ruby gem" }.freeze
 
   # This repository is public, so anyone can open an issue with either title and a marker of
-  # their own. Only the issues the basecradle-ai App wrote are the scan's (as `gh issue list
+  # their own. Only the issues an App the scan runs as wrote are the scan's (as `gh issue list
   # --json author` names it); a look-alike is never read, so it can neither stop a page nor
-  # hide the real issue.
-  AUTHOR = "app/basecradle-ai"
+  # hide the real issue. The scan runs as this repository's own bot, basecradle-ruby-ai
+  # (basecradle/basecradle#870), which is also the identity this repository's captain acts
+  # as: an issue it files under either title, with a marker, is read as the scan's. Before
+  # that it ran as the capital's basecradle-ai, which the workflow's bridge still mints until
+  # this repository's FLEET_BOT_* pair is placed. An issue basecradle-ai filed stays the
+  # scan's, so the first run as the new bot updates it rather than filing a second; its entry
+  # can go once the bridge is gone and no scan issue it filed is still open.
+  AUTHORS = %w[ app/basecradle-ruby-ai app/basecradle-ai ].freeze
 
   # Each issue body carries the state it was written for, so the next run can tell a
   # standing finding (say nothing) from a changed one. The marker is written last, so it is
@@ -124,7 +130,7 @@ class DependencySecurityScan
   # open_issues: the repository's open issues, as `gh issue list --json
   # number,title,body,author` returns them.
   def plans(open_issues)
-    ours = open_issues.select { |issue| issue.dig("author", "login") == AUTHOR }
+    ours = open_issues.select { |issue| AUTHORS.include?(issue.dig("author", "login")) }
     [ advisories_plan(ours), error_plan(ours) ].compact
   end
 
