@@ -67,7 +67,7 @@ Locked (@origin, 2026-06-04); test framework and HTTP client resolved toward the
 
 | Concern | Choice | Notes |
 |---|---|---|
-| Ruby | **3.2+** | CI matrix across supported minors (currently 3.2 · 3.3 · 3.4). |
+| Ruby | **3.2+** | CI matrix across supported minors (currently 3.2 · 3.3 · 3.4 · 4.0). |
 | Toolchain | **Bundler + Rake** | Standard gem workflow. |
 | Lint + format | **RuboCop (`rubocop-rails-omakase`)** | The constitution's mandated Ruby style; `TargetRubyVersion: 3.2`. |
 | Tests | **Minitest + WebMock** | The constitution's omakase default, in stdlib. Parity is behavior and surface, not tooling, so "Python uses pytest" is no argument for RSpec. WebMock stubs HTTP at the Net::HTTP layer. |
