@@ -38,8 +38,8 @@ jobs:
       BUNDLER_AUDIT_VERSION: "0.9.3"
 
     # Every action here is pinned to a full commit SHA, never a tag or branch (#286). This job
-    # holds the capital's App private key, which can write issues across the fleet, so whatever
-    # a moving ref points at when the scan runs runs beside that key. Dependabot's
+    # holds an App private key that can write issues, so whatever a moving ref points at when
+    # the scan runs runs beside that key. Dependabot's
     # github-actions entry bumps the SHA and rewrites the version comment.
     steps:
       - name: Checkout code
@@ -79,15 +79,23 @@ jobs:
       - name: Install bundler-audit
         run: gem install bundler-audit --version "$BUNDLER_AUDIT_VERSION" --no-document
 
-      # The issue and its label must come from the basecradle-ai App, never GITHUB_TOKEN:
-      # GitHub starts no workflow for an event GITHUB_TOKEN caused, so a needs-human label it
-      # applied would page nobody. Scoped to issues.
-      - name: Mint basecradle-ai App token
+      # The issue and its label must come from an App, never GITHUB_TOKEN: GitHub starts no
+      # workflow for an event GITHUB_TOKEN caused, so a needs-human label it applied would page
+      # nobody. Scoped to issues.
+      #
+      # Whose App (basecradle/basecradle#870): this repository's own bot, basecradle-ruby-ai.
+      # FLEET_BOT_CLIENT_ID and FLEET_BOT_APP_PRIVATE_KEY hold its pair, so the capital's key is
+      # needed nowhere here. The `|| secrets.BASECRADLE_AI_*` fallback is a bridge, minting the
+      # capital's basecradle-ai until the pair is placed in this repository; the capital's later
+      # handoff removes it, in the same change that deletes the organization-level copies. The
+      # scan reads issues either App wrote (DependencySecurityScan::AUTHORS), so an issue filed
+      # before the handover is updated, never duplicated.
+      - name: Mint this repository's bot token
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.BASECRADLE_AI_APP_ID }}
-          private-key: ${{ secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.FLEET_BOT_CLIENT_ID || secrets.BASECRADLE_AI_CLIENT_ID }}
+          private-key: ${{ secrets.FLEET_BOT_APP_PRIVATE_KEY || secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}
           permission-issues: write
 
       - name: Read the open issues
