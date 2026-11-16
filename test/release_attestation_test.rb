@@ -61,6 +61,15 @@ class ReleaseAttestationTest < Minitest::Test
     end
   end
 
+  # A non-empty list counts only when it holds sigstore bundles. A list of anything else
+  # (an error wrapped in an array, an API change) is no answer: counting it as attested is
+  # the silent green this check exists to end.
+  def test_a_list_of_anything_but_sigstore_bundles_is_no_answer_yet
+    [ [ nil ], [ {} ], [ { "error" => "not found" } ], [ "bundle" ], [ BUNDLE, { "mediaType" => "text/plain" } ] ].each do |list|
+      assert_equal :pending, ReleaseAttestation.read(200, JSON.generate(list)).state, list.inspect
+    end
+  end
+
   # --- asking until there is a verdict -------------------------------------------------
 
   def test_a_signed_release_passes
@@ -129,9 +138,46 @@ class ReleaseAttestationTest < Minitest::Test
     assert_match "The gem is already published. Do not re-run this job", error
   end
 
-  # Five minutes, like release-gem's own wait.
-  def test_by_default_it_waits_five_minutes
+  # Five minutes of waiting between asks, like release-gem's own wait for the release.
+  def test_by_default_it_asks_for_five_minutes
     assert_equal 300, ReleaseAttestation::ATTEMPTS * ReleaseAttestation::INTERVAL
+  end
+
+  # A count of no attempts still asks once, so there is always a reading to judge.
+  def test_it_always_asks_at_least_once
+    stub_request(:get, URL).to_return(status: 200, body: "[]")
+
+    status, = run_check("basecradle", "0.14.3", attempts: 0)
+
+    assert_equal 1, status
+    assert_requested :get, URL, times: 1
+  end
+
+  # Only network errors mean "no answer yet". A defect in the check fails at once and names
+  # itself, instead of waiting out the window and blaming the registry.
+  def test_a_defect_in_the_check_fails_at_once_and_says_so
+    stub_request(:get, URL).to_raise(NoMethodError.new("undefined method 'body'"))
+
+    status, out = run_check("basecradle", "0.14.3")
+
+    assert_equal 1, status
+    assert_requested :get, URL, times: 1
+    error = sole_error(out)
+    assert_match "The attestation check for basecradle-0.14.3 failed on its own: NoMethodError", error
+    assert_match "not a verdict on the release", error
+  end
+
+  # Each network failure a slow or unreachable registry raises is waited out.
+  def test_every_network_error_is_no_answer_yet
+    [ Net::ReadTimeout, Errno::ECONNREFUSED, SocketError, OpenSSL::SSL::SSLError, EOFError ].each do |error|
+      WebMock.reset!
+      stub_request(:get, URL).to_raise(error).then.to_return(status: 200, body: JSON.generate([ BUNDLE ]))
+
+      status, = run_check("basecradle", "0.14.3")
+
+      assert_equal 0, status, error.name
+      assert_requested :get, URL, times: 2
+    end
   end
 
   # --- what reaches the URL ------------------------------------------------------------

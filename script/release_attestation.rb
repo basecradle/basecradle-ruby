@@ -2,6 +2,7 @@
 
 require "json"
 require "net/http"
+require "openssl"
 
 # Whether a published gem version carries its sigstore attestation, read from RubyGems.org's
 # public attestations endpoint. Run by `script/check-release-attestation`: last in
@@ -19,9 +20,22 @@ class ReleaseAttestation
   ENDPOINT = "https://rubygems.org/api/v1/attestations/%s-%s.json"
 
   # How many times to ask while the registry has no answer yet, and how long to wait between
-  # asks: five minutes, the window release-gem's own wait gives a release to propagate.
+  # asks: five minutes of waiting, the window release-gem's own wait gives a release to
+  # propagate. Each ask also gives up on a connection or a response after TIMEOUT seconds,
+  # so a registry that hangs rather than answering stretches the whole to about fifteen.
   ATTEMPTS = 30
   INTERVAL = 10
+  TIMEOUT = 10
+
+  # The media type every sigstore bundle carries, whatever its version (0.14.1's is
+  # `application/vnd.dev.sigstore.bundle.v0.3+json`).
+  BUNDLE_MEDIA_TYPE = %r{\Aapplication/vnd\.dev\.sigstore\.bundle\b}
+
+  # What a slow or unreachable registry raises. Only these mean "no answer yet": anything
+  # else is a defect in this script, and must say so rather than wait out the window looking
+  # like a slow registry.
+  NETWORK_ERRORS = [ IOError, SocketError, SystemCallError, Timeout::Error, OpenSSL::SSL::SSLError,
+                     Net::HTTPBadResponse, Net::ProtocolError ].freeze
 
   # A gem name as RubyGems allows it. Checked so that nothing but a name and a version can
   # reach the URL.
@@ -43,7 +57,16 @@ class ReleaseAttestation
     end
 
     full_name = "#{name}-#{Gem::Version.new(version)}"
-    reading = check(name, version, out:, attempts:, interval:)
+    begin
+      reading = check(name, version, out:, attempts:, interval:)
+    rescue StandardError => e
+      out.puts "::error::The attestation check for #{full_name} failed on its own: #{e.class}: " \
+               "#{e.message}. This is a defect in script/release_attestation.rb, not a verdict on " \
+               "the release. The gem is already published. Do not re-run this job; check the " \
+               "attestation by hand (.claude/skills/rubygems-release, 'Verifying live')."
+      return 1
+    end
+
     case reading.state
     when :attested
       out.puts "#{full_name} carries its sigstore attestation (#{reading.detail})."
@@ -65,11 +88,11 @@ class ReleaseAttestation
   end
 
   # Asks the registry until it gives a verdict or the attempts run out, and returns the last
-  # reading. Each attempt is logged to +out+.
+  # reading. Each attempt is logged to +out+. It always asks at least once.
   def self.check(name, version, out: $stdout, attempts: ATTEMPTS, interval: INTERVAL)
     uri = url(name, version)
     reading = nil
-    attempts.times do |attempt|
+    [ attempts, 1 ].max.times do |attempt|
       sleep interval if attempt.positive?
       reading = fetch(uri)
       out.puts "#{uri}: #{reading.detail}"
@@ -87,7 +110,9 @@ class ReleaseAttestation
   # What one response from the attestations endpoint says. Only a 200 carrying a JSON list is
   # an answer: the list is empty when the version was pushed unsigned, and holds the sigstore
   # bundles when it was signed. A version the registry does not know yet is a 404, and
-  # anything else (an outage page, a redirect, JSON of another shape) is no answer yet.
+  # anything else (an outage page, a redirect, JSON of another shape, a list holding anything
+  # but sigstore bundles) is no answer yet. Counting a list of something else as attested
+  # would be the silent green this check exists to end.
   #
   # An empty list is final, not a reason to ask again: release-gem sends the attestation in
   # the same request as the gem, so it is stored with the version or not at all.
@@ -97,6 +122,9 @@ class ReleaseAttestation
     list = JSON.parse(body.to_s)
     return Reading.new(:pending, "HTTP 200, but the JSON is not a list") unless list.is_a?(Array)
     return Reading.new(:unattested, "no attestation") if list.empty?
+    unless list.all? { |entry| entry.is_a?(Hash) && entry["mediaType"].to_s.match?(BUNDLE_MEDIA_TYPE) }
+      return Reading.new(:pending, "HTTP 200, but the list holds something other than sigstore bundles")
+    end
 
     Reading.new(:attested, "#{list.size} attestation#{"s" unless list.size == 1}")
   rescue JSON::ParserError
@@ -105,11 +133,11 @@ class ReleaseAttestation
 
   # One GET. A network error is no answer yet, never a verdict.
   def self.fetch(uri)
-    response = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: 10, read_timeout: 10) do |http|
+    response = Net::HTTP.start(uri.host, uri.port, use_ssl: true, open_timeout: TIMEOUT, read_timeout: TIMEOUT) do |http|
       http.get(uri.request_uri)
     end
     read(response.code.to_i, response.body)
-  rescue StandardError => e
+  rescue *NETWORK_ERRORS => e
     Reading.new(:pending, "#{e.class}: #{e.message}")
   end
 

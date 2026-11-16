@@ -6,7 +6,8 @@
 #
 #   script/check-release-attestation NAME VERSION
 #
-# Asks for up to five minutes while the registry does not know the version yet. Exits 0 when
+# Asks 30 times, 10 seconds apart, while the registry does not know the version yet (longer if
+# it hangs: each ask waits up to 10 seconds for a connection and 10 for an answer). Exits 0 when
 # the version is attested, and 1 with an `::error::` line when it was published unsigned or no
 # verdict was reached. It reads no credential and sends none: the endpoint is public.
 require_relative "release_attestation"

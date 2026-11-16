@@ -320,14 +320,15 @@ class ReleaseWorkflowTest < Minitest::Test
   # - after release-gem, since before it there is nothing on the registry to read;
   # - with no `if:` and no step-level `continue-on-error`, either of which can keep a failure
   #   off the job (`continue-on-error` reports `success` however the step exits);
-  # - under `env -i` with only PATH and HOME, because the RubyGems push key release-gem minted
-  #   is still in the job's environment, and the check needs no credential to read a public
-  #   endpoint;
+  # - under `env -i` with only PATH, because the RubyGems push key release-gem minted is still
+  #   in the job's environment, and the check needs no credential to read a public endpoint;
   # - for this gem by its gemspec name, and for the version the tag names.
   def test_the_publish_job_checks_the_attestation_after_release_gem
     steps = Array(jobs.fetch(publish_key)["steps"])
     release = steps.index { |step| step["uses"].to_s.split("@").first == PUBLISH_ACTION }
     checks = steps.each_index.select { |index| steps[index]["run"].to_s.include?(ATTESTATION_CHECK) }
+    refute_nil release, "the #{publish_key} job no longer runs #{PUBLISH_ACTION}, so there is no " \
+                        "push for the attestation check to follow"
 
     assert_equal 1, checks.size,
                  "the #{publish_key} job must run #{ATTESTATION_CHECK} exactly once (found " \
@@ -346,7 +347,7 @@ class ReleaseWorkflowTest < Minitest::Test
     gem_name = Gem::Specification.load(File.expand_path("../basecradle.gemspec", __dir__)).name
     commands = check["run"].lines.map(&:strip).reject(&:empty?)
     assert_equal [ %(version="${GITHUB_REF_NAME#v}"),
-                   %(env -i PATH="$PATH" HOME="$HOME" ruby #{ATTESTATION_CHECK} #{gem_name} "$version") ],
+                   %(env -i PATH="$PATH" ruby #{ATTESTATION_CHECK} #{gem_name} "$version") ],
                  commands,
                  "the attestation check must run as written: under `env -i`, so the RubyGems push " \
                  "key still in the job's environment never reaches it; with plain `ruby`, so the " \
