@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "yaml"
+require "support/action_pins"
 
 # The daily dependency security scan's workflow (#267) only runs the tested decisions in
 # script/dependency_security_scan.rb and applies their plan. What it can still get wrong is
@@ -71,6 +72,16 @@ class DependencySecurityScanWorkflowTest < Minitest::Test
       variable = scan["env"].key("${{ steps.#{setup["id"]}.outputs.ruby-prefix }}")
       assert variable, "the Ruby #{setup.dig("with", "ruby-version")} prefix reaches the scan"
       assert_includes scan["run"], %(--ruby "$#{variable}")
+    end
+  end
+
+  # The scan holds the capital's App private key, so every action it runs is pinned to a full
+  # commit SHA (#286), held by the same rule as the release's (test/support/action_pins.rb).
+  def test_every_action_in_the_scan_is_pinned_to_a_full_commit_sha
+    workflow["jobs"].each do |key, job|
+      unpinned = ActionPins.unpinned(job["steps"])
+
+      assert_empty unpinned, ActionPins.message(key, unpinned, "That job holds the capital's App private key")
     end
   end
 

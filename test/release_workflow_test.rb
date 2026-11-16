@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "yaml"
+require "support/action_pins"
 
 # release.yml carries facts that are *contractual*, not merely conventional: its own
 # filename and the name of the environment its publish job runs in. Both are registered at
@@ -215,24 +216,49 @@ class ReleaseWorkflowTest < Minitest::Test
                  "teach this test which scope and why."
   end
 
-  # Every action the publish job runs is pinned to a full commit SHA (#284). Why the pin
-  # exists is said once, in release.yml's comment above the job's steps; this holds the form.
+  # Every action in the release is pinned to a full commit SHA (#284, #286). Why the pin
+  # exists is said once, in release.yml's comment above the publish job's steps; the form is
+  # held once, in test/support/action_pins.rb.
   #
-  # Forty lowercase hex characters: GitHub resolves a *short* SHA too, and anyone can name a
-  # branch or tag after one, so only the full canonical form is a ref nobody can move. A local
-  # action (`./…`) or a `docker://` image would need its own rule; neither is used here, so
-  # either fails and asks for one.
-  def test_every_action_in_the_publish_job_is_pinned_to_a_full_commit_sha
-    unpinned = Array(jobs.fetch(publish_key)["steps"]).filter_map { |step| step["uses"] }
-                 .grep_v(%r{\A[\w.-]+/[\w.-]+(/[^@]+)?@[0-9a-f]{40}\z})
+  # Every job, not just the publish: the publish can mint a RubyGems push credential for this
+  # gem, and it waits on the rehearsal's guards — the tag on main's tip, the tag naming the
+  # version built, a plain X.Y.Z — and the capital approves the gate on their word. A moved
+  # ref under the rehearsal can fake that green as surely as one under the publish can push.
+  def test_every_action_in_every_release_job_is_pinned_to_a_full_commit_sha
+    jobs.each do |key, job|
+      unpinned = ActionPins.unpinned(job["steps"])
+      holder =
+        if key == publish_key
+          "That job can mint a RubyGems push credential for this gem"
+        else
+          "The publish waits on that job's guards, and the capital approves the gate on their word"
+        end
 
-    assert_empty unpinned,
-                 "the #{publish_key} job runs #{unpinned.join(', ')} by a movable ref. That " \
-                 "job can mint a RubyGems push credential for this gem, so a tag or branch " \
-                 "moved by the action's owner — or by whoever compromises it — runs with " \
-                 "the power to publish. Pin each to its full 40-character commit SHA with " \
-                 "the version in a comment (`uses: owner/repo@<sha> # vX.Y.Z`); Dependabot " \
-                 "keeps that form current."
+      assert_empty unpinned, ActionPins.message(key, unpinned, holder)
+    end
+  end
+
+  # The publish job restores no cache (#286). A tag-ref run can restore a cache saved on
+  # main, and ci.yml saves the Ruby 3.4 bundle there from jobs whose actions float, so a
+  # restored `vendor/bundle` is code someone else can move, loaded by `bundle exec rake
+  # release` while the push credential is live. setup-ruby's `bundler-cache` is the one cache
+  # this workflow could use; `actions/cache` in any form would be the same hole, so both fail.
+  def test_the_publish_job_restores_no_cache
+    steps = Array(jobs.fetch(publish_key)["steps"])
+    caching = steps.select do |step|
+      step.dig("with", "bundler-cache") || step["uses"].to_s.start_with?("actions/cache")
+    end
+
+    assert_empty caching.map { |step| step["uses"] },
+                 "the #{publish_key} job restores a cache. A tag-ref run can restore one saved " \
+                 "on main by a CI job whose actions float, and `bundle exec rake release` then " \
+                 "loads it while holding the push credential — no SHA pin in this job comes " \
+                 "into it. Resolve the bundle fresh instead (a `bundle install` step before " \
+                 "release-gem, which never installs the bundle itself)."
+    assert(steps.any? { |step| step["run"].to_s.match?(/\Abundle install\b/) },
+           "the #{publish_key} job installs no bundle, and release-gem runs `bundle exec rake " \
+           "release` without one — the Rakefile's rubocop task is a Gemfile gem, so the " \
+           "publish would die after the gate has been actuated.")
   end
 
   private

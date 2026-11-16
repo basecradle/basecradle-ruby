@@ -37,9 +37,13 @@ jobs:
       # database it cannot read is a scan that reached no verdict.
       BUNDLER_AUDIT_VERSION: "0.9.3"
 
+    # Every action here is pinned to a full commit SHA, never a tag or branch (#286). This job
+    # holds the capital's App private key, which can write issues across the fleet, so whatever
+    # a moving ref points at when the scan runs runs beside that key. Dependabot's
+    # github-actions entry bumps the SHA and rewrites the version comment.
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -50,25 +54,25 @@ jobs:
       # set up is the one on PATH, which runs the scan and bundler-audit.
       - name: Set up Ruby 3.2
         id: ruby-3-2
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "3.2"
 
       - name: Set up Ruby 3.3
         id: ruby-3-3
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "3.3"
 
       - name: Set up Ruby 3.4
         id: ruby-3-4
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "3.4"
 
       - name: Set up Ruby 4.0
         id: ruby-4-0
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "4.0"
 
@@ -80,7 +84,7 @@ jobs:
       # applied would page nobody. Scoped to issues.
       - name: Mint basecradle-ai App token
         id: app-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.BASECRADLE_AI_APP_ID }}
           private-key: ${{ secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}

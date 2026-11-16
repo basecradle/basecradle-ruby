@@ -20,8 +20,11 @@ jobs:
   rehearsal:
     name: rehearsal (build + clean install)
     runs-on: ubuntu-latest
+    # Pinned to full commit SHAs like the publish job's (#286): the capital approves the gate
+    # on this job's word, so the `gem` and `ruby` that run its guards must not come from a
+    # ref someone else can move. The reason is said once, above the publish job's steps.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # Deriving the release tag from the gemspec (#186) bought correctness at a price:
@@ -59,7 +62,7 @@ jobs:
             exit 1
           fi
           echo "Tag $GITHUB_REF_NAME is on main's tip ($tagged)."
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "3.2"
           bundler-cache: true
@@ -131,14 +134,24 @@ jobs:
     # setup-ruby and release-gem is each project's *branch*, not a tag. RubyGems' own action
     # READMEs recommend the SHA pin. Dependabot's github-actions entry bumps the SHA and
     # rewrites the version comment, and its PRs merge under the fleet auto-merge policy.
-    # release-gem must stay at v1.4.1 or later: earlier releases recurse forever against
-    # RubyGems 4.1+ (rubygems/release-gem#42), which a newer Ruby here would bundle.
+    # release-gem must stay at v1.4.2 or later: earlier releases recurse forever against
+    # RubyGems 4.1+ (rubygems/release-gem#42), which a newer Ruby here would bundle, and
+    # v1.4.1's wait step ran the newest rubygems-await, unpinned, with the push credential
+    # in its environment, and crashed under Bundler 4.1 (rubygems/release-gem#46, #291).
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # No `bundler-cache` here, on purpose (#286). A tag-ref run can restore a cache saved on
+      # main, and ci.yml saves the Ruby 3.4 bundle there from jobs whose actions float. A
+      # poisoned `vendor/bundle` restored here would be loaded by `bundle exec rake release`
+      # while it holds the push credential, and no SHA pin in this job would come into it.
+      # So the bundle is resolved fresh, in its own step, before release-gem mints the
+      # credential. release-gem runs `bundle exec` but never `bundle install`, so the step is
+      # needed: the Rakefile requires rubocop's task, and that is a Gemfile gem.
       - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         with:
           ruby-version: "3.4"
-          bundler-cache: true
-      - uses: rubygems/release-gem@7f9650160c1a4e7989fdc9855807bdbd421d8b6b # v1.4.1
+      - name: Install the bundle fresh
+        run: bundle install
+      - uses: rubygems/release-gem@5c53f5308233b7c0f47411f0471b3faae6fa57b2 # v1.4.2
