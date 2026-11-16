@@ -153,7 +153,8 @@ class ClientTest < Minitest::Test
   end
 
   def test_rejects_a_negative_max_retries
-    assert_raises(ArgumentError) { BaseCradle::Client.new(FAKE_TOKEN, max_retries: -1) }
+    error = assert_raises(ArgumentError) { BaseCradle::Client.new(FAKE_TOKEN, max_retries: -1) }
+    assert_equal "max_retries must be >= 0", error.message
   end
 
   def test_retries_a_get_on_a_lost_connection_then_succeeds
@@ -275,6 +276,16 @@ class ClientTest < Minitest::Test
     assert_requested(:post, "#{BASE_URL}/session") do |req|
       JSON.parse(req.body)["name"] == "ci runner"
     end
+  end
+
+  # Refused before POST /session, so a bad count never mints a credential the caller would
+  # never receive. Nothing is stubbed: a mint that went out would fail here.
+  def test_login_refuses_a_negative_max_retries_before_minting
+    error = assert_raises(ArgumentError) do
+      BaseCradle::Client.login(email_address: "nova@example.com", password: "secret", max_retries: -1)
+    end
+    assert_equal "max_retries must be >= 0", error.message
+    assert_not_requested :post, "#{BASE_URL}/session"
   end
 
   def test_login_forwards_max_retries_to_the_client

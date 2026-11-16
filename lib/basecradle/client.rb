@@ -82,7 +82,7 @@ module BaseCradle
                    max_retries: DEFAULT_MAX_RETRIES)
       resolved = token || ENV.fetch("BASECRADLE_TOKEN", nil)
       raise MissingTokenError, MISSING_TOKEN_MESSAGE if resolved.nil? || resolved.empty?
-      raise ArgumentError, "max_retries must be >= 0" if max_retries.negative?
+      self.class.refuse_negative_max_retries(max_retries)
 
       @token = resolved
       @base_url = base_url
@@ -123,9 +123,14 @@ module BaseCradle
     # The minted token is on the returned client as +#token+ — save it; it is never
     # retrievable again. The credential itself is on +#session+ (so +bc.session.uuid+ is
     # what revokes it later), and +#start_here+ points at the Dashboard. +name+ is an
-    # optional label to tell credentials apart later.
+    # optional label to tell credentials apart later. A negative +max_retries+ raises
+    # ArgumentError before anything is sent, so no credential is minted.
     def self.login(email_address:, password:, name: nil, base_url: DEFAULT_BASE_URL,
                    timeout: DEFAULT_TIMEOUT, max_retries: DEFAULT_MAX_RETRIES)
+      # Before the mint, as the Python SDK's login does: a bad count refused only when the
+      # client is built would have minted a credential the caller never receives.
+      refuse_negative_max_retries(max_retries)
+
       payload = { "email_address" => email_address, "password" => password }
       payload["name"] = name unless name.nil?
 
@@ -225,6 +230,11 @@ module BaseCradle
     # defaults (how the four creates attach an +Idempotency-Key+).
     def request(method, path, json: nil, params: nil, form: nil, headers: nil)
       handle(deliver(method, path, json: json, params: params, form: form, headers: headers))
+    end
+
+    # One check for +new+ and +login+, so a count +new+ refuses never reaches the mint.
+    def self.refuse_negative_max_retries(max_retries)
+      raise ArgumentError, "max_retries must be >= 0" if max_retries.negative?
     end
 
     # The shared low-level send: returns the Net::HTTPResponse or raises APIConnectionError.
