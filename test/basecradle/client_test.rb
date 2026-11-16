@@ -36,6 +36,87 @@ class ClientTest < Minitest::Test
     assert_match(/BASECRADLE_TOKEN/, error.message)
   end
 
+  # --- a token HTTP cannot carry is refused when the client is built (#301) -----------------
+  #
+  # The idempotency key's rule (BaseCradle.header_value_defect), applied to the token:
+  # printable ASCII, with spaces or tabs only between characters. Anything else raises
+  # ArgumentError from Client.new, never stripped or repaired, and no rendering of the error
+  # shows any part of the token, not even the character at fault. Nothing is stubbed for
+  # these, and none can send: the client is never built.
+
+  # Asserts the refusal, its "where", and that no rendering of it carries the token: no
+  # slice of it, and not the character at fault (+fault+), raw or inspected.
+  def assert_token_refused(token, where, fault: nil)
+    error = assert_raises(ArgumentError, token.inspect) { BaseCradle::Client.new(token) }
+    assert_match(/\AThe token cannot be sent in an HTTP header: /, error.message)
+    assert_includes error.message, where, token.inspect
+    assert_includes error.message, "It is not shown here, as it is a credential."
+    assert_nil error.cause
+    [ error.message, error.inspect, error.full_message, error.detailed_message ].each do |rendered|
+      refute_includes rendered, FAKE_TOKEN[0, 12], token.inspect
+      refute_includes rendered, FAKE_TOKEN[12, 15], token.inspect
+      refute_includes rendered, FAKE_TOKEN[-12..], token.inspect
+      next unless fault
+
+      refute_includes rendered.b, fault.b, token.inspect
+      refute_includes rendered, fault.inspect, token.inspect
+    end
+    error
+  end
+
+  # The usual case: a token read from a file or an env file, newline kept (Unix, Windows,
+  # old Mac). Net::HTTP refused CR and LF, but only when the first request was built.
+  def test_a_token_with_a_trailing_newline_is_refused_and_says_so
+    [ "\n", "\r\n", "\r" ].each do |ending|
+      error = assert_token_refused(FAKE_TOKEN + ending, "the character at index 39 is a control character")
+      assert_includes error.message, "A token read from a file or an env file often keeps its trailing newline."
+    end
+  end
+
+  def test_a_token_from_the_environment_with_its_newline_is_refused
+    ENV["BASECRADLE_TOKEN"] = "#{FAKE_TOKEN}\n"
+    error = assert_raises(ArgumentError) { BaseCradle::Client.new }
+    assert_includes error.message, "the character at index 39 is a control character"
+    refute_includes error.full_message, FAKE_TOKEN[0, 12]
+  end
+
+  # Whitespace at either end: Net::HTTP sent it, and a hop strips it.
+  def test_a_token_with_whitespace_at_either_end_is_refused
+    [ " #{FAKE_TOKEN}", "#{FAKE_TOKEN} ", "\t#{FAKE_TOKEN}", "#{FAKE_TOKEN}\t", " " ].each do |token|
+      error = assert_token_refused(token, "it begins or ends with whitespace, which a header value cannot")
+      refute_includes error.message, "trailing newline"
+      assert_includes error.message, "Check where the token was read from."
+    end
+  end
+
+  # Every other control character: Net::HTTP sent each one as given.
+  def test_a_token_with_another_control_character_is_refused
+    [ "\0", "\x01", "\v", "\f", "\x1f", "\x7f" ].each do |char|
+      token = FAKE_TOKEN[0, 20] + char + FAKE_TOKEN[20..]
+      error = assert_token_refused(token, "the character at index 20 is a control character", fault: char)
+      refute_includes error.message, "trailing newline"
+    end
+    assert_token_refused("\0", "the character at index 0 is a control character", fault: "\0")
+  end
+
+  # Non-ASCII: Net::HTTP sent the raw bytes. An invalid byte is not ASCII either, and a
+  # string whose encoding is not ASCII-compatible is refused as a whole.
+  def test_a_token_with_a_non_ascii_character_is_refused
+    assert_token_refused("#{FAKE_TOKEN[0..-2]}é", "the character at index 38 is not ASCII", fault: "é")
+    assert_token_refused("#{FAKE_TOKEN[0..-2]}\xff".dup.force_encoding("UTF-8"), "the character at index 38 is not ASCII",
+                         fault: "\xff".dup.force_encoding("UTF-8"))
+    assert_token_refused("#{FAKE_TOKEN[0..-2]}\xff".b, "the character at index 38 is not ASCII", fault: "\xff".b)
+    assert_token_refused(FAKE_TOKEN.encode("UTF-16LE"), "its encoding, UTF-16LE, is not ASCII-compatible")
+  end
+
+  # Never stripped: a token HTTP can carry is kept exactly as given. Spaces or tabs between
+  # characters are the key's rule too (the Python SDK reads it the same way).
+  def test_a_token_http_can_carry_is_accepted_as_given
+    [ FAKE_TOKEN, FAKE_TOKEN.b, "#{FAKE_TOKEN[0, 20]} #{FAKE_TOKEN[20..]}", "a\tb" ].each do |token|
+      assert_equal token, BaseCradle::Client.new(token).token
+    end
+  end
+
   # --- request: success paths ------------------------------------------------------------
 
   def test_request_returns_parsed_json
