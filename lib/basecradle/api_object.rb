@@ -3,6 +3,7 @@
 require "json"
 
 require_relative "errors"
+require_relative "header_value"
 require_relative "rendering"
 
 module BaseCradle
@@ -34,28 +35,15 @@ module BaseCradle
   end
 
   # Why HTTP cannot carry this key exactly as given, or +nil+ when it can (#295). A key is
-  # sent as given and never repaired, so it must be a header value no hop can change:
-  # printable ASCII (+!+ to +~+), with spaces or tabs allowed only between those
-  # characters. Net::HTTP refuses only CR and LF; it sends NUL, every other control
-  # character and non-ASCII bytes, and a hop that receives whitespace at either end of a
-  # value strips it, so the platform would store a different key. The one meaning every
-  # SDK shares refuses all of them, not whatever one HTTP library tolerates. A string in
-  # an encoding that is not ASCII-compatible (UTF-16, say) is refused as a whole: its
-  # bytes are not the characters it holds.
+  # sent as given and never repaired, so it must be a header value no hop can change: the
+  # rule is +header_value_defect+, the one the token is held to as well. A key is not a
+  # secret, so the reason shows the character at fault.
   def self.unsendable_idempotency_key_reason(key)
-    unless key.encoding.ascii_compatible?
-      return "its encoding, #{key.encoding}, is not ASCII-compatible; pass an ASCII or UTF-8 string"
-    end
+    index, reason = header_value_defect(key)
+    return if reason.nil?
+    return reason if index.nil?
 
-    key.each_char.with_index do |char, index|
-      return "#{char.inspect} at index #{index} is not ASCII" unless char.ascii_only?
-      unless char == " " || char == "\t" || (0x21..0x7E).cover?(char.ord)
-        return "#{char.inspect} at index #{index} is a control character"
-      end
-    end
-    return unless key.start_with?(" ", "\t") || key.end_with?(" ", "\t")
-
-    "it begins or ends with whitespace, which a header value cannot"
+    "#{key[index].inspect} at index #{index} #{reason}"
   end
 
   # The per-request headers carrying an optional idempotency key — +nil+ when no key was
