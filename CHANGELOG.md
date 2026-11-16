@@ -9,6 +9,70 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.14.3] - 2026-11-16
+
+A patch release with one behavior fix. No verb is added or removed, and no signature
+changes. It affects a caller whose `idempotency_key` is one HTTP cannot carry exactly as
+given: that create now raises `ArgumentError` before anything is sent. **Some such keys
+used to go through, so a caller whose keys can hold whitespace at either end, a control
+character or a non-ASCII character must change how it makes them** (see below). It is
+also the first release whose publish job fails if the gem goes out without its sigstore
+attestation.
+
+### Fixed
+
+- **An `idempotency_key` HTTP cannot carry raises `ArgumentError` before any request**
+  ([#299](https://github.com/basecradle/basecradle-ruby/pull/299),
+  [#295](https://github.com/basecradle/basecradle-ruby/issues/295)). Every SDK now shares
+  one meaning of a key. A blank key (`nil`, empty, or only ASCII whitespace) is still no
+  key. Any other key must be printable ASCII, with spaces or tabs only between
+  characters. A key that is not is the caller's error: `timeline.messages.create`,
+  `timeline.assets.create`, `timeline.tasks.create` and
+  `timeline.webhook_endpoints.create` raise `ArgumentError` naming `idempotency_key`,
+  saying what is wrong with it and that nothing was sent. The SDK never strips or
+  repairs a key. What a caller who passed such a key sees now:
+  - Whitespace at either end (`" key-1 "`): until now, **the key was sent as given**, and
+    the platform received and stored it without the whitespace, a different key from the
+    one you passed. It now raises.
+  - A line break, such as the trailing newline of a key read from a file or an
+    environment variable (`"key-1\n"`): until now, Net::HTTP's own `ArgumentError`
+    ("header field value cannot include CR/LF"), which named no argument. It now raises
+    the SDK's `ArgumentError`, which names `idempotency_key`.
+  - A key made only of NUL, or of NUL and whitespace (`"\0"`, `" \0 "`): until now,
+    Ruby's `strip` counted it as blank, so the create went out unkeyed and was never
+    retried. NUL is not whitespace, so it is now a key HTTP cannot carry, and it raises.
+  - Any other control character (NUL inside a key, `"\x01"` to `"\x1f"` except tab, and
+    DEL, `"\x7f"`) or a non-ASCII character (`"clé-1"`): **until now, the key was sent as
+    raw bytes and the create went through.** These keys now raise too. If yours can hold
+    one, change how you make keys: a UUID is ideal.
+
+  An asset upload checks its key before it opens the file, so a bad key opens nothing.
+  The Python SDK is making the same change
+  ([basecradle-python#351](https://github.com/basecradle/basecradle-python/issues/351)),
+  so once it ships the two SDKs agree on every key, a NUL-only key included.
+
+### Security
+
+- **The publish job fails when a release goes out without its sigstore attestation**
+  ([#298](https://github.com/basecradle/basecradle-ruby/pull/298),
+  [#297](https://github.com/basecradle/basecradle-ruby/issues/297)). 0.14.2 is on RubyGems
+  with no attestation: signing failed, `rubygems/release-gem` pushed the gem unsigned, and
+  its step stayed green. A last step now asks RubyGems for the new version's attestations
+  and fails the job when there are none. A version can never be re-signed, so 0.14.2
+  stays unattested.
+- **The signer no longer sees the publish job's bundle**
+  ([#296](https://github.com/basecradle/basecradle-ruby/pull/296)). That is what broke
+  0.14.2's signing: the bundle was installed into the system gems, and the signer loaded
+  a `json` it cannot call. The bundle now installs into `vendor/bundle`, as it did for
+  0.14.1.
+- **Every action in the release workflow and the daily dependency scan is pinned to a
+  commit SHA, and neither release job restores a cache**
+  ([#294](https://github.com/basecradle/basecradle-ruby/pull/294), part of
+  [#286](https://github.com/basecradle/basecradle-ruby/issues/286)). 0.14.1 pinned only
+  the publish job. The rehearsal job is pinned too now, and no cache saved by another run
+  can reach the job that holds the push credential. `rubygems/release-gem` moves to
+  v1.4.2. The CI jobs still use version tags. Nothing in the gem itself changes.
+
 ## [0.14.2] - 2026-11-16
 
 A patch release with one behavior fix. No verb is added or removed, and no signature
@@ -794,6 +858,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.14.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.3
 [0.14.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.2
 [0.14.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.1
 [0.14.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.0
