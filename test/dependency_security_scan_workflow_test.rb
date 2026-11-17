@@ -24,17 +24,18 @@ class DependencySecurityScanWorkflowTest < Minitest::Test
     refute_match(/secrets\.GITHUB_TOKEN|github\.token/, File.read(workflow_path))
   end
 
-  # This repository's own bot (basecradle/basecradle#870), from the FLEET_BOT_* pair, with
-  # the capital's App as the bridge until the pair is placed here. Each half of the pair
-  # falls back to the matching half of the old one.
+  # This repository's own bot (basecradle/basecradle#870), from the FLEET_BOT_* pair and
+  # nothing else: no fallback to an organization secret, which would mint another App's
+  # token here.
   def test_the_app_token_is_minted_from_this_repositorys_bot_and_scoped_to_issues
     mint = steps.find { |step| step["id"] == "app-token" }
 
     assert_match %r{\Aactions/create-github-app-token@}, mint["uses"]
     assert_equal "Mint this repository's bot token", mint["name"]
-    assert_equal({ "client-id" => "${{ secrets.FLEET_BOT_CLIENT_ID || secrets.BASECRADLE_AI_CLIENT_ID }}",
-                   "private-key" => "${{ secrets.FLEET_BOT_APP_PRIVATE_KEY || secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}",
+    assert_equal({ "client-id" => "${{ secrets.FLEET_BOT_CLIENT_ID }}",
+                   "private-key" => "${{ secrets.FLEET_BOT_APP_PRIVATE_KEY }}",
                    "permission-issues" => "write" }, mint["with"])
+    refute_match(/secrets\.BASECRADLE_AI_/, File.read(workflow_path))
   end
 
   def test_it_runs_daily_and_by_hand_and_never_on_a_pull_request

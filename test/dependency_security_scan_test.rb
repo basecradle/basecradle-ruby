@@ -218,24 +218,22 @@ class DependencySecurityScanTest < Minitest::Test
     assert_empty scan_of(errors: { "gem" => "no verdict" }).plans([ issue(Scan::ERROR_TITLE, "", author: "someone"), open_issue(sole(scan_of(errors: { "gem" => "no verdict" }).plans([]))) ])
   end
 
-  # The scan runs as this repository's own bot (basecradle/basecradle#870). It ran as the
-  # capital's App before, and an issue that App filed is still open when the handover lands:
-  # the first run as the new bot updates it, never files a second beside it.
-  def test_the_scans_issues_are_its_own_bots_and_the_capitals_app_it_ran_as_before
-    assert_equal [ CAPITAL_APP, OWN_BOT ], Scan::AUTHORS.sort
+  # The scan runs as this repository's own bot and nothing else (basecradle/basecradle#870).
+  # The capital's App it once ran as is no longer one of its authors: the workflow cannot
+  # mint it, so an issue it writes is read like any other look-alike.
+  def test_the_scans_issues_are_its_own_bots_alone
+    assert_equal [ OWN_BOT ], Scan::AUTHORS
   end
 
-  def test_an_issue_the_capitals_app_filed_before_the_handover_is_still_the_scans
+  def test_an_issue_the_capitals_app_files_is_not_the_scans
     filed = sole(scan_of(advisory("rack", "GHSA-4444-5555-6666", "low")).plans([]))
-    before = open_issue(filed, author: CAPITAL_APP)
+    theirs = open_issue(filed, author: CAPITAL_APP)
 
-    assert_empty scan_of(advisory("rack", "GHSA-4444-5555-6666", "low")).plans([ before ]), "a standing finding stays quiet"
-
-    plan = sole(scan_of(advisory("rack", "GHSA-4444-5555-6666", "critical")).plans([ before ]))
-    assert_equal [ "update", 812 ], [ plan.action, plan.number ]
+    assert_equal "create", sole(scan_of(advisory("rack", "GHSA-4444-5555-6666", "low")).plans([ theirs ])).action
+    assert_equal [ "create", [ "needs-human" ] ], sole(scan_of(advisory("rack", "GHSA-4444-5555-6666", "critical")).plans([ theirs ])).then { |plan| [ plan.action, plan.labels ] }
 
     failing = sole(scan_of(errors: { "gem" => "no verdict" }).plans([]))
-    assert_equal "close", sole(scan_of.plans([ open_issue(failing, author: CAPITAL_APP) ])).action
+    assert_empty scan_of.plans([ open_issue(failing, author: CAPITAL_APP) ]), "a clean scan never closes an issue it did not write"
   end
 
   def test_an_issue_with_no_author_is_not_the_scans
