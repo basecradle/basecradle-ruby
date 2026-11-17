@@ -9,6 +9,63 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.14.4] - 2026-11-17
+
+A patch release with two behavior fixes, both about a credential. No verb is added or
+removed, and no signature changes. It affects a caller whose token is one HTTP cannot
+carry exactly as given: `Client.new` now raises `ArgumentError` before any request.
+**Some such tokens used to authenticate, so a caller whose token can carry whitespace at
+either end (a padded line in an env file, say) must pass it exactly as minted** (see
+below). The `login` fix changes nothing for a caller who already passes a `max_retries`
+of zero or more.
+
+### Fixed
+
+- **A token HTTP cannot carry raises `ArgumentError` when the client is built, and the
+  error never shows it**
+  ([#304](https://github.com/basecradle/basecradle-ruby/pull/304),
+  [#301](https://github.com/basecradle/basecradle-ruby/issues/301)). A token follows the
+  same rule as an `idempotency_key` (0.14.3): printable ASCII, with spaces or tabs only
+  between characters. `BaseCradle::Client.new`, whether given the token or reading
+  `BASECRADLE_TOKEN`, raises `ArgumentError` for any other token, saying where the fault
+  is and never showing the token, not even the character at fault. The SDK never strips
+  or repairs a token. What a caller who passed such a token sees now:
+  - Whitespace at either end (`"bc_uat_… "`): until now, **the token was sent as given and
+    the request authenticated**, because a hop stripped the whitespace before the platform
+    read it. It now raises.
+  - A token made only of whitespace (`BASECRADLE_TOKEN=" "`): until now, a client was
+    built and every request failed. It now raises `ArgumentError`, not
+    `MissingTokenError`, which is still raised only for a missing or empty token.
+  - A trailing newline, as a token read from a file or an env file often keeps
+    (`"bc_uat_…\n"`): until now, the client was built and every request failed with
+    Net::HTTP's own `ArgumentError` ("header field value cannot include CR/LF"), which
+    named no argument. It now raises when the client is built, and the message says a
+    file or an env file often keeps the trailing newline.
+  - Any other control character, or a non-ASCII character: until now, the token was sent
+    as raw bytes. It now raises.
+  - A string in an encoding that is not ASCII-compatible (UTF-16, say): until now, every
+    request failed with an `Encoding::CompatibilityError`. It now raises `ArgumentError`
+    naming the encoding.
+
+  The Python SDK made the same change
+  ([basecradle-python#359](https://github.com/basecradle/basecradle-python/issues/359)).
+- **`Client.login` with a negative `max_retries` raises before it mints a credential**
+  ([#305](https://github.com/basecradle/basecradle-ruby/pull/305)). `login` checked
+  `max_retries` only when it built the client, after `POST /session` had already minted a
+  token, so `login(max_retries: -1)` created a live credential the caller never received.
+  It still raises the same `ArgumentError`, but now before anything is sent, as the
+  Python SDK's `login` does.
+
+### Security
+
+- **The daily dependency scan writes as this repository's own bot, and only as it**
+  ([#303](https://github.com/basecradle/basecradle-ruby/pull/303),
+  [#309](https://github.com/basecradle/basecradle-ruby/pull/309),
+  [basecradle#870](https://github.com/basecradle/basecradle/issues/870)). Its
+  `[SECURITY]` issues and their labels now come from `basecradle-ruby-ai[bot]`, not the
+  capital's App, and the scan reads only issues that bot wrote. Nothing in the gem itself
+  changes.
+
 ## [0.14.3] - 2026-11-16
 
 A patch release with one behavior fix. No verb is added or removed, and no signature
@@ -858,6 +915,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.14.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.4
 [0.14.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.3
 [0.14.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.2
 [0.14.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.1
