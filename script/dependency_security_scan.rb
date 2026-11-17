@@ -36,12 +36,9 @@ class DependencySecurityScan
   # --json author` names it); a look-alike is never read, so it can neither stop a page nor
   # hide the real issue. The scan runs as this repository's own bot, basecradle-ruby-ai
   # (basecradle/basecradle#870), which is also the identity this repository's captain acts
-  # as: an issue it files under either title, with a marker, is read as the scan's. Before
-  # that it ran as the capital's basecradle-ai, which the workflow's bridge still mints until
-  # this repository's FLEET_BOT_* pair is placed. An issue basecradle-ai filed stays the
-  # scan's, so the first run as the new bot updates it rather than filing a second; its entry
-  # can go once the bridge is gone and no scan issue it filed is still open.
-  AUTHORS = %w[ app/basecradle-ruby-ai app/basecradle-ai ].freeze
+  # as: an issue it files under either title, with a marker, is read as the scan's. No other
+  # App is one the scan runs as, so an issue any other writes is a look-alike.
+  AUTHORS = %w[ app/basecradle-ruby-ai ].freeze
 
   # Each issue body carries the state it was written for, so the next run can tell a
   # standing finding (say nothing) from a changed one. The marker is written last, so it is

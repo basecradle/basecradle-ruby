@@ -85,17 +85,14 @@ jobs:
       #
       # Whose App (basecradle/basecradle#870): this repository's own bot, basecradle-ruby-ai.
       # FLEET_BOT_CLIENT_ID and FLEET_BOT_APP_PRIVATE_KEY hold its pair, so the capital's key is
-      # needed nowhere here. The `|| secrets.BASECRADLE_AI_*` fallback is a bridge, minting the
-      # capital's basecradle-ai until the pair is placed in this repository; the capital's later
-      # handoff removes it, in the same change that deletes the organization-level copies. The
-      # scan reads issues either App wrote (DependencySecurityScan::AUTHORS), so an issue filed
-      # before the handover is updated, never duplicated.
+      # needed nowhere here. The scan reads only the issues this App wrote
+      # (DependencySecurityScan::AUTHORS).
       - name: Mint this repository's bot token
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          client-id: ${{ secrets.FLEET_BOT_CLIENT_ID || secrets.BASECRADLE_AI_CLIENT_ID }}
-          private-key: ${{ secrets.FLEET_BOT_APP_PRIVATE_KEY || secrets.BASECRADLE_AI_APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.FLEET_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.FLEET_BOT_APP_PRIVATE_KEY }}
           permission-issues: write
 
       - name: Read the open issues
