@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-# One rule for every workflow job that holds a credential (#284, #286): each action it runs
-# is pinned to a full commit SHA, never a tag or branch, so code someone else can move never
-# runs beside the credential. release_workflow_test.rb holds release.yml to it and
-# dependency_security_scan_workflow_test.rb holds the scan to it; a job that gains a
-# credential later snaps onto the same check. ci_workflow_test.rb holds ci.yml to it too
-# (#311): its jobs hold no secret, but a push to main saves the bundle cache main's later
-# runs restore, and they run the Ruby every change is tested on.
+# One rule for every workflow job this repository owns (#284, #286, #311): each action it
+# runs is pinned to a full commit SHA, never a tag or branch, so code someone else can move
+# never runs with what the job holds. What that is differs, so each caller names it: the
+# release's push credential, the scan's App private key, CI's choice of the Ruby every change
+# is tested on and the bundle cache it saves on main. release_workflow_test.rb,
+# dependency_security_scan_workflow_test.rb and ci_workflow_test.rb hold their workflows to
+# it; a workflow added later snaps onto the same check.
 #
 # Forty lowercase hex characters: GitHub resolves a *short* SHA too, and anyone can name a
 # branch or tag after one, so only the full canonical form is a ref nobody can move. A local

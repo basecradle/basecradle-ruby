@@ -145,8 +145,8 @@ jobs:
           persist-credentials: false
       # No `bundler-cache` here, on purpose (#286). A tag-ref run can restore a cache saved on
       # main, and ci.yml saves the Ruby 3.4 bundle there, from jobs that run every gem their
-      # unlocked resolution brings and code this job never sees. Its actions are pinned now
-      # (#311), but a pin vouches for the action, not for what the job put in the cache. A
+      # unlocked resolution brings and code this job never sees. ci.yml's actions are pinned
+      # (#311), but a pin vouches for the action, not for what its job put in the cache. A
       # poisoned `vendor/bundle` restored here would be loaded by `bundle exec rake release`
       # while it holds the push credential, and no SHA pin in this job would come into it.
       # So the bundle is resolved fresh, in its own step, before release-gem mints the

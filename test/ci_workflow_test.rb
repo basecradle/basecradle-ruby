@@ -281,15 +281,19 @@ class CiWorkflowTest < Minitest::Test
   end
 
   # Every action in CI is pinned to a full commit SHA (#311), by the rule release.yml and the
-  # scan are held to (test/support/action_pins.rb). A CI job holds no secret, but a moved ref
-  # under it chooses the Ruby every change is tested on — setup-ruby@v1 kept CI on whatever
-  # its owner pointed it at — and on a push to main it saves the bundle cache main's later
-  # runs restore. Dependabot's github-actions entry bumps the SHA and its version comment.
+  # scan are held to (test/support/action_pins.rb). A CI job holds no repository secret, but
+  # a moved ref under it chooses the Ruby every change is tested on — setup-ruby@v1 kept CI
+  # on whatever its owner pointed it at — and on a push to main it saves the bundle cache
+  # main's later runs restore. Dependabot's github-actions entry bumps the SHA and its
+  # version comment.
   def test_every_action_in_ci_is_pinned_to_a_full_commit_sha
     jobs.each do |key, job|
       unpinned = ActionPins.unpinned(job)
 
-      assert_empty unpinned, ActionPins.message(key, unpinned, "That job picks the Ruby every change is tested on and, on main, saves the bundle cache later runs restore")
+      holder = "That job picks the Ruby every change is tested on and, on main, saves the " \
+               "bundle cache later runs restore"
+
+      assert_empty unpinned, ActionPins.message(key, unpinned, holder)
     end
   end
 
