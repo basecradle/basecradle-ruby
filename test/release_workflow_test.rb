@@ -3,6 +3,7 @@
 require "test_helper"
 require "yaml"
 require "support/action_pins"
+require "support/ruby_floor"
 
 # release.yml carries facts that are *contractual*, not merely conventional: its own
 # filename and the name of the environment its publish job runs in. Both are registered at
@@ -261,6 +262,24 @@ class ReleaseWorkflowTest < Minitest::Test
                    "for — beside the push credential in the publish, beside the gate's " \
                    "guards in the rehearsal. Resolve the bundle fresh instead."
     end
+  end
+
+  # The rehearsal's clean install is the release's one proof that the gem installs and loads
+  # on the gemspec's Ruby floor (#318). Above the floor it proves nothing about the floor;
+  # below it `gem install` refuses the gem, and the run dies on a tag. Raising the floor
+  # moves this Ruby in the same PR (.claude/skills/rubygems-release, "Raising the Ruby
+  # floor").
+  def test_the_rehearsal_installs_on_the_gemspecs_ruby_floor
+    floor = RubyFloor.version
+
+    rubies = Array(jobs.fetch(rehearsal_key)["steps"]).filter_map do |step|
+      step.dig("with", "ruby-version") if step["uses"].to_s.split("@").first == "ruby/setup-ruby"
+    end
+
+    assert_equal [ floor.to_s ], rubies,
+                 "the #{rehearsal_key} job sets up #{rubies.inspect}, but the gemspec's floor is " \
+                 "#{floor}: it must set up exactly that Ruby, once, quoted (YAML reads 3.10 as " \
+                 "the number 3.1)."
   end
 
   # With no cache, the publish installs its own bundle, and must do it before release-gem:

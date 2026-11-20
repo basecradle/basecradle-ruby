@@ -52,12 +52,6 @@ jobs:
       # every resolution. A test keeps this list equal to ci.yml's matrix. No bundler-cache:
       # the scan resolves the Gemfile itself, so a resolution that fails is filed. The last one
       # set up is the one on PATH, which runs the scan and bundler-audit.
-      - name: Set up Ruby 3.2
-        id: ruby-3-2
-        uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1.343.0
-        with:
-          ruby-version: "3.2"
-
       - name: Set up Ruby 3.3
         id: ruby-3-3
         uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1.343.0
@@ -102,13 +96,12 @@ jobs:
 
       - name: Scan
         env:
-          RUBY_3_2: ${{ steps.ruby-3-2.outputs.ruby-prefix }}
           RUBY_3_3: ${{ steps.ruby-3-3.outputs.ruby-prefix }}
           RUBY_3_4: ${{ steps.ruby-3-4.outputs.ruby-prefix }}
           RUBY_4_0: ${{ steps.ruby-4-0.outputs.ruby-prefix }}
         run: >-
           script/dependency-security-scan --open-issues "$RUNNER_TEMP/open-issues.json" --plan "$RUNNER_TEMP/plan.json"
-          --ruby "$RUBY_3_2" --ruby "$RUBY_3_3" --ruby "$RUBY_3_4" --ruby "$RUBY_4_0"
+          --ruby "$RUBY_3_3" --ruby "$RUBY_3_4" --ruby "$RUBY_4_0"
 
       # A label rides its message: on a new issue the body is the message; on an open one the
       # comment is posted before the label is applied. The label is removed and re-added
