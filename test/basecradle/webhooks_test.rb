@@ -363,15 +363,38 @@ class WebhooksTest < Minitest::Test
     assert_patched({ "verifier" => "stripe" })
   end
 
-  # The API's rule is that a blank secret is no change; the SDK does not repair it.
+  # The API's rule is that a blank secret is no change; the SDK does not repair it. What
+  # the platform then does is the platform's: the wire is the SDK's half.
   def test_configure_verification_sends_a_blank_credential_as_given
-    endpoint = an_endpoint
     stub_verification_patch
 
-    endpoint.configure_verification(credential: "")
+    an_endpoint.configure_verification(credential: "")
 
     assert_patched({ "verification_credential" => "" })
-    refute endpoint.content.verification.enabled
+  end
+
+  # A secret read with File.binread is a BINARY string; its bytes go out as given.
+  def test_configure_verification_sends_a_binary_credential_as_its_utf8_bytes
+    stub_verification_patch
+
+    an_endpoint.configure_verification(credential: "#{SIGNING_SECRET}é".b)
+
+    assert_patched({ "verification_credential" => "#{SIGNING_SECRET}é" })
+  end
+
+  # JSON cannot carry bytes that are not UTF-8, and its own error would hold the whole
+  # secret. So the SDK refuses first, naming the fault, never the value.
+  def test_a_credential_that_cannot_be_sent_raises_argument_error_without_showing_it
+    [ "#{SIGNING_SECRET}\xFF".b, "#{SIGNING_SECRET}é".encode(Encoding::ISO_8859_1),
+      SIGNING_SECRET.to_sym, 12_345_678, false ].each do |credential|
+      error = assert_raises(ArgumentError, credential.class.name) do
+        an_endpoint.configure_verification(verifier: "github", credential: credential)
+      end
+      assert_includes error.message, "credential: must be a String whose bytes are UTF-8"
+      assert_renders_no_secret(error)
+      refute_includes error.message, "12345678"
+    end
+    assert_not_requested(:any, /.*/)
   end
 
   def test_configure_verification_with_no_keywords_is_a_usage_error_and_sends_nothing
@@ -388,10 +411,8 @@ class WebhooksTest < Minitest::Test
   end
 
   def test_configure_verification_with_an_unknown_verifier_raises_validation_error
-    stub_request(:patch, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}")
-      .to_return(status: 422, headers: { "Content-Type" => "application/problem+json" },
-                 body: problem("validation_failed", 422,
-                               errors: { "verifier" => [ "is not included in the list" ] }).to_json)
+    stub_verification_problem("validation_failed", 422,
+                              errors: { "verifier" => [ "is not included in the list" ] })
 
     error = assert_raises(BaseCradle::ValidationError) do
       an_endpoint.configure_verification(verifier: "nope", credential: SIGNING_SECRET)
@@ -400,9 +421,7 @@ class WebhooksTest < Minitest::Test
   end
 
   def test_configure_verification_as_a_non_viewer_raises_forbidden
-    stub_request(:patch, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}")
-      .to_return(status: 403, headers: { "Content-Type" => "application/problem+json" },
-                 body: problem("not_a_viewer", 403).to_json)
+    stub_verification_problem("not_a_viewer", 403)
 
     assert_raises(BaseCradle::ForbiddenError) { an_endpoint.configure_verification(verifier: "github") }
   end
@@ -436,11 +455,12 @@ class WebhooksTest < Minitest::Test
     endpoint.configure_verification(verifier: "github", credential: SIGNING_SECRET)
 
     renderings = [
-      endpoint.inspect, endpoint.to_s, "#{endpoint}", endpoint.to_json, endpoint.to_h.to_s,
+      endpoint.inspect, endpoint.to_s, endpoint.to_json, endpoint.to_h.to_s,
       endpoint.content.inspect, endpoint.content.verification.inspect,
       endpoint.content.verification.to_json,
-      # an instance variable stashed beside the data, not in it
-      endpoint.instance_variables.map { |name| endpoint.instance_variable_get(name).inspect }.join
+      # an instance variable stashed beside the data, on the endpoint or on its client —
+      # read raw, because the client's own inspect redacts
+      raw_ivars(endpoint), raw_ivars(@bc)
     ]
     renderings.each { |rendered| refute_includes rendered, SIGNING_SECRET }
   end
@@ -453,9 +473,7 @@ class WebhooksTest < Minitest::Test
   end
 
   def test_an_api_error_carries_no_secret
-    stub_request(:patch, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}")
-      .to_return(status: 422, headers: { "Content-Type" => "application/problem+json" },
-                 body: problem("validation_failed", 422, errors: { "verifier" => [ "is not included" ] }).to_json)
+    stub_verification_problem("validation_failed", 422, errors: { "verifier" => [ "is not included" ] })
 
     error = assert_raises(BaseCradle::ValidationError) do
       an_endpoint.configure_verification(verifier: "nope", credential: SIGNING_SECRET)
@@ -465,7 +483,7 @@ class WebhooksTest < Minitest::Test
 
   # Its +cause+ is Net::HTTP's own error; neither it nor the wrapper carries the body.
   def test_a_connection_error_carries_no_secret
-    stub_request(:patch, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}").to_raise(Errno::ECONNREFUSED)
+    stub_request(:patch, VERIFICATION_URL).to_raise(Errno::ECONNREFUSED)
 
     error = assert_raises(BaseCradle::APIConnectionError) do
       an_endpoint.configure_verification(credential: SIGNING_SECRET)
@@ -512,24 +530,35 @@ class WebhooksTest < Minitest::Test
     BaseCradle::WebhookEndpoint.new(webhook_endpoint_payload(**overrides), client: @bc)
   end
 
+  VERIFICATION_URL = "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}".freeze
+
   def stub_verification_patch(verification = VERIFICATION_OFF)
-    stub_request(:patch, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}")
+    stub_request(:patch, VERIFICATION_URL)
       .to_return(status: 200,
                  body: { "webhook_endpoint" => webhook_endpoint_payload(verification: verification) }.to_json)
   end
 
+  def stub_verification_problem(code, status, **extra)
+    stub_request(:patch, VERIFICATION_URL)
+      .to_return(status: status, headers: { "Content-Type" => "application/problem+json" },
+                 body: problem(code, status, **extra).to_json)
+  end
+
   # Exactly one PATCH to the endpoint, carrying exactly +fields+ under the resource name.
   def assert_patched(fields)
-    assert_requested(:patch, "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}", times: 1) do |req|
+    assert_requested(:patch, VERIFICATION_URL, times: 1) do |req|
       assert_equal "application/json", req.headers["Content-Type"]
       assert_equal({ "webhook_endpoint" => fields }, JSON.parse(req.body))
       true
     end
   end
 
+  def raw_ivars(object)
+    object.instance_variables.map { |name| object.instance_variable_get(name).inspect }.join
+  end
+
   def assert_renders_no_secret(error)
-    renderings = [ error.message, error.inspect, error.full_message, error.to_s,
-                   error.instance_variables.map { |name| error.instance_variable_get(name).inspect }.join ]
+    renderings = [ error.message, error.inspect, error.full_message, raw_ivars(error) ]
     renderings.each { |rendered| refute_includes rendered, SIGNING_SECRET }
   end
 

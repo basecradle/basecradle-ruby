@@ -78,9 +78,11 @@ module BaseCradle
     #   turns verification on. A blank one is sent as given and the API treats it as no
     #   change: the current secret, if any, stays, and +content.verification.enabled+
     #   cannot tell that skipped rotation from a real one, so make sure a secret read from
-    #   the environment is not empty before passing it. It is write-only: the API never
-    #   returns it, and this SDK keeps no copy and never puts it in an inspect or an error
-    #   message.
+    #   the environment is not empty before passing it. It is sent as its bytes, which
+    #   must be UTF-8 (a BINARY string read from a file is fine); a credential that is not
+    #   a String, or whose bytes are not UTF-8, raises ArgumentError before any request,
+    #   and the error never shows it. It is write-only: the API never returns it, and this
+    #   SDK keeps no copy and never puts it in an inspect or an error message.
     # - +signature_header+ is the header the signature is read from, for
     #   "hmac_sha256_hex" only; a "github" endpoint always reads X-Hub-Signature-256.
     #
@@ -94,6 +96,7 @@ module BaseCradle
         raise ArgumentError, "configure_verification needs at least one of verifier:, credential: " \
                              "or signature_header:. Nothing was sent."
       end
+      given["verification_credential"] = sendable_secret(credential) unless credential.nil?
 
       adopt(require_client.request("PATCH", endpoint_path, json: { "webhook_endpoint" => given }))
     end
@@ -107,6 +110,20 @@ module BaseCradle
     end
 
     private
+
+    # The credential's bytes as given, read as UTF-8, or ArgumentError. JSON refuses a
+    # string it cannot read as UTF-8, and its error holds the whole string, so a secret
+    # with the wrong bytes would ride out on an exception's +invalid_object+. Refusing it
+    # here, with a message that names the fault and never the value, closes that door.
+    def sendable_secret(credential)
+      if credential.is_a?(String)
+        secret = credential.b.force_encoding(Encoding::UTF_8)
+        return secret if secret.valid_encoding?
+      end
+
+      raise ArgumentError, "credential: must be a String whose bytes are UTF-8. It is not shown. " \
+                           "Nothing was sent."
+    end
 
     def endpoint_path
       "/webhook_endpoints/#{content.uuid}"
