@@ -205,10 +205,15 @@ module TestSupport
   WEBHOOK_ENDPOINT_UUID = "019e7750-66ee-79fc-a07f-0301cf1ace97"
   INGEST_URL = "https://basecradle.com/webhooks/019e7750-66ee-705a-803c-b25c5ee9b1f3"
 
+  # Verification off, on the default scheme and header: a new endpoint's block.
+  VERIFICATION_OFF = { "enabled" => false, "signature_header" => "X-Signature",
+                       "verifier" => "hmac_sha256_hex" }.freeze
+
   # A webhook endpoint in subject form. +user+ is its author, in nested-actor form.
+  # +verification+ replaces the default block (VERIFICATION_OFF).
   def webhook_endpoint_payload(uuid: WEBHOOK_ENDPOINT_UUID, description: "CI notifications",
                                enabled: true, ingest_url: INGEST_URL, timeline_uuid: TIMELINE_UUID,
-                               user: JOHN)
+                               user: JOHN, verification: VERIFICATION_OFF)
     {
       "type" => "webhook_endpoint",
       "created_at" => "2026-01-02T00:00:00.000Z",
@@ -218,8 +223,7 @@ module TestSupport
       "content" => {
         "uuid" => uuid, "description" => description, "enabled" => enabled,
         "ingest_url" => ingest_url,
-        "verification" => { "enabled" => false, "signature_header" => "X-Signature",
-                            "verifier" => "hmac_sha256_hex" }
+        "verification" => verification.dup
       }
     }
   end

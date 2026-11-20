@@ -73,6 +73,9 @@ class ReadmeTest < Minitest::Test
       .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
     stub_request(:post, %r{#{BASE_URL}/webhook_endpoints/.+/rotation})
       .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
+    github = { "enabled" => true, "signature_header" => "X-Hub-Signature-256", "verifier" => "github" }
+    stub_request(:patch, %r{#{BASE_URL}/webhook_endpoints/[^/]+\z})
+      .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload(verification: github) }.to_json)
     stub_request(:get, %r{#{BASE_URL}/webhook_events})
       .to_return(status: 200, body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json)
     stub_request(:get, "#{BASE_URL}/users/sessions").to_return(

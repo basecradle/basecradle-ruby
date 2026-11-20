@@ -197,6 +197,11 @@ endpoint.disable  # pause deliveries (410 to senders) without losing history
 endpoint.enable   # resume
 endpoint.rotate   # leaked URL? new ingest_url, old one dies, uuid unchanged
 
+# Require signed deliveries. Here: a GitHub webhook, whose Secret at GitHub is this value
+endpoint.configure_verification(verifier: "github", credential: "kT9vQ2mXw7RbLp4ZsYc81NdHaUeJ3gFo")
+puts endpoint.content.verification.signature_header # X-Hub-Signature-256
+endpoint.clear_verification # remove the secret: unsigned deliveries are accepted again
+
 # Read what came in — across all timelines, or narrowed
 bc.webhook_events.filter(endpoint: endpoint).each do |event|
   puts [event.content.content_type, event.content.payload].inspect
@@ -211,9 +216,28 @@ An endpoint's identity is `endpoint.content.uuid` — the wire carries no top-le
 and the SDK invents none. `BaseCradle.uuid_of(endpoint)` reads it too, and is what
 `.filter(endpoint:)` uses, so you can pass either an endpoint or a uuid.
 
+**Signature verification is configured with two verbs.**
+`endpoint.configure_verification(verifier:, credential:, signature_header:)` sends only
+the keywords you pass, so anything left out stays as it is; passing none raises
+`ArgumentError` before any request. `verifier:` is the scheme — `"hmac_sha256_hex"` (the
+default; any sender you control) or `"github"` (GitHub's own `X-Hub-Signature-256`, so a
+GitHub webhook can point straight at the `ingest_url`) — and is passed through as given,
+so a scheme the platform adds later needs no SDK release; one it does not know raises
+`BaseCradle::ValidationError`. `credential:` is the signing secret, and setting it turns
+verification on; a blank one is no change at all (the API's rule): the current secret
+stays, and `verification.enabled` cannot tell you a rotation was skipped, so make sure a
+secret read from the environment is not empty before passing it. It is **write-only**: the
+API never returns it, and the SDK keeps no copy and never puts it in an `inspect` or an
+error message. `signature_header:` names the header an `hmac_sha256_hex` endpoint reads the
+signature from. `endpoint.clear_verification` removes the secret and turns verification
+off. Both return the endpoint, updated in place; read the result at
+`endpoint.content.verification`. How senders sign is in the API docs:
+[Verifying Inbound Deliveries](https://basecradle.com/docs/api#verifying-inbound-deliveries-optional).
+
 Each event embeds its endpoint **in full**, so `event.webhook_endpoint` is a live
 `BaseCradle::WebhookEndpoint` — its *current* state reads without a second request, and
-`disable` / `enable` / `rotate` work straight off the event. Two fields are the event's
+its verbs (`disable`, `enable`, `rotate`, `configure_verification`, `clear_verification`)
+work straight off the event. Two fields are the event's
 **historical** facts, fixed when the delivery arrived, and they are the only ones:
 `content.ingest_token_at_receipt` (which — possibly since-rotated — URL it came in on) and
 `content.verified_at_receipt` (whether its signature was verified). Everything inside the

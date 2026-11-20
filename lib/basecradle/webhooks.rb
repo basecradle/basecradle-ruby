@@ -10,10 +10,15 @@ module BaseCradle
   # --- models ---------------------------------------------------------------------------
 
   # Whether inbound deliveries must be signed, and how.
+  #
+  # +enabled+ is true once a signing secret is set. The secret itself is write-only: the
+  # API never returns it, so it is never here. Set it, the scheme and the header with
+  # +endpoint.configure_verification+; turn verification off with
+  # +endpoint.clear_verification+.
   class WebhookVerification < ApiObject
     attribute :enabled
-    attribute :signature_header
-    attribute :verifier # "hmac_sha256_hex"
+    attribute :signature_header # for a "github" endpoint, always "X-Hub-Signature-256"
+    attribute :verifier # "hmac_sha256_hex" or "github" — an open set; read it as a string
   end
 
   # An endpoint's content: identity, state, and the rotatable ingest URL.
@@ -27,7 +32,10 @@ module BaseCradle
 
   # An inbound webhook URL on a timeline. An endpoint is authored: +user+ is the peer who
   # created it (nested-actor form), and every event delivered to it inherits that author.
-  # Verbs update this object from the full endpoint the API returns (live objects).
+  # Verbs update this object from the full endpoint the API returns (live objects). The
+  # API models enablement and rotation as singular state resources, and signature
+  # verification as a +PATCH+ of the endpoint itself; the SDK expresses all of them as
+  # verbs here, never as raw paths.
   #
   # The endpoint's identity is +content.uuid+ — the wire carries no top-level +uuid+, and
   # the SDK does not invent one. +BaseCradle.uuid_of(endpoint)+ yields it too, which is
@@ -54,13 +62,75 @@ module BaseCradle
     # Regenerate the ingest URL. The old URL dies immediately; the uuid is unchanged.
     # Use this when an ingest URL leaks. Recorded events are preserved.
     def rotate
-      adopt(require_client.request("POST", "/webhook_endpoints/#{content.uuid}/rotation"))
+      adopt(require_client.request("POST", "#{endpoint_path}/rotation"))
+    end
+
+    # Set how inbound deliveries must be signed: the scheme, the secret, the header.
+    #
+    # Every keyword is optional and only the ones you pass are sent, so anything left out
+    # stays as it is; pass at least one, or this raises ArgumentError before any request
+    # is made.
+    #
+    # - +verifier+ is the scheme: "hmac_sha256_hex" (the default) or "github". It is
+    #   passed through as given, so a scheme the platform adds later works here unchanged;
+    #   one it does not know raises ValidationError.
+    # - +credential+ is the signing secret, sent as +verification_credential+: setting it
+    #   turns verification on. A blank one is sent as given and the API treats it as no
+    #   change: the current secret, if any, stays, and +content.verification.enabled+
+    #   cannot tell that skipped rotation from a real one, so make sure a secret read from
+    #   the environment is not empty before passing it. It is sent as its bytes, which
+    #   must be UTF-8 (a BINARY string read from a file is fine); a credential that is not
+    #   a String, or whose bytes are not UTF-8, raises ArgumentError before any request,
+    #   and the error never shows it. It is write-only: the API never returns it, and this
+    #   SDK keeps no copy and never puts it in an inspect or an error message.
+    # - +signature_header+ is the header the signature is read from, for
+    #   "hmac_sha256_hex" only; a "github" endpoint always reads X-Hub-Signature-256.
+    #
+    # Any viewer of the endpoint's timeline may configure it, locked timeline or not.
+    # Returns this endpoint, which adopts the one the API returns, so
+    # +content.verification+ shows the new state.
+    def configure_verification(verifier: nil, credential: nil, signature_header: nil)
+      given = { "verifier" => verifier, "verification_credential" => credential,
+                "signature_header" => signature_header }.compact
+      if given.empty?
+        raise ArgumentError, "configure_verification needs at least one of verifier:, credential: " \
+                             "or signature_header:. Nothing was sent."
+      end
+      given["verification_credential"] = sendable_secret(credential) unless credential.nil?
+
+      adopt(require_client.request("PATCH", endpoint_path, json: { "webhook_endpoint" => given }))
+    end
+
+    # Remove the signing secret and turn verification off: deliveries are accepted
+    # unsigned again, and +content.verification.enabled+ reads false. Returns this
+    # endpoint, which adopts the one the API returns.
+    def clear_verification
+      adopt(require_client.request("PATCH", endpoint_path,
+                                   json: { "webhook_endpoint" => { "clear_credential" => true } }))
     end
 
     private
 
+    # The credential's bytes as given, read as UTF-8, or ArgumentError. JSON refuses a
+    # string it cannot read as UTF-8, and its error holds the whole string, so a secret
+    # with the wrong bytes would ride out on an exception's +invalid_object+. Refusing it
+    # here, with a message that names the fault and never the value, closes that door.
+    def sendable_secret(credential)
+      if credential.is_a?(String)
+        secret = credential.b.force_encoding(Encoding::UTF_8)
+        return secret if secret.valid_encoding?
+      end
+
+      raise ArgumentError, "credential: must be a String whose bytes are UTF-8. It is not shown. " \
+                           "Nothing was sent."
+    end
+
+    def endpoint_path
+      "/webhook_endpoints/#{content.uuid}"
+    end
+
     def enablement_path
-      "/webhook_endpoints/#{content.uuid}/enablement"
+      "#{endpoint_path}/enablement"
     end
 
     # Live-object update: the API returned the complete endpoint, so this object points at
@@ -113,7 +183,8 @@ module BaseCradle
     attribute :timeline, wrap: Reference
     # The endpoint this arrived on, embedded in full (its own subject form) rather than by
     # reference — so its current state reads without a second request, and its verbs
-    # (disable / enable / rotate) are reachable straight off the event. Its uuid is
+    # (disable / enable / rotate / configure_verification / clear_verification) are
+    # reachable straight off the event. Its uuid is
     # +event.webhook_endpoint.content.uuid+, or +BaseCradle.uuid_of(...)+.
     attribute :webhook_endpoint, wrap: WebhookEndpoint
     attribute :content, wrap: WebhookEventContent
