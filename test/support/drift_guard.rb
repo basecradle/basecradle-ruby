@@ -58,6 +58,7 @@ module DriftGuard
     [ "POST", "/webhook_endpoints/{webhook_endpoint_id}/enablement" ] => "endpoint.enable",
     [ "DELETE", "/webhook_endpoints/{webhook_endpoint_id}/enablement" ] => "endpoint.disable",
     [ "POST", "/webhook_endpoints/{webhook_endpoint_id}/rotation" ] => "endpoint.rotate",
+    [ "PATCH", "/webhook_endpoints/{id}" ] => "endpoint.configure_verification / .clear_verification",
     # Webhook events
     [ "GET", "/webhook_events" ] => "bc.webhook_events (iteration) / .filter",
     [ "GET", "/webhook_events/{id}" ] => "bc.webhook_events.get",
