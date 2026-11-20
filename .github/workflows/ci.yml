@@ -15,8 +15,8 @@ concurrency:
 jobs:
   # Lint runs on a Ruby that still gets security fixes, not on the gemspec's floor.
   # RuboCop parses for .rubocop.yml's TargetRubyVersion, not for the Ruby it runs on, so
-  # the floor is still what it checks against. 3.2 is past its end of life and has no
-  # build carrying the 2026-11-18 Regexp and String fixes (#311).
+  # the floor is still what it checks against (#311). The floor is the oldest Ruby its
+  # maintainers still fix, and it is raised when that line reaches end of life (#318).
   lint:
     name: lint
     runs-on: ubuntu-latest
@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby-version: ["3.2", "3.3", "3.4", "4.0"]
+        ruby-version: ["3.3", "3.4", "4.0"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

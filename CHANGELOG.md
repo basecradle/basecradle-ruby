@@ -9,6 +9,33 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.16.0] - 2026-11-20
+
+A minor release that raises the minimum Ruby from **3.2 to 3.3**. Nothing in the SDK's
+API changes: no verb is added or removed, and no signature changes. **If you are on Ruby
+3.2, stay on the 0.15 line** (`gem "basecradle", "~> 0.15.0"`): it stays installable.
+Bundler on 3.2 resolves to it, and RubyGems refuses to install 0.16.0 there.
+
+### Changed
+
+- **The minimum Ruby is now 3.3** (`required_ruby_version >= 3.3`,
+  [#318](https://github.com/basecradle/basecradle-ruby/issues/318)). The rule, the same in
+  every BaseCradle SDK: the floor is the oldest Ruby that still receives security fixes
+  from its maintainers. Ruby 3.2 reached its end of life on 2026-03-31 and has no build
+  carrying Ruby's 2026-11-18 Regexp and String fixes. 3.3 is supported until 2027-03-31,
+  and the first release after that date raises the floor to 3.4, as a minor version, with
+  an entry here that says so. CI now tests 3.3, 3.4 and 4.0, and no CI, release or
+  dependency-scan job runs an end-of-life Ruby.
+
+### Security
+
+- **CI's checkouts no longer leave the read token on disk**
+  ([#316](https://github.com/basecradle/basecradle-ruby/pull/316),
+  [#313](https://github.com/basecradle/basecradle-ruby/issues/313)). The `lint`, `test`
+  and `drift-guard` jobs now check out with `persist-credentials: false`, like every other
+  checkout here, so the gems an unlocked bundle runs cannot read the job's `GITHUB_TOKEN`.
+  This changes nothing in the gem.
+
 ## [0.15.0] - 2026-11-20
 
 A minor release that adds two verbs for an API operation the platform documented on
@@ -963,6 +990,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.16.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.16.0
 [0.15.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.15.0
 [0.14.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.4
 [0.14.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.3

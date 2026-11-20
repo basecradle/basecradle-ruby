@@ -35,6 +35,7 @@ class ReleaseWorkflowTest < Minitest::Test
 
   # The two contractual names, verbatim as registered.
   FILENAME = "release.yml"
+  GEMSPEC = File.expand_path("../basecradle.gemspec", __dir__)
   ENVIRONMENT = "rubygems"
 
   # The action that does the publishing. The publish job is found by the step that pushes
@@ -261,6 +262,28 @@ class ReleaseWorkflowTest < Minitest::Test
                    "for — beside the push credential in the publish, beside the gate's " \
                    "guards in the rehearsal. Resolve the bundle fresh instead."
     end
+  end
+
+  # The rehearsal's clean install is the release's one proof that the gem installs and loads
+  # on the gemspec's Ruby floor (#318). Above the floor it proves nothing about the floor;
+  # below it `gem install` refuses the gem, and the run dies on a tag. Raising the floor
+  # moves this Ruby in the same PR (.claude/skills/rubygems-release, "Raising the Ruby
+  # floor").
+  def test_the_rehearsal_installs_on_the_gemspecs_ruby_floor
+    requirement = Gem::Specification.load(GEMSPEC).required_ruby_version
+    assert_equal [ ">=" ], requirement.requirements.map(&:first),
+                 "basecradle.gemspec's required_ruby_version is #{requirement}; this test reads " \
+                 "a single `>=` floor. Teach it the new shape before changing that one."
+    floor = requirement.requirements.first.last
+
+    rubies = Array(jobs.fetch(rehearsal_key)["steps"]).filter_map do |step|
+      step.dig("with", "ruby-version") if step["uses"].to_s.split("@").first == "ruby/setup-ruby"
+    end
+
+    assert_equal [ floor.to_s ], rubies,
+                 "the #{rehearsal_key} job sets up #{rubies.inspect}, but the gemspec's floor is " \
+                 "#{floor}: it must set up exactly that Ruby, once, quoted (YAML reads 3.10 as " \
+                 "the number 3.1)."
   end
 
   # With no cache, the publish installs its own bundle, and must do it before release-gem:

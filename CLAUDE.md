@@ -67,13 +67,15 @@ Locked (@origin, 2026-06-04); test framework and HTTP client resolved toward the
 
 | Concern | Choice | Notes |
 |---|---|---|
-| Ruby | **3.2+** | CI matrix across supported minors (currently 3.2 · 3.3 · 3.4 · 4.0). |
+| Ruby | **3.3+** | The floor is the oldest maintained Ruby (rule below). CI matrix across supported minors (currently 3.3 · 3.4 · 4.0). |
 | Toolchain | **Bundler + Rake** | Standard gem workflow. |
-| Lint + format | **RuboCop (`rubocop-rails-omakase`)** | The constitution's mandated Ruby style; `TargetRubyVersion: 3.2`. |
+| Lint + format | **RuboCop (`rubocop-rails-omakase`)** | The constitution's mandated Ruby style; `TargetRubyVersion: 3.3`. |
 | Tests | **Minitest + WebMock** | The constitution's omakase default, in stdlib. Parity is behavior and surface, not tooling, so "Python uses pytest" is no argument for RSpec. WebMock stubs HTTP at the Net::HTTP layer. |
 | HTTP | **Net::HTTP** | Zero runtime dependencies; every call funnels through one transport method. |
 | Packaging | **gemspec + Bundler** | `Gemfile.lock` is **gitignored** on purpose — the CI matrix resolves dev deps per Ruby version (reason in `.gitignore`). |
 | Types | **RBS signatures** — deferred | None ship yet. Sorbet is the heavier alternative; not required. |
+
+**The Ruby floor is the oldest Ruby that still receives security fixes from its maintainers** (@origin, 2026-11-20, #318; the same rule in every SDK). When a Ruby line reaches end of life, the next release raises the floor to the next line, as a **minor** version, with a changelog entry that says so; users on the old line keep the previous release line, which stays installable. No CI, release or scan job runs an end-of-life Ruby. 3.3 reaches end of life on 2027-03-31, so the release after that date raises the floor to 3.4. The gemspec's `required_ruby_version` is the source of truth, and tests hold the README, `.rubocop.yml`, `ci.yml`'s matrix, the release rehearsal's Ruby and the scan's setups equal to it; this table and the `ship-a-pr` and `rubygems-release` skills move by hand. The procedure: the `rubygems-release` skill → *Raising the Ruby floor*.
 
 Runtime dependencies: keep the list at zero or one, and argue every addition in a PR against the constitution's "every dependency is debt" principle. Dependencies and Actions pins are kept current by the fleet Dependabot program (#124): `.github/dependabot.yml` plus the shared auto-merge stub, whose merge policy is stated once, in Cross-Repo Handoffs → Propagation.
 

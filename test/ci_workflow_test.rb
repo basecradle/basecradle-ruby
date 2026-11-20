@@ -28,12 +28,13 @@ require "support/action_pins"
 # block left a green tree. The two tests after the gate's hold it; a third holds every
 # checkout to dropping that token once the repository is on disk (#313).
 #
-# The last pin is not about the gate either: the gemspec's Ruby floor, the test matrix here
-# and the README's "Ruby X.Y+" are kept by hand with nothing holding them equal (#281;
-# basecradle-python#336 found its own copies apart). The floor has other hand-kept copies
-# this test does not hold — release.yml's rehearsal, .rubocop.yml's TargetRubyVersion, and
-# CLAUDE.md — so a floor raise still moves those by hand. (ci.yml's lint job is not one:
-# it runs on a Ruby that gets security fixes and lints for TargetRubyVersion, #311.)
+# The last pin is not about the gate either: the gemspec's Ruby floor, the test matrix here,
+# the README's "Ruby X.Y+" and .rubocop.yml's TargetRubyVersion are kept by hand with
+# nothing else holding them equal (#281, #318; basecradle-python#336 found its own copies
+# apart). release.yml's rehearsal and the daily scan's setups are held by their own tests;
+# CLAUDE.md and the ship-a-pr and rubygems-release skills are moved by hand. (ci.yml's lint
+# job is not a copy: it runs on a Ruby that gets security fixes and lints for
+# TargetRubyVersion, #311.)
 #
 # The limit of this file: it proves ci.yml is internally consistent. The other half of the
 # gate — that the "Protect main" ruleset requires this workflow's context and no other —
@@ -47,6 +48,7 @@ class CiWorkflowTest < Minitest::Test
   WORKFLOW = File.expand_path("../.github/workflows/ci.yml", __dir__)
   GEMSPEC = File.expand_path("../basecradle.gemspec", __dir__)
   README = File.expand_path("../README.md", __dir__)
+  RUBOCOP = File.expand_path("../.rubocop.yml", __dir__)
 
   # The gate is found by the *check context* branch protection names, not by its job key:
   # the ruleset requires the context "CI", and for a non-matrix job the context is the
@@ -332,9 +334,11 @@ class CiWorkflowTest < Minitest::Test
   # The gemspec's `required_ruby_version` is the floor and the one source of truth; the test
   # matrix and the README follow it. A matrix entry below the floor tests a Ruby the gem
   # refuses to install on; a matrix that starts above it ships a floor nothing tests; a README
-  # that names another minimum tells a reader the wrong thing. Raising the floor means moving
-  # all three in one PR — the scan's setups follow the matrix by their own test.
-  def test_the_matrix_and_the_readme_start_at_the_gemspecs_ruby_floor
+  # that names another minimum tells a reader the wrong thing; a TargetRubyVersion above it
+  # lets RuboCop suggest syntax the floor cannot parse, and one below it holds the code to an
+  # end-of-life Ruby. Raising the floor means moving all four in one PR — the scan's setups
+  # follow the matrix, and the release rehearsal the gemspec, by their own tests.
+  def test_the_matrix_the_readme_and_rubocop_start_at_the_gemspecs_ruby_floor
     requirement = Gem::Specification.load(GEMSPEC).required_ruby_version
     assert_equal [ ">=" ], requirement.requirements.map(&:first),
                  "basecradle.gemspec's required_ruby_version is #{requirement}; this test reads " \
@@ -354,6 +358,11 @@ class CiWorkflowTest < Minitest::Test
     assert stated, "README.md no longer states a minimum as a line beginning \"Ruby X.Y+\"; this test reads it there."
     assert_equal floor, Gem::Version.new(stated),
                  "README.md says \"Ruby #{stated}+\", but the gemspec's floor is #{floor}."
+
+    target = YAML.safe_load_file(RUBOCOP).dig("AllCops", "TargetRubyVersion")
+    assert target, ".rubocop.yml sets no AllCops TargetRubyVersion; this test reads it there."
+    assert_equal floor, Gem::Version.new(target.to_s),
+                 ".rubocop.yml's TargetRubyVersion is #{target}, but the gemspec's floor is #{floor}."
   end
 
   private
