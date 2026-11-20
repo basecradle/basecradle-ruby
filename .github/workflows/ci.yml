@@ -13,14 +13,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Lint runs on a Ruby that still gets security fixes, not on the gemspec's floor.
+  # RuboCop parses for .rubocop.yml's TargetRubyVersion, not for the Ruby it runs on, so
+  # the floor is still what it checks against. 3.2 is past its end of life and has no
+  # build carrying the 2026-11-18 Regexp and String fixes (#311).
   lint:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1.343.0
         with:
-          ruby-version: "3.2"
+          ruby-version: "3.4"
           bundler-cache: true
       - name: Lint
         run: bundle exec rubocop
@@ -33,8 +37,8 @@ jobs:
       matrix:
         ruby-version: ["3.2", "3.3", "3.4", "4.0"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1.343.0
         with:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true
@@ -48,8 +52,8 @@ jobs:
     name: drift-guard
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: ruby/setup-ruby@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ruby/setup-ruby@be3c7df29b3349ec6bcfc6b4792f1cf9f5237d18 # v1.343.0
         with:
           ruby-version: "3.4"
           bundler-cache: true
@@ -69,7 +73,7 @@ jobs:
       # Both steps are gated on the event rather than the job: a job that *skips* would
       # fail the CI gate below, which counts a skip as a failure. All-steps-skipped still
       # reports success.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
         with:
           # Walking base..head needs both ends present in the clone.
@@ -151,7 +155,7 @@ jobs:
       ACTIONLINT_VERSION: "1.7.12"
       ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install actionlint (pinned, checksum-verified)

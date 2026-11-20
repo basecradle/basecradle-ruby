@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "yaml"
+require "support/action_pins"
 
 # Branch protection requires exactly one status check: the context named "CI", produced by
 # ci.yml's gate job, which succeeds only when every job in its `needs` list succeeded. That
@@ -29,8 +30,9 @@ require "yaml"
 # The last pin is not about the gate either: the gemspec's Ruby floor, the test matrix here
 # and the README's "Ruby X.Y+" are kept by hand with nothing holding them equal (#281;
 # basecradle-python#336 found its own copies apart). The floor has other hand-kept copies
-# this test does not hold — ci.yml's lint job, release.yml's rehearsal, .rubocop.yml's
-# TargetRubyVersion, and CLAUDE.md — so a floor raise still moves those by hand.
+# this test does not hold — release.yml's rehearsal, .rubocop.yml's TargetRubyVersion, and
+# CLAUDE.md — so a floor raise still moves those by hand. (ci.yml's lint job is not one:
+# it runs on a Ruby that gets security fixes and lints for TargetRubyVersion, #311.)
 #
 # The limit of this file: it proves ci.yml is internally consistent. The other half of the
 # gate — that the "Protect main" ruleset requires this workflow's context and no other —
@@ -277,6 +279,23 @@ class CiWorkflowTest < Minitest::Test
                  "gets more than the default without touching the default. No CI job " \
                  "writes to the repo. If one genuinely needs a scope, decide it in the PR " \
                  "that adds it and teach this test which scope and why."
+  end
+
+  # Every action in CI is pinned to a full commit SHA (#311), by the rule release.yml and the
+  # scan are held to (test/support/action_pins.rb). A CI job holds no repository secret, but
+  # a moved ref under it chooses the Ruby every change is tested on — setup-ruby@v1 kept CI
+  # on whatever its owner pointed it at — and on a push to main it saves the bundle cache
+  # main's later runs restore. Dependabot's github-actions entry bumps the SHA and its
+  # version comment.
+  def test_every_action_in_ci_is_pinned_to_a_full_commit_sha
+    jobs.each do |key, job|
+      unpinned = ActionPins.unpinned(job)
+
+      holder = "That job picks the Ruby every change is tested on and, on main, saves the " \
+               "bundle cache later runs restore"
+
+      assert_empty unpinned, ActionPins.message(key, unpinned, holder)
+    end
   end
 
   # The gemspec's `required_ruby_version` is the floor and the one source of truth; the test
