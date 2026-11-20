@@ -3,6 +3,7 @@
 require "test_helper"
 require "yaml"
 require "support/action_pins"
+require "support/checkout_token"
 
 # The daily dependency security scan's workflow (#267) only runs the tested decisions in
 # script/dependency_security_scan.rb and applies their plan. What it can still get wrong is
@@ -87,6 +88,20 @@ class DependencySecurityScanWorkflowTest < Minitest::Test
       unpinned = ActionPins.unpinned(job)
 
       assert_empty unpinned, ActionPins.message(key, unpinned, "That job holds the capital's App private key")
+    end
+  end
+
+  # Every checkout in the scan drops the token (#317), by the rule CI and the release are held
+  # to (test/support/checkout_token.rb). The job goes on to resolve every Ruby's bundle, run
+  # what each resolution brings, and mint this repository's bot token from its App key.
+  def test_every_checkout_in_the_scan_drops_the_token
+    jobs = workflow["jobs"]
+    refute_empty jobs.values.flat_map { |job| CheckoutToken.checkouts(job) }, CheckoutToken.none("dependency-security-scan.yml")
+
+    jobs.each do |key, job|
+      holder = "That job resolves every Ruby's bundle and holds this repository's bot App key"
+
+      assert_empty CheckoutToken.keeping(job), CheckoutToken.message("dependency-security-scan.yml", key, holder)
     end
   end
 
