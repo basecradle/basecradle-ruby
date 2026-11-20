@@ -3,6 +3,7 @@
 require "test_helper"
 require "yaml"
 require "support/action_pins"
+require "support/ruby_floor"
 
 # release.yml carries facts that are *contractual*, not merely conventional: its own
 # filename and the name of the environment its publish job runs in. Both are registered at
@@ -35,7 +36,6 @@ class ReleaseWorkflowTest < Minitest::Test
 
   # The two contractual names, verbatim as registered.
   FILENAME = "release.yml"
-  GEMSPEC = File.expand_path("../basecradle.gemspec", __dir__)
   ENVIRONMENT = "rubygems"
 
   # The action that does the publishing. The publish job is found by the step that pushes
@@ -270,11 +270,7 @@ class ReleaseWorkflowTest < Minitest::Test
   # moves this Ruby in the same PR (.claude/skills/rubygems-release, "Raising the Ruby
   # floor").
   def test_the_rehearsal_installs_on_the_gemspecs_ruby_floor
-    requirement = Gem::Specification.load(GEMSPEC).required_ruby_version
-    assert_equal [ ">=" ], requirement.requirements.map(&:first),
-                 "basecradle.gemspec's required_ruby_version is #{requirement}; this test reads " \
-                 "a single `>=` floor. Teach it the new shape before changing that one."
-    floor = requirement.requirements.first.last
+    floor = RubyFloor.version
 
     rubies = Array(jobs.fetch(rehearsal_key)["steps"]).filter_map do |step|
       step.dig("with", "ruby-version") if step["uses"].to_s.split("@").first == "ruby/setup-ruby"
