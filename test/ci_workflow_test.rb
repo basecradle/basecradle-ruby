@@ -30,8 +30,9 @@ require "support/action_pins"
 # The last pin is not about the gate either: the gemspec's Ruby floor, the test matrix here
 # and the README's "Ruby X.Y+" are kept by hand with nothing holding them equal (#281;
 # basecradle-python#336 found its own copies apart). The floor has other hand-kept copies
-# this test does not hold — ci.yml's lint job, release.yml's rehearsal, .rubocop.yml's
-# TargetRubyVersion, and CLAUDE.md — so a floor raise still moves those by hand.
+# this test does not hold — release.yml's rehearsal, .rubocop.yml's TargetRubyVersion, and
+# CLAUDE.md — so a floor raise still moves those by hand. (ci.yml's lint job is not one:
+# it runs on a Ruby that gets security fixes and lints for TargetRubyVersion, #311.)
 #
 # The limit of this file: it proves ci.yml is internally consistent. The other half of the
 # gate — that the "Protect main" ruleset requires this workflow's context and no other —
