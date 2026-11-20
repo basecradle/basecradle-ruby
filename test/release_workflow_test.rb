@@ -242,8 +242,9 @@ class ReleaseWorkflowTest < Minitest::Test
   end
 
   # No job in the release restores a cache (#286). A tag-ref run can restore a cache saved on
-  # main, and ci.yml saves Ruby bundles there from jobs whose actions float, so a restored
-  # `vendor/bundle` is code someone else can move: in the publish, loaded by `bundle exec
+  # main, and ci.yml saves Ruby bundles there from jobs that run every gem their unlocked
+  # resolution brings — their action pins (#311) vouch for the action, not for what the job
+  # cached — so a restored `vendor/bundle` is code no pin in this file vouches for: in the publish, loaded by `bundle exec
   # rake release` while the push credential is live; in the rehearsal, beside the guards the
   # capital approves the gate on. setup-ruby's `bundler-cache` is the one cache this workflow
   # could use; `actions/cache` in any form would be the same hole, so both fail.
@@ -255,8 +256,8 @@ class ReleaseWorkflowTest < Minitest::Test
 
       assert_empty caching.map { |step| step["uses"] },
                    "the #{key} job restores a cache. A tag-ref run can restore one saved on " \
-                   "main by a CI job whose actions float, so the bundle it loads is code someone " \
-                   "else can move — beside the push credential in the publish, beside the gate's " \
+                   "main by a CI job, so the bundle it loads is code no pin in this file vouches " \
+                   "for — beside the push credential in the publish, beside the gate's " \
                    "guards in the rehearsal — and no SHA pin in this file comes into it. Resolve " \
                    "the bundle fresh instead."
     end

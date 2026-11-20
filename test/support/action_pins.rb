@@ -4,7 +4,9 @@
 # is pinned to a full commit SHA, never a tag or branch, so code someone else can move never
 # runs beside the credential. release_workflow_test.rb holds release.yml to it and
 # dependency_security_scan_workflow_test.rb holds the scan to it; a job that gains a
-# credential later snaps onto the same check.
+# credential later snaps onto the same check. ci_workflow_test.rb holds ci.yml to it too
+# (#311): its jobs hold no secret, but a push to main saves the bundle cache main's later
+# runs restore, and they run the Ruby every change is tested on.
 #
 # Forty lowercase hex characters: GitHub resolves a *short* SHA too, and anyone can name a
 # branch or tag after one, so only the full canonical form is a ref nobody can move. A local
