@@ -9,6 +9,54 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.15.0] - 2026-11-20
+
+A minor release that adds two verbs for an API operation the platform documented on
+2026-11-20. Nothing is removed and no signature changes. Its release pipeline also moved
+to a Ruby with Ruby's 2026-11-18 security fixes. That is not a fix you get by upgrading
+the gem: the SDK is pure Ruby and ships no interpreter, so the fixes reach you only when
+you upgrade your own Ruby, to 3.3.14, 3.4.13 or 4.0.10.
+
+### Added
+
+- **`WebhookEndpoint#configure_verification` and `#clear_verification`**
+  ([#314](https://github.com/basecradle/basecradle-ruby/pull/314), mirroring
+  [basecradle-python#376](https://github.com/basecradle/basecradle-python/issues/376)).
+  They set and remove an endpoint's signature verification by wrapping
+  `PATCH /webhook_endpoints/{uuid}`, which the platform documented together with a second
+  scheme, `github`.
+  - **`configure_verification(verifier:, credential:, signature_header:)`** sends only the
+    keywords you pass, as `verifier`, `verification_credential` and `signature_header`.
+    It raises `ArgumentError` before any request when you pass none.
+  - **`verifier:`** is passed through as a string: `"hmac_sha256_hex"` or `"github"`
+    today, so a scheme added later needs no release. One the platform does not know
+    raises `BaseCradle::ValidationError`.
+  - **`credential:`** is the signing secret. A blank one is sent as given, and the API
+    treats it as no change, so the current secret stays. It is sent as its bytes, which
+    must be UTF-8. A credential that is not a String, or whose bytes are not UTF-8,
+    raises `ArgumentError` without showing it, and nothing is sent. It is write-only: the
+    API never returns it, and the SDK keeps no copy and never puts it in an `inspect` or
+    an error message.
+  - **`signature_header:`** names the header the signature is read from, for
+    `hmac_sha256_hex` only. A `github` endpoint always reads `X-Hub-Signature-256`.
+  - **`clear_verification`** sends `clear_credential: true`, which removes the secret and
+    turns verification off.
+  - Both update the endpoint in place and return it, like `rotate`, so the new state
+    reads at `endpoint.content.verification`.
+
+### Security
+
+- **The release pipeline runs on a Ruby with the 2026-11-18 Regexp and String fixes**
+  ([#312](https://github.com/basecradle/basecradle-ruby/pull/312),
+  [#311](https://github.com/basecradle/basecradle-ruby/issues/311)). The release and
+  the daily dependency scan pinned `ruby/setup-ruby` v1.338.0, which predates the fixed
+  builds. They now pin v1.343.0, which installs 3.3.14, 3.4.13 and 4.0.10, so the publish
+  job that builds and pushes the gem runs on 3.4.13. CI now pins every action it runs to a
+  full commit, and `lint` runs on 3.4. Ruby 3.2, the gem's floor, is past its end of
+  life and has no fixed build. It still runs where the floor itself is under test: the
+  `test (3.2)` job, the release rehearsal's build-and-install check, and the scan's 3.2
+  resolution.
+
 ## [0.14.4] - 2026-11-17
 
 A patch release with two behavior fixes, both about a credential. No verb is added or
@@ -915,6 +963,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.15.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.15.0
 [0.14.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.4
 [0.14.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.3
 [0.14.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.2
