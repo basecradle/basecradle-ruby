@@ -3,6 +3,7 @@
 require "test_helper"
 require "yaml"
 require "support/action_pins"
+require "support/checkout_token"
 require "support/ruby_floor"
 
 # release.yml carries facts that are *contractual*, not merely conventional: its own
@@ -239,6 +240,26 @@ class ReleaseWorkflowTest < Minitest::Test
         end
 
       assert_empty unpinned, ActionPins.message(key, unpinned, holder)
+    end
+  end
+
+  # Every checkout in the release drops the token (#317), by the rule CI and the scan are
+  # held to (test/support/checkout_token.rb). The publish job is granted `contents: write`,
+  # so a token left on disk there is a write token, beside `bundle exec rake release` with
+  # the push credential live. The rehearsal's token can only read, but the capital approves
+  # the gate on that job's word.
+  def test_every_checkout_in_the_release_drops_the_token
+    refute_empty jobs.values.flat_map { |job| CheckoutToken.checkouts(job) }, CheckoutToken.none(FILENAME)
+
+    jobs.each do |key, job|
+      holder =
+        if key == publish_key
+          "That job's token can write to this repository, and its later steps run with the RubyGems push credential live"
+        else
+          "The publish waits on that job's guards, and the capital approves the gate on their word"
+        end
+
+      assert_empty CheckoutToken.keeping(job), CheckoutToken.message(FILENAME, key, holder)
     end
   end
 
