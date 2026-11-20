@@ -3,6 +3,7 @@
 require "test_helper"
 require "yaml"
 require "support/action_pins"
+require "support/checkout_token"
 require "support/ruby_floor"
 
 # Branch protection requires exactly one status check: the context named "CI", produced by
@@ -287,30 +288,17 @@ class CiWorkflowTest < Minitest::Test
   # it on disk for the rest of the job unless told not to — v7.0.1 writes it to a
   # credentials file under the runner's temp directory that `.git/config` includes — and the
   # lint, test and drift-guard jobs go on to run `bundle install` and every gem an unlocked
-  # resolution brings. Nothing after a checkout here uses git credentials: the repository is
-  # public. release.yml and the dependency scan drop the token at every checkout; this holds
-  # ci.yml to the same. Every checkout step in every job is read, so a job added later with
-  # its own steps is held without an edit here, and a workflow with none flunks rather than
-  # passing over nothing. (No job here calls a reusable workflow; one that did would keep its
-  # checkouts in another file, out of this test's sight.)
+  # resolution brings. The rule is held once, in test/support/checkout_token.rb, which
+  # release.yml and the dependency scan are held to as well. Every checkout step in every job
+  # is read, so a job added later with its own steps is held without an edit here.
   def test_every_checkout_drops_the_token
-    checkouts = jobs.flat_map do |key, job|
-      Array(job["steps"]).select { |step| step["uses"].to_s.start_with?("actions/checkout@") }
-                         .map { |step| [ key, step ] }
+    refute_empty jobs.values.flat_map { |job| CheckoutToken.checkouts(job) }, CheckoutToken.none("ci.yml")
+
+    jobs.each do |key, job|
+      holder = "CI's lint, test and drift-guard jobs go on to run `bundle install` and every gem it brings"
+
+      assert_empty CheckoutToken.keeping(job), CheckoutToken.message("ci.yml", key, holder)
     end
-    refute_empty checkouts, "ci.yml has no actions/checkout step; this test reads them."
-
-    # A `with:` that is not a mapping sets no input at all, so it reads as keeping the token.
-    keeping = checkouts.reject do |_, step|
-      inputs = step["with"]
-      inputs.is_a?(Hash) && inputs["persist-credentials"].to_s == "false"
-    end.map(&:first).uniq
-
-    assert_empty keeping,
-                 "ci.yml: a checkout in #{keeping.join(', ')} does not set " \
-                 "`persist-credentials: false`, so the job's GITHUB_TOKEN stays readable for " \
-                 "every step after it — every gem `bundle install` brings included. Nothing " \
-                 "in CI uses git credentials after checkout; add the key under the step's `with:`."
   end
 
   # Every action in CI is pinned to a full commit SHA (#311), by the rule release.yml and the
