@@ -200,7 +200,7 @@ class DriftGuardTest < Minitest::Test
       BaseCradle::Task => %i[cancel],
       BaseCradle::User => %i[grant_trust revoke_trust],
       BaseCradle::Session => %i[revoke],
-      BaseCradle::WebhookEndpoint => %i[enable disable rotate]
+      BaseCradle::WebhookEndpoint => %i[enable disable rotate configure_verification clear_verification]
     }.each do |model, verbs|
       verbs.each do |verb|
         assert model.method_defined?(verb), "COVERAGE references #{model}##{verb}, which is gone"
