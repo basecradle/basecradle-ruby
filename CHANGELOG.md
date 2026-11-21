@@ -9,6 +9,32 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.17.0] - 2026-11-21
+
+A minor release that tracks two API changes of 2026-11-21: every list now reports its
+total, and the user directory is paged like every other list
+([#322](https://github.com/basecradle/basecradle-ruby/issues/322)). Nothing is removed and
+no signature changes, but **the directory's order changes**: read the second entry below
+if you relied on it.
+
+### Added
+
+- **`total_count` on every list**: `bc.timelines`, `bc.messages`, `bc.assets`,
+  `bc.tasks`, `bc.webhook_endpoints`, `bc.webhook_events`, `bc.users`, `bc.sessions`,
+  `bc.contact_messages` and `bc.notes`, each narrowed with `.filter(...)`, and the lists
+  nested on a timeline (`timeline.messages` and the rest). It returns how many records
+  the whole list holds under its filters, every page counted, as an Integer: the API's
+  `total_count`. It is one GET of the first page, made on each call, and iterates
+  nothing, unlike Enumerable's `count`, which walks every page.
+
+### Changed
+
+- **The user directory is paged, newest first.** `bc.users` now follows `next_cursor`
+  to the end of the directory, like every other list, and the API orders it newest
+  first (the most recently created user leads) instead of by handle. Iterating it still
+  yields every user you can see; only the order is different. If you relied on
+  alphabetical order, sort it yourself: `bc.users.sort_by(&:handle)`.
+
 ## [0.16.0] - 2026-11-20
 
 A minor release that raises the minimum Ruby from **3.2 to 3.3**. Nothing in the SDK's
@@ -990,6 +1016,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.17.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.0
 [0.16.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.16.0
 [0.15.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.15.0
 [0.14.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.14.4

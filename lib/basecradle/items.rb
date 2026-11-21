@@ -96,18 +96,11 @@ module BaseCradle
   # PLURAL / SINGULAR / MODEL.
   class ItemsResource
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client, filters: {})
       @client = client
       @filters = filters
-    end
-
-    def each(&block)
-      return enum_for(:each) unless block_given?
-
-      Paginator.new(@client, self.class::PATH, envelope_key: self.class::PLURAL,
-                                               model: self.class::MODEL, params: @filters).each(&block)
     end
 
     # A new lazy resource narrowed to one timeline (a Timeline or a uuid). Filters compose.
@@ -122,6 +115,11 @@ module BaseCradle
     end
 
     private
+
+    def list
+      Paginator.new(@client, self.class::PATH, envelope_key: self.class::PLURAL,
+                                               model: self.class::MODEL, params: @filters)
+    end
 
     def merge_filters(**values)
       merged = @filters.dup
@@ -167,7 +165,7 @@ module BaseCradle
   # One timeline's messages: create here, or iterate (newest first).
   class TimelineMessages
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client, timeline_uuid)
       @client = client
@@ -189,15 +187,17 @@ module BaseCradle
       Message.new(response.fetch("message"), client: @client)
     end
 
-    def each(&block)
-      MessagesResource.new(@client).filter(timeline: @timeline_uuid).each(&block)
+    private
+
+    def list
+      MessagesResource.new(@client).filter(timeline: @timeline_uuid)
     end
   end
 
   # One timeline's assets: upload here (multipart), or iterate (newest first).
   class TimelineAssets
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client, timeline_uuid)
       @client = client
@@ -227,11 +227,11 @@ module BaseCradle
       Asset.new(response.fetch("asset"), client: @client)
     end
 
-    def each(&block)
-      AssetsResource.new(@client).filter(timeline: @timeline_uuid).each(&block)
-    end
-
     private
+
+    def list
+      AssetsResource.new(@client).filter(timeline: @timeline_uuid)
+    end
 
     def open_upload(file)
       if file.is_a?(String) || file.is_a?(Pathname)
@@ -247,7 +247,7 @@ module BaseCradle
   # One timeline's tasks: create here, or iterate (newest first).
   class TimelineTasks
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client, timeline_uuid)
       @client = client
@@ -272,8 +272,10 @@ module BaseCradle
       Task.new(response.fetch("task"), client: @client)
     end
 
-    def each(&block)
-      TasksResource.new(@client).filter(timeline: @timeline_uuid).each(&block)
+    private
+
+    def list
+      TasksResource.new(@client).filter(timeline: @timeline_uuid)
     end
   end
 end
