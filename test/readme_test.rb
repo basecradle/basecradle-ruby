@@ -36,7 +36,8 @@ class ReadmeTest < Minitest::Test
     stub_request(:get, "#{BASE_URL}/users/dashboard.md")
       .to_return(status: 200, body: "# Your Dashboard\n\nYou are **Nova Digital** (`@nova`).\n")
     stub_request(:get, "#{BASE_URL}/timelines")
-      .to_return(status: 200, body: { "timelines" => [ timeline_payload ], "next_cursor" => nil }.to_json)
+      .to_return(status: 200, body: { "timelines" => [ timeline_payload ], "next_cursor" => nil,
+                                      "total_count" => 1 }.to_json)
     # The one endpoint that returns a timeline's items inline — a mixed list, so the
     # README's case/when over item.type is exercised on every branch it names. The task
     # is activated: a pending one never appears inline (api.md, "Fetching a Timeline").
@@ -62,9 +63,10 @@ class ReadmeTest < Minitest::Test
     stub_request(:post, %r{#{BASE_URL}/tasks/.+/cancellation})
       .to_return(status: 200, body: { "task" => task_payload(status: "cancelled") }.to_json)
     stub_request(:get, %r{#{BASE_URL}/messages})
-      .to_return(status: 200, body: { "messages" => [ message_payload ], "next_cursor" => nil }.to_json)
+      .to_return(status: 200, body: { "messages" => [ message_payload ], "next_cursor" => nil,
+                                      "total_count" => 1 }.to_json)
     stub_request(:get, %r{#{BASE_URL}/tasks})
-      .to_return(status: 200, body: { "tasks" => [ task_payload ], "next_cursor" => nil }.to_json)
+      .to_return(status: 200, body: { "tasks" => [ task_payload ], "next_cursor" => nil, "total_count" => 1 }.to_json)
     stub_request(:post, %r{#{BASE_URL}/timelines/.+/webhook_endpoints})
       .to_return(status: 201, body: { "webhook_endpoint" => webhook_endpoint_payload }.to_json)
     stub_request(:post, %r{#{BASE_URL}/webhook_endpoints/.+/enablement})
@@ -77,19 +79,21 @@ class ReadmeTest < Minitest::Test
     stub_request(:patch, %r{#{BASE_URL}/webhook_endpoints/[^/]+\z})
       .to_return(status: 200, body: { "webhook_endpoint" => webhook_endpoint_payload(verification: github) }.to_json)
     stub_request(:get, %r{#{BASE_URL}/webhook_events})
-      .to_return(status: 200, body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil }.to_json)
+      .to_return(status: 200, body: { "webhook_events" => [ webhook_event_payload ], "next_cursor" => nil,
+                                      "total_count" => 1 }.to_json)
     stub_request(:get, "#{BASE_URL}/users/sessions").to_return(
       status: 200,
       body: { "sessions" => [ session_payload(current: true),
                               session_payload(uuid: WEB_SESSION_UUID, name: "stale ci runner",
                                               current: false) ],
-              "next_cursor" => nil }.to_json
+              "next_cursor" => nil, "total_count" => 2 }.to_json
     )
     stub_request(:delete, %r{#{BASE_URL}/users/sessions/.+}).to_return(status: 204)
     stub_request(:delete, "#{BASE_URL}/session").to_return(status: 204)
     stub_request(:patch, "#{BASE_URL}/users/password").to_return(status: 204)
     stub_request(:get, "#{BASE_URL}/users")
-      .to_return(status: 200, body: { "users" => [ directory_user_payload(trusts_you: true) ] }.to_json)
+      .to_return(status: 200, body: { "users" => [ directory_user_payload(trusts_you: true) ],
+                                      "next_cursor" => nil, "total_count" => 1 }.to_json)
     stub_request(:get, "#{BASE_URL}/users/#{NOVA['uuid']}")
       .to_return(status: 200, body: { "user" => directory_user_payload(trusts_you: true) }.to_json)
     stub_request(:get, %r{#{BASE_URL}/contact_messages(\?.*)?\z}).to_return(
@@ -97,7 +101,7 @@ class ReadmeTest < Minitest::Test
       # The second is a filled honeypot, so the README's set_status line actually runs.
       body: { "contact_messages" => [ contact_message_payload,
                                       contact_message_payload(user: JOHN).merge("honeypot_filled" => true) ],
-              "next_cursor" => nil }.to_json
+              "next_cursor" => nil, "total_count" => 2 }.to_json
     )
     stub_request(:get, %r{#{BASE_URL}/contact_messages/[^/]+\z})
       .to_return(status: 200, body: { "contact_message" => contact_message_payload }.to_json)
@@ -106,7 +110,7 @@ class ReadmeTest < Minitest::Test
     stub_request(:post, %r{#{BASE_URL}/contact_messages/.+/notes})
       .to_return(status: 201, body: { "note" => note_payload }.to_json)
     stub_request(:get, "#{BASE_URL}/notes")
-      .to_return(status: 200, body: { "notes" => [ note_payload ], "next_cursor" => nil }.to_json)
+      .to_return(status: 200, body: { "notes" => [ note_payload ], "next_cursor" => nil, "total_count" => 1 }.to_json)
     stub_request(:post, %r{#{BASE_URL}/users/.+/trust})
       .to_return(status: 201,
                  body: { "user" => trusted_peer_user_payload(you_trust: true, trusts_you: true) }.to_json)

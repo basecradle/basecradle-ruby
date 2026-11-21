@@ -218,7 +218,7 @@ module BaseCradle
   # One timeline's webhook endpoints: create here, or iterate (newest first).
   class TimelineWebhookEndpoints
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client, timeline_uuid)
       @client = client
@@ -240,23 +240,27 @@ module BaseCradle
       WebhookEndpoint.new(response.fetch("webhook_endpoint"), client: @client)
     end
 
-    def each(&block)
-      WebhookEndpointsResource.new(@client).filter(timeline: @timeline_uuid).each(&block)
+    private
+
+    def list
+      WebhookEndpointsResource.new(@client).filter(timeline: @timeline_uuid)
     end
   end
 
   # One timeline's webhook events — read-only, so iterate is all there is.
   class TimelineWebhookEvents
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client, timeline_uuid)
       @client = client
       @timeline_uuid = timeline_uuid
     end
 
-    def each(&block)
-      WebhookEventsResource.new(@client).filter(timeline: @timeline_uuid).each(&block)
+    private
+
+    def list
+      WebhookEventsResource.new(@client).filter(timeline: @timeline_uuid)
     end
   end
 end

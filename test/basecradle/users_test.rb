@@ -9,16 +9,46 @@ class UsersTest < Minitest::Test
     @bc = BaseCradle::Client.new(FAKE_TOKEN)
   end
 
-  def test_directory_iterates_in_one_unpaginated_request
+  # The directory pages like every other list: newest first (John's account is the newer
+  # one), next_cursor passed back as ?before= until it comes back null.
+  def test_directory_pages_through_the_cursor_to_its_end
     stub_request(:get, "#{BASE_URL}/users").to_return(
       status: 200,
-      body: { "users" => [ directory_user_payload(user: JOHN), directory_user_payload(user: NOVA) ] }.to_json
+      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => JOHN["uuid"],
+              "total_count" => 2 }.to_json
+    )
+    stub_request(:get, "#{BASE_URL}/users").with(query: { "before" => JOHN["uuid"] }).to_return(
+      status: 200,
+      body: { "users" => [ directory_user_payload(user: NOVA) ], "next_cursor" => nil,
+              "total_count" => 2 }.to_json
     )
 
     handles = @bc.users.map(&:handle)
 
     assert_equal %w[john nova], handles
     assert_requested(:get, "#{BASE_URL}/users", times: 1)
+    assert_requested(:get, "#{BASE_URL}/users", query: { "before" => JOHN["uuid"] }, times: 1)
+  end
+
+  def test_directory_is_lazy_across_pages
+    stub_request(:get, "#{BASE_URL}/users").to_return(
+      status: 200,
+      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => JOHN["uuid"],
+              "total_count" => 2 }.to_json
+    )
+
+    assert_equal "john", @bc.users.first.handle
+    assert_not_requested(:get, "#{BASE_URL}/users", query: hash_including("before"))
+  end
+
+  def test_directory_reports_how_many_users_you_can_see
+    stub_request(:get, "#{BASE_URL}/users").to_return(
+      status: 200,
+      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => JOHN["uuid"],
+              "total_count" => 2 }.to_json
+    )
+
+    assert_equal 2, @bc.users.total_count
     assert_not_requested(:get, "#{BASE_URL}/users", query: hash_including("before"))
   end
 

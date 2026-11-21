@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "api_object"
+require_relative "pagination"
 require_relative "serialization"
 
 module BaseCradle
@@ -94,25 +95,17 @@ module BaseCradle
     end
   end
 
-  # The directory of other users — you are never listed; hidden users are omitted.
+  # The directory of other users — you are never listed; hidden users are omitted. It is a
+  # list like every other: newest first (the most recently created user leads),
+  # auto-paginating to the end, with +total_count+ for how many users you can see.
   #
   #   bc.users.each { |user| puts [user.handle, user.kind, user.trust.mutual].inspect }
   class UsersResource
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client)
       @client = client
-    end
-
-    # The directory is not paginated (no next_cursor in the API contract) — one request
-    # returns everyone you can see.
-    def each
-      return enum_for(:each) unless block_given?
-
-      @client.request("GET", "/users").fetch("users").each do |data|
-        yield User.new(data, client: @client)
-      end
     end
 
     # Fetch one user in subject form. The fields you get depend on your relationship to
@@ -120,6 +113,12 @@ module BaseCradle
     # more; your own profile shows everything.
     def get(uuid)
       User.new(@client.request("GET", "/users/#{uuid}").fetch("user"), client: @client)
+    end
+
+    private
+
+    def list
+      Paginator.new(@client, "/users", envelope_key: "users", model: User)
     end
   end
 end

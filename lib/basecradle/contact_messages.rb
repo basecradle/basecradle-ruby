@@ -115,18 +115,11 @@ module BaseCradle
   #   end
   class ContactMessagesResource
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client, filters: {})
       @client = client
       @filters = filters
-    end
-
-    def each(&block)
-      return enum_for(:each) unless block_given?
-
-      Paginator.new(@client, "/contact_messages", envelope_key: "contact_messages",
-                                                  model: ContactMessage, params: @filters).each(&block)
     end
 
     # A new lazy resource narrowed by status: +"received"+, +"closed"+ or +"spam"+. Any
@@ -142,6 +135,13 @@ module BaseCradle
       ContactMessage.new(@client.request("GET", "/contact_messages/#{uuid}").fetch("contact_message"),
                          client: @client)
     end
+
+    private
+
+    def list
+      Paginator.new(@client, "/contact_messages", envelope_key: "contact_messages",
+                                                  model: ContactMessage, params: @filters)
+    end
   end
 
   # Every note, across every subject, newest first, auto-paginating — or fetch one by uuid.
@@ -149,21 +149,21 @@ module BaseCradle
   # from here.
   class NotesResource
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client)
       @client = client
     end
 
-    def each(&block)
-      return enum_for(:each) unless block_given?
-
-      Paginator.new(@client, "/notes", envelope_key: "notes", model: Note).each(&block)
-    end
-
     # Fetch one note by its uuid.
     def get(uuid)
       Note.new(@client.request("GET", "/notes/#{uuid}").fetch("note"), client: @client)
+    end
+
+    private
+
+    def list
+      Paginator.new(@client, "/notes", envelope_key: "notes", model: Note)
     end
   end
 end

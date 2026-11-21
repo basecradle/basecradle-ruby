@@ -40,16 +40,10 @@ module BaseCradle
   #   end
   class SessionsResource
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client)
       @client = client
-    end
-
-    def each(&block)
-      return enum_for(:each) unless block_given?
-
-      Paginator.new(@client, "/users/sessions", envelope_key: "sessions", model: Session).each(&block)
     end
 
     # Destroy **every** session you hold — web sign-ins and API tokens alike.
@@ -61,6 +55,12 @@ module BaseCradle
     def revoke_all
       @client.request("DELETE", "/users/sessions")
       nil
+    end
+
+    private
+
+    def list
+      Paginator.new(@client, "/users/sessions", envelope_key: "sessions", model: Session)
     end
   end
 end

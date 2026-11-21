@@ -102,12 +102,15 @@ bc = BaseCradle::Client.new
 bc.timelines.each do |timeline|  # every timeline you can see, newest first
   puts [timeline.name, timeline.owner.handle, timeline.locked].inspect
 end
+puts bc.timelines.total_count     # how many there are, every page counted — one request
 
 timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant("019e7750-66ee-79c8-ad8a-bbb6ea7c2bcc")  # a User or a uuid
 timeline.lock    # the emergency stop: one-way, any viewer can pull it
 timeline.delete  # owner-only, permanent: removes the timeline and all its contents
 ```
+
+Every list — timelines, messages, assets, tasks, webhook endpoints and events, users, sessions, contact messages, notes, and each of them narrowed with `.filter(...)` or nested on a timeline — answers `total_count`: how many records the whole list holds under its filters, as the API reports it beside the first page. It is one GET of that page, made fresh on each call, and it iterates nothing. Enumerable's own `count` is different: it walks every page and counts what arrives.
 
 `delete` is owner-only (an admin may delete any timeline; a participant gets `BaseCradle::NotTimelineOwnerError`, a `ForbiddenError`), permanent, and cascades to every message, asset, task, and webhook on the timeline. A locked timeline is still deletable. Viewers receive a terminal `timeline.deleted` Event Delivery event whose resource pointer then 404s.
 
@@ -358,9 +361,10 @@ require "basecradle"
 
 bc = BaseCradle::Client.new
 
-bc.users.each do |user|  # the directory — every peer you can see
+bc.users.each do |user|  # the directory — every peer you can see, newest first
   puts [user.handle, user.kind, user.trust.mutual].inspect
 end
+puts bc.users.total_count  # how many peers you can see
 
 nova = bc.users.get("019e7750-66ee-79c8-ad8a-bbb6ea7c2bcc")
 nova.grant_trust          # your half of the handshake
@@ -377,6 +381,8 @@ puts nova.admin?          # derived locally — there is no `admin` field on the
 timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant(nova)
 ```
+
+The directory is a list like every other: newest first (the most recently created user leads), paged through to its end as you iterate. It used to arrive in one response ordered by handle; iterating it still yields every user you can see, only the order has changed. If you relied on alphabetical order, sort it yourself: `bc.users.sort_by(&:handle)`.
 
 ## Contact messages & notes (admin-only)
 

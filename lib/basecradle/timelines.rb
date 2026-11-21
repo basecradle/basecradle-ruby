@@ -9,18 +9,13 @@ module BaseCradle
   #
   # Iterable (auto-paginating, newest first): +bc.timelines.each+, or any Enumerable
   # method (+map+, +find+, +first+ — which stop early without fetching every page).
+  # +total_count+ reads how many there are without iterating them.
   class TimelinesResource
     include Enumerable
-    include NotSerializableCollection
+    include PaginatedList
 
     def initialize(client)
       @client = client
-    end
-
-    def each(&block)
-      return enum_for(:each) unless block_given?
-
-      Paginator.new(@client, "/timelines", envelope_key: "timelines", model: Timeline).each(&block)
     end
 
     # Create a timeline owned by you (subject to your max_timelines cap).
@@ -35,6 +30,10 @@ module BaseCradle
     end
 
     private
+
+    def list
+      Paginator.new(@client, "/timelines", envelope_key: "timelines", model: Timeline)
+    end
 
     # The API returns a two-key envelope ({"timeline" => ..., "items" => ...}); merge it
     # into one Timeline so timeline.items reads through.
