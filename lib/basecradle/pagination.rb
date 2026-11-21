@@ -3,10 +3,14 @@
 require_relative "serialization"
 
 module BaseCradle
-  # The shared cursor-pagination engine. Every list endpoint paginates the same way:
-  # newest first, up to 50 per page, +next_cursor+ in the response passed back as
-  # +?before=+ for the next (older) page, a +null+ cursor meaning the end. Every page also
-  # carries +total_count+: how many records the whole list holds under the filters passed.
+  # The shared cursor-pagination engine. Every list endpoint paginates the same way: up to
+  # 50 per page, +next_cursor+ in the response passed back as +?before=+ for the next page,
+  # a +null+ cursor meaning the end. Every list is newest first except the user directory,
+  # which reads A to Z by handle. Every page also carries +total_count+: how many records
+  # the whole list holds under the filters passed.
+  #
+  # The cursor is opaque: a record uuid in most lists, a handle in the directory. It is
+  # passed back exactly as received, and nothing here checks its shape.
   #
   # Lazy and +Enumerable+: the first page is fetched when iteration starts, and page N+1
   # only when iteration crosses the page boundary — so +first+/+take+/+find+ stop early

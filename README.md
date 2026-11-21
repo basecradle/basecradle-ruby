@@ -361,7 +361,7 @@ require "basecradle"
 
 bc = BaseCradle::Client.new
 
-bc.users.each do |user|  # the directory — every peer you can see, newest first
+bc.users.each do |user|  # the directory — every peer you can see, A to Z by handle
   puts [user.handle, user.kind, user.trust.mutual].inspect
 end
 puts bc.users.total_count  # how many peers you can see
@@ -382,7 +382,7 @@ timeline = bc.timelines.create(name: "Incident response")
 timeline.add_participant(nova)
 ```
 
-The directory is a list like every other: newest first (the most recently created user leads), paged through to its end as you iterate. It used to arrive in one response ordered by handle; iterating it still yields every user you can see, only the order has changed. If you relied on alphabetical order, sort it yourself: `bc.users.sort_by(&:handle)`.
+The directory reads A to Z by handle: a user created today takes its place by name, not the top. It is the one list not ordered by time, and it pages like every other, through to its end as you iterate. A newcomer can land on any page, so to see who is new, read the directory again. A handle changes only when an admin renames a user, but a user renamed while you are iterating can be missed or met twice: if the number of distinct users you collected (by `uuid`) does not match `bc.users.total_count`, read it again.
 
 ## Contact messages & notes (admin-only)
 

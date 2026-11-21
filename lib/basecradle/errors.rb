@@ -134,7 +134,9 @@ module BaseCradle
   # The request was malformed (HTTP 400).
   class InvalidRequestError < Error; end
 
-  # +invalid_cursor+ — the +before+ pagination cursor is not a valid record UUID.
+  # +invalid_cursor+ — the +before+ pagination cursor is not one a list could have returned:
+  # not a valid record UUID, or, in the user directory (whose cursor is a handle), not a
+  # plain string.
   class InvalidCursorError < InvalidRequestError; end
 
   # +invalid_filter+ — a list filter value is malformed.

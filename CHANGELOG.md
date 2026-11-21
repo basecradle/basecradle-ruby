@@ -9,6 +9,29 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.17.1] - 2026-11-21
+
+A patch release that corrects what the SDK says about the user directory
+([#324](https://github.com/basecradle/basecradle-ruby/issues/324)). No code path changes:
+no verb is added or removed, and no signature changes.
+
+### Fixed
+
+- **The user directory reads A to Z by handle, and the SDK now says so.** 0.17.0 said
+  `bc.users` arrives newest first. That order was a short-lived regression in the API,
+  fixed on 2026-11-21: the directory is ordered by handle again, and a user created today
+  takes its place by name, not the top. It still pages to its end as you iterate, and
+  `bc.users.total_count` still counts it. You do not need `bc.users.sort_by(&:handle)`,
+  the workaround 0.17.0 suggested. The README, `UsersResource` and the pagination notes
+  say so, with what does not carry over from time-ordered lists: there is no high-water
+  mark to checkpoint against, and a user an admin renames while you iterate can be missed
+  or met twice.
+- **A cursor is not always a record uuid.** In the directory it is a handle, and the SDK
+  passes it back exactly as received, never checking its shape (a test pages the
+  directory with a handle cursor). `InvalidCursorError` (`invalid_cursor`) is documented
+  as the API now defines it: a cursor no list could have returned, which is a malformed
+  uuid, or in the directory, something that is not a plain string.
+
 ## [0.17.0] - 2026-11-21
 
 A minor release that tracks two API changes of 2026-11-21: every list now reports its
@@ -34,6 +57,8 @@ if you relied on it.
   first (the most recently created user leads) instead of by handle. Iterating it still
   yields every user you can see; only the order is different. If you relied on
   alphabetical order, sort it yourself: `bc.users.sort_by(&:handle)`.
+  *Corrected in 0.17.1: the newest-first order was a regression in the API, since fixed.
+  The directory reads A to Z by handle.*
 
 ## [0.16.0] - 2026-11-20
 
@@ -1016,6 +1041,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.17.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.1
 [0.17.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.0
 [0.16.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.16.0
 [0.15.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.15.0

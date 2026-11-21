@@ -110,7 +110,8 @@ module TestSupport
       "webhook_endpoints_url" => "https://basecradle.com/webhook_endpoints.json",
       "webhook_events_url" => "https://basecradle.com/webhook_events.json",
       "pagination" => {
-        "summary" => "Lists are newest-first, 50 per page, paged with ?before=. Within one " \
+        "summary" => "Lists are newest-first (the user directory alone is A to Z by handle), " \
+                     "50 per page, paged with ?before=. Within one " \
                      "timeline, UUID order is commit order, so the newest UUID you have read " \
                      "from a timeline is a safe high-water mark. A list spanning timelines is " \
                      "not — checkpoint per timeline with ?timeline=<uuid>, one mark per list.",

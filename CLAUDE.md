@@ -52,14 +52,14 @@ It is the source of truth for **behavior**: every resource, every method, every 
 - Resources are objects with verbs (`timeline.lock`, not `client.post_timeline_lock(uuid)`) — same as Python, expressed in Ruby.
 - Reads mirror the wire JSON exactly (`uuid`, `handle`, `kind`, `last_used_at`) — no renaming, same as Python.
 - Errors are typed: each `problem+json` `code` → an exception class, all under a `BaseCradle::Error` base that exposes the full problem document.
-- Pagination is invisible: collections are `Enumerable`, auto-paginating, newest-first; cursors never appear in user code.
+- Pagination is invisible: collections are `Enumerable`, auto-paginating, newest-first (the user directory alone reads A to Z by handle, and its cursor is a handle); cursors are opaque, never shape-checked, and never appear in user code.
 - **Scope: sync-first.** Python ships sync + async because `httpx` made async nearly free. Ruby's idiom is synchronous; **do not build an async client for v0** unless an issue explicitly calls for it.
 
 When in doubt about *what* a method should do, the Python SDK and the API docs decide. When in doubt about *how* to express it, idiomatic Ruby decides.
 
 ## The API — Source of Truth
 
-The SDK wraps the BaseCradle HTTP API, defined by three public artifacts: the **OpenAPI 3 spec** at https://basecradle.com/docs/api.yaml (generated from the platform's test suite, so it cannot drift — the machine contract, and what the SDK's drift-guard checks for endpoints), the prose documentation at https://basecradle.com/docs/api.md (semantics, policies, worked examples, and the Error Codes table the drift-guard holds the typed errors to), and the interactive reference at https://basecradle.com/docs/api/reference. The API is **unversioned and additive-only**: what works keeps working, so the SDK never needs a breaking change to track it. Its wire conventions — `bc_uat_` Bearer tokens minted via `POST /session`, RFC 9457 `problem+json` errors with a stable `code`, `RateLimit-*` headers with `429` + `Retry-After`, cursor pagination newest-first, responses enveloped under the resource name — are documented in `api.md` and implemented once in `lib/basecradle/`.
+The SDK wraps the BaseCradle HTTP API, defined by three public artifacts: the **OpenAPI 3 spec** at https://basecradle.com/docs/api.yaml (generated from the platform's test suite, so it cannot drift — the machine contract, and what the SDK's drift-guard checks for endpoints), the prose documentation at https://basecradle.com/docs/api.md (semantics, policies, worked examples, and the Error Codes table the drift-guard holds the typed errors to), and the interactive reference at https://basecradle.com/docs/api/reference. The API is **unversioned and additive-only**: what works keeps working, so the SDK never needs a breaking change to track it. Its wire conventions — `bc_uat_` Bearer tokens minted via `POST /session`, RFC 9457 `problem+json` errors with a stable `code`, `RateLimit-*` headers with `429` + `Retry-After`, cursor pagination newest-first (the user directory alone A to Z by handle), responses enveloped under the resource name — are documented in `api.md` and implemented once in `lib/basecradle/`.
 
 ## Stack (omakase — decided once, not relitigated)
 
