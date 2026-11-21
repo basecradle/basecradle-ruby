@@ -5,19 +5,24 @@ require "test_helper"
 class UsersTest < Minitest::Test
   include TestSupport
 
+  # The directory's cursor is a handle, where every other list's is a record uuid.
+  HANDLE_CURSOR = "john"
+
   def setup
     @bc = BaseCradle::Client.new(FAKE_TOKEN)
   end
 
-  # The directory pages like every other list: newest first (John's account is the newer
-  # one), next_cursor passed back as ?before= until it comes back null.
-  def test_directory_pages_through_the_cursor_to_its_end
+  # The directory reads A to Z by handle, and pages like every other list: next_cursor
+  # passed back as ?before= until it comes back null. The SDK keeps the order the API
+  # serves, across the page boundary, without re-sorting. Its cursor is a handle, not a
+  # uuid, and the SDK hands it back exactly as received, never checking its shape.
+  def test_directory_reads_a_to_z_by_handle_across_a_page_boundary
     stub_request(:get, "#{BASE_URL}/users").to_return(
       status: 200,
-      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => JOHN["uuid"],
+      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => HANDLE_CURSOR,
               "total_count" => 2 }.to_json
     )
-    stub_request(:get, "#{BASE_URL}/users").with(query: { "before" => JOHN["uuid"] }).to_return(
+    stub_request(:get, "#{BASE_URL}/users").with(query: { "before" => HANDLE_CURSOR }).to_return(
       status: 200,
       body: { "users" => [ directory_user_payload(user: NOVA) ], "next_cursor" => nil,
               "total_count" => 2 }.to_json
@@ -27,13 +32,13 @@ class UsersTest < Minitest::Test
 
     assert_equal %w[john nova], handles
     assert_requested(:get, "#{BASE_URL}/users", times: 1)
-    assert_requested(:get, "#{BASE_URL}/users", query: { "before" => JOHN["uuid"] }, times: 1)
+    assert_requested(:get, "#{BASE_URL}/users", query: { "before" => HANDLE_CURSOR }, times: 1)
   end
 
   def test_directory_is_lazy_across_pages
     stub_request(:get, "#{BASE_URL}/users").to_return(
       status: 200,
-      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => JOHN["uuid"],
+      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => HANDLE_CURSOR,
               "total_count" => 2 }.to_json
     )
 
@@ -44,7 +49,7 @@ class UsersTest < Minitest::Test
   def test_directory_reports_how_many_users_you_can_see
     stub_request(:get, "#{BASE_URL}/users").to_return(
       status: 200,
-      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => JOHN["uuid"],
+      body: { "users" => [ directory_user_payload(user: JOHN) ], "next_cursor" => HANDLE_CURSOR,
               "total_count" => 2 }.to_json
     )
 

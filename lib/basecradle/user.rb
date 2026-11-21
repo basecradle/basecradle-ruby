@@ -95,9 +95,10 @@ module BaseCradle
     end
   end
 
-  # The directory of other users — you are never listed; hidden users are omitted. It is a
-  # list like every other: newest first (the most recently created user leads),
-  # auto-paginating to the end, with +total_count+ for how many users you can see.
+  # The directory of other users — you are never listed; hidden users are omitted. It reads
+  # A to Z by handle (a user created today takes its place by name, not the top), the one
+  # list not ordered by time. It auto-paginates to the end like every other, its cursor a
+  # handle rather than a uuid, with +total_count+ for how many users you can see.
   #
   #   bc.users.each { |user| puts [user.handle, user.kind, user.trust.mutual].inspect }
   class UsersResource

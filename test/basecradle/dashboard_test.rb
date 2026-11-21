@@ -43,7 +43,9 @@ class DashboardTest < Minitest::Test
     interaction = @bc.me.interaction
 
     assert_instance_of BaseCradle::DashboardPagination, interaction.pagination
-    assert_includes interaction.pagination.summary, "newest-first, 50 per page"
+    assert_includes interaction.pagination.summary, "Lists are newest-first"
+    assert_includes interaction.pagination.summary, "the user directory alone is A to Z by handle"
+    assert_includes interaction.pagination.summary, "50 per page"
     assert_equal "https://basecradle.com/docs/api.md#pagination", interaction.pagination.guide_url
 
     assert_instance_of BaseCradle::DashboardTools, interaction.tools
