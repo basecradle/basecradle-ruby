@@ -1,12 +1,49 @@
 version: 2
+# The fleet's Dependabot policy (@origin: trialled from 2026-11-16, fleet-wide 2026-11-22,
+# basecradle/basecradle#874), in two halves:
+#
+# - A new version is not proposed until it is seven days old (`cooldown` on every entry),
+#   so a release pulled or found compromised in its first week never arrives here as a
+#   version-update pull request. A security update is never delayed: Dependabot exempts
+#   security updates from the cooldown, and the daily dependency scan (#267) has no cooldown.
+#   Groups, too, apply only to version updates, so a security update arrives ungrouped.
+# - An update to an action, or to a gem on this repository's publish path, is read by the
+#   capital and not auto-merged: green CI is no verdict on a job CI never runs. That routing
+#   half lives in the shared auto-merge workflow (basecradle/.github, called by
+#   .github/workflows/dependabot-auto-merge.yml); this file only says what is on the path,
+#   in the group named `publish-path`.
 updates:
 - package-ecosystem: bundler
   directory: "/"
   schedule:
     interval: weekly
+  cooldown:
+    default-days: 7
+  # The publish path (#327). release.yml's publish job runs `bundle install` on the whole
+  # Gemfile and then `bundle exec rake release`, in a job that holds `id-token: write` and,
+  # from release-gem on, the RubyGems push key: every gem in the bundle installs and runs
+  # there, not only rake and the bundler and rubygems that build the gem. No Gemfile.lock is
+  # committed, so Dependabot can only ever move what the Gemfile and the gemspec declare;
+  # that is this list, exact names, one per gem. test/dependabot_config_test.rb holds it
+  # equal to those declarations, so a gem added to the Gemfile joins it in the same diff.
+  groups:
+    publish-path:
+      patterns:
+      - activesupport
+      - minitest
+      - rake
+      - rubocop-rails-omakase
+      - webmock
   open-pull-requests-limit: 10
 - package-ecosystem: github-actions
   directory: "/"
   schedule:
     interval: weekly
+  cooldown:
+    default-days: 7
+  # A week's action bumps arrive as one pull request for the capital to read.
+  groups:
+    github-actions:
+      patterns:
+      - "*"
   open-pull-requests-limit: 10
