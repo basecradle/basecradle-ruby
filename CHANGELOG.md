@@ -9,6 +9,32 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.17.3] - 2026-11-26
+
+A patch release that corrects what the SDK says about a platform change of 2026-11-26
+([#334](https://github.com/basecradle/basecradle-ruby/issues/334)). No code path changes:
+no verb is added or removed, and no signature changes.
+
+### Fixed
+
+- **An endpoint's `verifier` has five schemes, not four.** The platform now verifies
+  `twilio`, for the webhooks Twilio sends (an incoming text message, a recording or
+  transcription callback, a status callback). It reads Twilio's own `X-Twilio-Signature`,
+  fixed, so `signature_header` is ignored as it is under `github` and `slack`, and a move
+  from `shared_secret_header` to `twilio` that names no header resets it to `X-Signature`.
+  The secret is a shared key made at Twilio for signing webhooks (Twilio's own
+  recommendation) or the account's Auth Token. Twilio signs the URL it was given, so give
+  it the endpoint's `ingest_url` exactly as the endpoint reports it. Twilio also reads the
+  reply to a delivery, so a `twilio` endpoint answers each delivery it stores with
+  `200 OK` and an empty TwiML document in place of the empty `201`; that is the
+  endpoint's answer to the sender, and nothing this SDK returns changes. The empty answer
+  ends a voice call, so an `ingest_url` is never a number's voice URL, and an endpoint
+  holds one secret, so a change between a shared key and the Auth Token is made here in
+  the same minute as at Twilio; the README says both.
+  `configure_verification` already passed the verifier through as a string, so `twilio`
+  works with this SDK as it is; only the docs listed four. The README,
+  `WebhookVerification` and `configure_verification` now list all five.
+
 ## [0.17.2] - 2026-11-26
 
 A patch release that corrects what the SDK says about two platform changes of 2026-11-25
@@ -39,6 +65,7 @@ no verb is added or removed, and no signature changes.
   `slack`. It is required in the same call that moves an endpoint to
   `shared_secret_header`, or from it back to `hmac_sha256_hex`; a call that passes only
   `verifier:` there raises `BaseCradle::ValidationError`.
+  *Corrected in 0.17.3: since 2026-11-26 it has five, adding `twilio`.*
 
 ## [0.17.1] - 2026-11-21
 
@@ -150,7 +177,8 @@ you upgrade your own Ruby, to 3.3.14, 3.4.13 or 4.0.10.
     `hmac_sha256_hex` only. A `github` endpoint always reads `X-Hub-Signature-256`.
     *Corrected in 0.17.2: since 2026-11-25 the platform has four schemes, adding
     `shared_secret_header` and `slack`, and `signature_header:` also names the header a
-    `shared_secret_header` endpoint reads the secret from.*
+    `shared_secret_header` endpoint reads the secret from. Corrected again in 0.17.3:
+    since 2026-11-26 it has five, adding `twilio`.*
   - **`clear_verification`** sends `clear_credential: true`, which removes the secret and
     turns verification off.
   - Both update the endpoint in place and return it, like `rotate`, so the new state
@@ -1077,6 +1105,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.17.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.3
 [0.17.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.2
 [0.17.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.1
 [0.17.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.0

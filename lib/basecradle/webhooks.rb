@@ -19,10 +19,11 @@ module BaseCradle
     attribute :enabled
     # The header deliveries are checked against: the signature's under "hmac_sha256_hex",
     # the secret's under "shared_secret_header". A "github" endpoint reports its fixed
-    # X-Hub-Signature-256 here; a "slack" endpoint always reads X-Slack-Signature.
+    # X-Hub-Signature-256 here; a "slack" endpoint always reads X-Slack-Signature, and a
+    # "twilio" endpoint X-Twilio-Signature.
     attribute :signature_header
-    # "hmac_sha256_hex", "github", "shared_secret_header" or "slack" today — an open set;
-    # read it as a string.
+    # "hmac_sha256_hex", "github", "shared_secret_header", "slack" or "twilio" today — an
+    # open set; read it as a string.
     attribute :verifier
   end
 
@@ -76,31 +77,43 @@ module BaseCradle
     # stays as it is; pass at least one, or this raises ArgumentError before any request
     # is made.
     #
-    # - +verifier+ is the scheme, one of four today: "hmac_sha256_hex" (the default; any
-    #   sender you control signs the body), "github" (a GitHub webhook), "slack" (a Slack
-    #   app's Events API; the endpoint answers Slack's url_verification handshake itself,
-    #   and the handshake creates no event) or "shared_secret_header" (a sender that
-    #   cannot sign sends the secret itself in a header). It is passed through as given,
-    #   so a scheme the platform adds later works here unchanged; one it does not know
-    #   raises ValidationError.
+    # - +verifier+ is the scheme, one of five today: "hmac_sha256_hex" (the default; any
+    #   sender you control signs the body), "github" (a GitHub webhook),
+    #   "shared_secret_header" (a sender that cannot sign sends the secret itself in a
+    #   header), "slack" (a Slack app's Events API; the endpoint answers Slack's
+    #   url_verification handshake itself, and the handshake creates no event) or "twilio"
+    #   (the webhooks Twilio sends: an incoming text message, a recording or transcription
+    #   callback, a status callback). It is passed through as given, so a scheme the
+    #   platform adds later works here unchanged; one it does not know raises
+    #   ValidationError. Twilio signs the URL it was given, so give it +content.ingest_url+
+    #   exactly as the endpoint reports it. Twilio also reads the reply, so a "twilio"
+    #   endpoint answers each delivery it stores with 200 OK and an empty TwiML document
+    #   in place of the empty 201: the answer to the sender, which changes nothing this
+    #   method returns. That empty answer ends a voice call, so the ingest_url is never a
+    #   number's voice URL; point a recording's callbacks at it instead.
     # - +credential+ is the signing secret, sent as +verification_credential+: setting it
     #   turns verification on. Under "shared_secret_header" nothing is signed: it is the
-    #   header's exact value, compared as sent, so include any prefix the sender adds. A
-    #   blank one is sent as given and the API treats it as no change: the current
-    #   secret, if any, stays, and +content.verification.enabled+
-    #   cannot tell that skipped rotation from a real one, so make sure a secret read from
-    #   the environment is not empty before passing it. It is sent as its bytes, which
-    #   must be UTF-8 (a BINARY string read from a file is fine); a credential that is not
-    #   a String, or whose bytes are not UTF-8, raises ArgumentError before any request,
-    #   and the error never shows it. It is write-only: the API never returns it, and this
-    #   SDK keeps no copy and never puts it in an inspect or an error message.
+    #   header's exact value, compared as sent, so include any prefix the sender adds.
+    #   Under "twilio" it is a shared key made at Twilio for signing webhooks (Twilio's own
+    #   recommendation) or the account's Auth Token. An endpoint holds one secret, a
+    #   delivery signed with the other is refused with 401, and Twilio does not resend it
+    #   by default: when you switch between the two, or replace a shared key, change it
+    #   here in the same minute you change it at Twilio. A blank credential is sent as
+    #   given and the API treats it as no change: the current secret, if any, stays, and
+    #   +content.verification.enabled+ cannot tell that skipped rotation from a real one,
+    #   so make sure a secret read from the environment is not empty before passing it. It
+    #   is sent as its bytes, which must be UTF-8 (a BINARY string read from a file is
+    #   fine); a credential that is not a String, or whose bytes are not UTF-8, raises
+    #   ArgumentError before any request, and the error never shows it. It is write-only:
+    #   the API never returns it, and this SDK keeps no copy and never puts it in an
+    #   inspect or an error message.
     # - +signature_header+ is the header that is read: the signature's under
-    #   "hmac_sha256_hex", the secret's under "shared_secret_header". A "github" or
-    #   "slack" endpoint ignores it. Pass it in the same call that moves an endpoint to
-    #   "shared_secret_header", or from it back to "hmac_sha256_hex": a header named for
-    #   one is never carried over to the other, so passing only +verifier+ there raises
-    #   ValidationError. A move from "shared_secret_header" to "github" or "slack" that
-    #   names no header resets it to X-Signature.
+    #   "hmac_sha256_hex", the secret's under "shared_secret_header". A "github", "slack"
+    #   or "twilio" endpoint ignores it. Pass it in the same call that moves an endpoint
+    #   to "shared_secret_header", or from it back to "hmac_sha256_hex": a header named
+    #   for one is never carried over to the other, so passing only +verifier+ there
+    #   raises ValidationError. A move from "shared_secret_header" to "github", "slack" or
+    #   "twilio" that names no header resets it to X-Signature.
     #
     # Any viewer of the endpoint's timeline may configure it, locked timeline or not.
     # Returns this endpoint, which adopts the one the API returns, so
