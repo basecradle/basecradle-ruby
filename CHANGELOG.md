@@ -9,6 +9,37 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.17.2] - 2026-11-26
+
+A patch release that corrects what the SDK says about two platform changes of 2026-11-25
+([#332](https://github.com/basecradle/basecradle-ruby/issues/332)). No code path changes:
+no verb is added or removed, and no signature changes.
+
+### Fixed
+
+- **A password change signs out every other session, and the SDK now says so.** Since
+  2026-11-25 a successful `bc.change_password` destroys every other session of the
+  account, browser sessions and API tokens alike, and each raises
+  `BaseCradle::AuthenticationError` (`401`) from then on. The token that made the call
+  keeps working, so the calling client goes on as before; a change that fails signs
+  nothing out. The README and `Client#change_password` said the opposite, as security
+  advice: that a password change is not a sign-out and every session stays valid. If you
+  run several clients on one account, mint each a new token after the change. If the
+  token you suspect is the one you called with, revoke it too (`bc.sign_out`, or
+  `bc.sessions.revoke_all`).
+- **An endpoint's `verifier` has four schemes, not two.** Besides `hmac_sha256_hex` and
+  `github`, the platform now verifies `shared_secret_header`, for a sender that cannot
+  sign and sends the secret itself in the header `signature_header` names, and `slack`,
+  for a Slack app's Events API, whose `url_verification` handshake the endpoint answers
+  itself without creating an event. `configure_verification` already passed the verifier
+  through as a string, so both work with this SDK as it is; only the docs listed two.
+  The README, `WebhookVerification` and `configure_verification` now list all four, and
+  say what `signature_header` means under each: the signature's header under
+  `hmac_sha256_hex`, the secret's under `shared_secret_header`, ignored by `github` and
+  `slack`. It is required in the same call that moves an endpoint to
+  `shared_secret_header`, or from it back to `hmac_sha256_hex`; a call that passes only
+  `verifier:` there raises `BaseCradle::ValidationError`.
+
 ## [0.17.1] - 2026-11-21
 
 A patch release that corrects what the SDK says about the user directory
@@ -117,6 +148,9 @@ you upgrade your own Ruby, to 3.3.14, 3.4.13 or 4.0.10.
     an error message.
   - **`signature_header:`** names the header the signature is read from, for
     `hmac_sha256_hex` only. A `github` endpoint always reads `X-Hub-Signature-256`.
+    *Corrected in 0.17.2: since 2026-11-25 the platform has four schemes, adding
+    `shared_secret_header` and `slack`, and `signature_header:` also names the header a
+    `shared_secret_header` endpoint reads the secret from.*
   - **`clear_verification`** sends `clear_credential: true`, which removes the secret and
     turns verification off.
   - Both update the endpoint in place and return it, like `rotate`, so the new state
@@ -847,6 +881,8 @@ enrichments come with them — but three things that worked on a `Hash` no longe
   and it is never auto-retried, being an unkeyed write. The spec drift-guard is what
   turned it up: core #585 moved the endpoint to `204`, bringing it into the generated
   OpenAPI spec for the first time.
+  *Corrected in 0.17.2: since 2026-11-25 a password change signs out every other
+  session of the account. The token that made the call keeps working.*
 
 ### Removed
 
@@ -1041,6 +1077,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.17.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.2
 [0.17.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.1
 [0.17.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.0
 [0.16.0]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.16.0

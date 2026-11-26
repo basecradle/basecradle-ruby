@@ -17,8 +17,13 @@ module BaseCradle
   # +endpoint.clear_verification+.
   class WebhookVerification < ApiObject
     attribute :enabled
-    attribute :signature_header # for a "github" endpoint, always "X-Hub-Signature-256"
-    attribute :verifier # "hmac_sha256_hex" or "github" — an open set; read it as a string
+    # The header deliveries are checked against: the signature's under "hmac_sha256_hex",
+    # the secret's under "shared_secret_header". A "github" endpoint reports its fixed
+    # X-Hub-Signature-256 here; a "slack" endpoint always reads X-Slack-Signature.
+    attribute :signature_header
+    # "hmac_sha256_hex", "github", "shared_secret_header" or "slack" today — an open set;
+    # read it as a string.
+    attribute :verifier
   end
 
   # An endpoint's content: identity, state, and the rotatable ingest URL.
@@ -71,20 +76,31 @@ module BaseCradle
     # stays as it is; pass at least one, or this raises ArgumentError before any request
     # is made.
     #
-    # - +verifier+ is the scheme: "hmac_sha256_hex" (the default) or "github". It is
-    #   passed through as given, so a scheme the platform adds later works here unchanged;
-    #   one it does not know raises ValidationError.
+    # - +verifier+ is the scheme, one of four today: "hmac_sha256_hex" (the default; any
+    #   sender you control signs the body), "github" (a GitHub webhook), "slack" (a Slack
+    #   app's Events API; the endpoint answers Slack's url_verification handshake itself,
+    #   and the handshake creates no event) or "shared_secret_header" (a sender that
+    #   cannot sign sends the secret itself in a header). It is passed through as given,
+    #   so a scheme the platform adds later works here unchanged; one it does not know
+    #   raises ValidationError.
     # - +credential+ is the signing secret, sent as +verification_credential+: setting it
-    #   turns verification on. A blank one is sent as given and the API treats it as no
-    #   change: the current secret, if any, stays, and +content.verification.enabled+
+    #   turns verification on. Under "shared_secret_header" nothing is signed: it is the
+    #   header's exact value, compared as sent, so include any prefix the sender adds. A
+    #   blank one is sent as given and the API treats it as no change: the current
+    #   secret, if any, stays, and +content.verification.enabled+
     #   cannot tell that skipped rotation from a real one, so make sure a secret read from
     #   the environment is not empty before passing it. It is sent as its bytes, which
     #   must be UTF-8 (a BINARY string read from a file is fine); a credential that is not
     #   a String, or whose bytes are not UTF-8, raises ArgumentError before any request,
     #   and the error never shows it. It is write-only: the API never returns it, and this
     #   SDK keeps no copy and never puts it in an inspect or an error message.
-    # - +signature_header+ is the header the signature is read from, for
-    #   "hmac_sha256_hex" only; a "github" endpoint always reads X-Hub-Signature-256.
+    # - +signature_header+ is the header that is read: the signature's under
+    #   "hmac_sha256_hex", the secret's under "shared_secret_header". A "github" or
+    #   "slack" endpoint ignores it. Pass it in the same call that moves an endpoint to
+    #   "shared_secret_header", or from it back to "hmac_sha256_hex": a header named for
+    #   one is never carried over to the other, so passing only +verifier+ there raises
+    #   ValidationError. A move from "shared_secret_header" to "github" or "slack" that
+    #   names no header resets it to X-Signature.
     #
     # Any viewer of the endpoint's timeline may configure it, locked timeline or not.
     # Returns this endpoint, which adopts the one the API returns, so

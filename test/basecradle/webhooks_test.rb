@@ -341,6 +341,31 @@ class WebhooksTest < Minitest::Test
                      "signature_header" => "X-Sig" })
   end
 
+  # The API requires the header in the same request that chooses shared_secret_header,
+  # so the README's one call must put both, and the secret, in one PATCH.
+  def test_configure_verification_names_the_header_in_the_call_that_chooses_shared_secret_header
+    stub_verification_patch
+
+    an_endpoint.configure_verification(verifier: "shared_secret_header", signature_header: "X-Webhook-Secret",
+                                       credential: SIGNING_SECRET)
+
+    assert_patched({ "verifier" => "shared_secret_header", "signature_header" => "X-Webhook-Secret",
+                     "verification_credential" => SIGNING_SECRET })
+  end
+
+  # Which scheme needs a header is the API's rule, not the SDK's: a verifier-only change to
+  # shared_secret_header is sent as given, and the API's 422 arrives as ValidationError.
+  def test_configure_verification_leaves_the_header_rule_to_the_api
+    stub_verification_problem("validation_failed", 422, errors: { "signature_header" => [ "can't be blank" ] })
+
+    error = assert_raises(BaseCradle::ValidationError) do
+      an_endpoint.configure_verification(verifier: "shared_secret_header")
+    end
+
+    assert_equal({ "signature_header" => [ "can't be blank" ] }, error.errors)
+    assert_patched({ "verifier" => "shared_secret_header" })
+  end
+
   # A live-object verb, like rotate: it returns the endpoint itself, now holding the
   # verification block the API returned.
   def test_configure_verification_adopts_the_verification_the_api_returns
