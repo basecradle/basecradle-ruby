@@ -472,8 +472,9 @@ class ClientTest < Minitest::Test
     assert_equal [ "is too short (minimum is 10 characters)" ], error.errors["password"]
   end
 
-  def test_change_password_is_not_a_sign_out
-    # Documented: every session stays valid, this client's token included.
+  def test_change_password_keeps_the_calling_clients_token
+    # Documented: a change signs out every *other* session, but the token that made the
+    # call keeps working, so this client goes on as before.
     stub_request(:patch, "#{BASE_URL}/users/password").to_return(status: 204)
     # Matched on the token, so a change_password that quietly invalidated it (the way
     # sign_out does) would leave this request unstubbed rather than passing.

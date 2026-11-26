@@ -203,6 +203,10 @@ endpoint.rotate   # leaked URL? new ingest_url, old one dies, uuid unchanged
 # Require signed deliveries. Here: a GitHub webhook, whose Secret at GitHub is this value
 endpoint.configure_verification(verifier: "github", credential: "kT9vQ2mXw7RbLp4ZsYc81NdHaUeJ3gFo")
 puts endpoint.content.verification.signature_header # X-Hub-Signature-256
+# Or a sender that cannot sign, sending `X-Webhook-Secret: <the secret>`. The header is
+# required in the same call that chooses this scheme
+endpoint.configure_verification(verifier: "shared_secret_header", signature_header: "X-Webhook-Secret",
+                                credential: "kT9vQ2mXw7RbLp4ZsYc81NdHaUeJ3gFo")
 endpoint.clear_verification # remove the secret: unsigned deliveries are accepted again
 
 # Read what came in — across all timelines, or narrowed
@@ -222,17 +226,31 @@ and the SDK invents none. `BaseCradle.uuid_of(endpoint)` reads it too, and is wh
 **Signature verification is configured with two verbs.**
 `endpoint.configure_verification(verifier:, credential:, signature_header:)` sends only
 the keywords you pass, so anything left out stays as it is; passing none raises
-`ArgumentError` before any request. `verifier:` is the scheme — `"hmac_sha256_hex"` (the
-default; any sender you control) or `"github"` (GitHub's own `X-Hub-Signature-256`, so a
-GitHub webhook can point straight at the `ingest_url`) — and is passed through as given,
-so a scheme the platform adds later needs no SDK release; one it does not know raises
-`BaseCradle::ValidationError`. `credential:` is the signing secret, and setting it turns
-verification on; a blank one is no change at all (the API's rule): the current secret
+`ArgumentError` before any request. `verifier:` is the scheme, one of four today:
+
+| `verifier:` | For | The header it reads |
+|---|---|---|
+| `"hmac_sha256_hex"` (the default) | any sender you control | `X-Signature`, or the `signature_header:` you set; carries the HMAC-SHA256 hex digest of the body |
+| `"github"` | a GitHub webhook, pointed straight at the `ingest_url` | `X-Hub-Signature-256`, fixed |
+| `"shared_secret_header"` | a sender that cannot sign | the `signature_header:` you set; carries the secret itself |
+| `"slack"` | a Slack app's Events API | `X-Slack-Signature`, fixed; the endpoint answers Slack's `url_verification` handshake itself, and the handshake creates no event |
+
+The verifier is passed through as given, so a scheme the platform adds later needs no SDK
+release; one it does not know raises `BaseCradle::ValidationError`. Use a signing scheme
+whenever the sender can sign: `shared_secret_header` proves only that the sender holds the
+secret, not that the body arrived unaltered. `credential:` is the signing secret (under
+`shared_secret_header`, the header's exact value, compared as sent, so include any prefix
+such as `Bearer `), and setting it turns verification on; a blank one is no change at all (the API's rule): the current secret
 stays, and `verification.enabled` cannot tell you a rotation was skipped, so make sure a
 secret read from the environment is not empty before passing it. It is **write-only**: the
 API never returns it, and the SDK keeps no copy and never puts it in an `inspect` or an
-error message. `signature_header:` names the header an `hmac_sha256_hex` endpoint reads the
-signature from. `endpoint.clear_verification` removes the secret and turns verification
+error message. `signature_header:` names the header that is read: the signature's under
+`hmac_sha256_hex`, the secret's under `shared_secret_header`; a `github` or `slack`
+endpoint ignores it. **Pass it in the same call that moves an endpoint to
+`shared_secret_header`, or from it back to `hmac_sha256_hex`** — a header named for one
+scheme is never carried over to the other, so a call that passes only `verifier:` raises
+`BaseCradle::ValidationError`. A move from `shared_secret_header` to `github` or `slack`
+that names no header resets it to `X-Signature`. `endpoint.clear_verification` removes the secret and turns verification
 off. Both return the endpoint, updated in place; read the result at
 `endpoint.content.verification`. How senders sign is in the API docs:
 [Verifying Inbound Deliveries](https://basecradle.com/docs/api#verifying-inbound-deliveries-optional).
@@ -350,7 +368,7 @@ bc.change_password(current_password: "correct-horse-battery-staple",
 # => nil (204 No Content)
 ```
 
-A password change is **not** a sign-out: every session stays valid, this client's token included. Revoke separately if a credential is suspect. A wrong current password raises `BaseCradle::CurrentPasswordIncorrectError`, a mismatched confirmation raises `BaseCradle::PasswordConfirmationMismatchError`, and a new password that fails the platform's rules (10+ characters, mixed case, a number or symbol) raises `BaseCradle::ValidationError` carrying the model's `errors`. The first two are **subclasses** of the third, so rescue them before `ValidationError` — rescuing only `ValidationError` catches all three, and the first two carry no `errors`.
+**A password change signs out every other session of the account**, browser sessions and API tokens alike: each of them raises `BaseCradle::AuthenticationError` (`401`) from then on, so if you run several clients on one account, mint each a new token with `BaseCradle::Client.login(...)` after the change. **The token that made the call keeps working** — this client goes on as before. So a password change does cut off a credential someone else holds, but not the one you just used: if that is the token you suspect, revoke it too (`bc.sign_out`, or `bc.sessions.revoke_all` to end everything at once). A change that fails signs nothing out. A wrong current password raises `BaseCradle::CurrentPasswordIncorrectError`, a mismatched confirmation raises `BaseCradle::PasswordConfirmationMismatchError`, and a new password that fails the platform's rules (10+ characters, mixed case, a number or symbol) raises `BaseCradle::ValidationError` carrying the model's `errors`. The first two are **subclasses** of the third, so rescue them before `ValidationError` — rescuing only `ValidationError` catches all three, and the first two carry no `errors`.
 
 ## Users & trust
 

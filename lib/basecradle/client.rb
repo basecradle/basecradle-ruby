@@ -205,10 +205,13 @@ module BaseCradle
     # +password_confirmation+ must match +password+ — the API rejects a mismatch rather
     # than guessing which one you meant.
     #
-    # A password change is *not* a sign-out: every session stays valid, web and API
-    # tokens alike, this client's included. Revoke separately if a credential is suspect
-    # (+session.revoke+, or +bc.sessions.revoke_all+ for all of them). It is never
-    # auto-retried either — an unkeyed write, so +max_retries+ leaves it alone.
+    # A successful change signs out every *other* session of the account, browser
+    # sessions and API tokens alike: each raises AuthenticationError (401) from then on,
+    # so another client on the same account needs a new token (+Client.login+). The token
+    # that made the call keeps working, so this client goes on as before; if that token
+    # is the one you suspect, revoke it too (+sign_out+, or +sessions.revoke_all+). A
+    # change that fails signs nothing out. It is never auto-retried — an unkeyed write,
+    # so +max_retries+ leaves it alone.
     #
     # Raises +CurrentPasswordIncorrectError+ when the current password is wrong,
     # +PasswordConfirmationMismatchError+ when the confirmation differs, and a
