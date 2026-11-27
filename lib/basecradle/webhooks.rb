@@ -19,11 +19,13 @@ module BaseCradle
     attribute :enabled
     # The header deliveries are checked against: the signature's under "hmac_sha256_hex",
     # the secret's under "shared_secret_header". A "github" endpoint reports its fixed
-    # X-Hub-Signature-256 here; a "slack" endpoint always reads X-Slack-Signature, and a
-    # "twilio" endpoint X-Twilio-Signature.
+    # X-Hub-Signature-256 here; a "slack" endpoint always reads X-Slack-Signature, a
+    # "stripe" endpoint Stripe-Signature, and a "twilio" endpoint X-Twilio-Signature. An
+    # "sns" endpoint reports an empty string: SNS signs inside the message, so no header
+    # is read.
     attribute :signature_header
-    # "hmac_sha256_hex", "github", "shared_secret_header", "slack" or "twilio" today — an
-    # open set; read it as a string.
+    # "hmac_sha256_hex", "github", "shared_secret_header", "slack", "stripe", "twilio" or
+    # "sns" today — an open set; read it as a string.
     attribute :verifier
   end
 
@@ -77,23 +79,36 @@ module BaseCradle
     # stays as it is; pass at least one, or this raises ArgumentError before any request
     # is made.
     #
-    # - +verifier+ is the scheme, one of five today: "hmac_sha256_hex" (the default; any
+    # - +verifier+ is the scheme, one of seven today: "hmac_sha256_hex" (the default; any
     #   sender you control signs the body), "github" (a GitHub webhook),
     #   "shared_secret_header" (a sender that cannot sign sends the secret itself in a
     #   header), "slack" (a Slack app's Events API; the endpoint answers Slack's
-    #   url_verification handshake itself, and the handshake creates no event) or "twilio"
-    #   (the webhooks Twilio sends: an incoming text message, a recording or transcription
-    #   callback, a status callback). It is passed through as given, so a scheme the
-    #   platform adds later works here unchanged; one it does not know raises
-    #   ValidationError. Twilio signs the URL it was given, so give it +content.ingest_url+
-    #   exactly as the endpoint reports it. Twilio also reads the reply, so a "twilio"
-    #   endpoint answers each delivery it stores with 200 OK and an empty TwiML document
-    #   in place of the empty 201: the answer to the sender, which changes nothing this
-    #   method returns. That empty answer ends a voice call, so the ingest_url is never a
-    #   number's voice URL; point a recording's callbacks at it instead.
+    #   url_verification handshake itself, and the handshake creates no event), "stripe"
+    #   (a Stripe webhook destination; a delivery whose signed timestamp is more than five
+    #   minutes from now is refused, and a repeat of one Stripe event, the same event id,
+    #   is stored once), "twilio" (the webhooks Twilio sends: an incoming text message, a
+    #   recording or transcription callback, a status callback) or "sns" (an Amazon SNS
+    #   topic's HTTPS subscription, in a standard or GovCloud region, not China; the
+    #   endpoint confirms the subscription itself, and the confirmation creates no event,
+    #   so set the topic's ARN before subscribing it, since with no ARN set the
+    #   confirmation is stored as an event whose SubscribeURL is yours to open; raw message
+    #   delivery must be off; a repeat of one SNS message, the same MessageId, is stored
+    #   once). It is passed through as given, so a scheme the platform adds later
+    #   works here unchanged; one it does not know raises ValidationError. Twilio signs the
+    #   URL it was given, so give it +content.ingest_url+ exactly as the endpoint reports
+    #   it. Twilio also reads the reply, so a "twilio" endpoint answers each delivery it
+    #   stores with 200 OK and an empty TwiML document in place of the empty 201: the
+    #   answer to the sender, which changes nothing this method returns. That empty answer
+    #   ends a voice call, so the ingest_url is never a number's voice URL; point a
+    #   recording's callbacks at it instead.
     # - +credential+ is the signing secret, sent as +verification_credential+: setting it
     #   turns verification on. Under "shared_secret_header" nothing is signed: it is the
     #   header's exact value, compared as sent, so include any prefix the sender adds.
+    #   Under "stripe" it is the destination's Signing secret at Stripe (whsec_...), not an
+    #   API key. Under "sns" it is the ARN of the topic the endpoint listens to: not a
+    #   secret, and still write-only. Pass it in the same call that moves an endpoint to
+    #   or from "sns": a topic's ARN is never carried over to a secret scheme, nor a secret
+    #   to "sns", so passing only +verifier+ there raises ValidationError.
     #   Under "twilio" it is a shared key made at Twilio for signing webhooks (Twilio's own
     #   recommendation) or the account's Auth Token. An endpoint holds one secret, a
     #   delivery signed with the other is refused with 401, and Twilio does not resend it
@@ -108,12 +123,13 @@ module BaseCradle
     #   the API never returns it, and this SDK keeps no copy and never puts it in an
     #   inspect or an error message.
     # - +signature_header+ is the header that is read: the signature's under
-    #   "hmac_sha256_hex", the secret's under "shared_secret_header". A "github", "slack"
-    #   or "twilio" endpoint ignores it. Pass it in the same call that moves an endpoint
-    #   to "shared_secret_header", or from it back to "hmac_sha256_hex": a header named
-    #   for one is never carried over to the other, so passing only +verifier+ there
-    #   raises ValidationError. A move from "shared_secret_header" to "github", "slack" or
-    #   "twilio" that names no header resets it to X-Signature.
+    #   "hmac_sha256_hex", the secret's under "shared_secret_header". A "github", "slack",
+    #   "sns", "stripe" or "twilio" endpoint ignores it. Pass it in the same call that
+    #   moves an endpoint to "shared_secret_header", or from it back to "hmac_sha256_hex":
+    #   a header named for one is never carried over to the other, so passing only
+    #   +verifier+ there raises ValidationError. A move from "shared_secret_header" to
+    #   "github", "slack", "sns", "stripe" or "twilio" that names no header resets it to
+    #   X-Signature.
     #
     # Any viewer of the endpoint's timeline may configure it, locked timeline or not.
     # Returns this endpoint, which adopts the one the API returns, so

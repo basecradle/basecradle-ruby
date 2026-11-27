@@ -30,7 +30,8 @@ class ErrorsTest < Minitest::Test
     "invalid_filter" => BaseCradle::InvalidFilterError,
     "endpoint_disabled" => BaseCradle::EndpointDisabledError,
     "payload_too_large" => BaseCradle::PayloadTooLargeError,
-    "binary_payload" => BaseCradle::BinaryPayloadError
+    "binary_payload" => BaseCradle::BinaryPayloadError,
+    "service_unavailable" => BaseCradle::ServiceUnavailableError
   }.freeze
 
   def test_the_catalog_is_exactly_the_registry

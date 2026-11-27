@@ -9,6 +9,40 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.17.4] - 2026-11-27
+
+A patch release that corrects what the SDK says about a platform change of 2026-11-27
+([#336](https://github.com/basecradle/basecradle-ruby/issues/336)), and gives the error code
+it added a class. No verb is added or removed, and no signature changes.
+
+### Fixed
+
+- **An endpoint's `verifier` has seven schemes, not five.** The platform now verifies
+  `stripe` and `sns`. `configure_verification` already passed the verifier through as a
+  string, so both work with this SDK as it is; only the docs listed five. The README,
+  `WebhookVerification` and `configure_verification` now list all seven.
+  - **`stripe`**, for a Stripe webhook destination. The secret is the destination's
+    Signing secret at Stripe (`whsec_…`). It reads Stripe's own `Stripe-Signature`, fixed,
+    so `signature_header` is ignored, as under `github`, `slack` and `twilio`. A delivery
+    whose signed timestamp is more than five minutes from now is refused, and a repeat of
+    one Stripe event (the same event `id`) is stored once.
+  - **`sns`**, for an Amazon SNS topic. The credential is **the ARN of the topic** the
+    endpoint listens to: not a secret, and still write-only. SNS signs inside the message,
+    so **`verification.signature_header` is an empty string** for an `sns` endpoint; the
+    SDK reads it as sent (a test now pins it), and nothing in the SDK assumed it was
+    non-empty. Pass `credential:` in the same call that moves an endpoint to or from `sns`:
+    an ARN is never carried over to a secret scheme, nor a secret to `sns`, so a call that
+    passes only `verifier:` raises `BaseCradle::ValidationError`. The endpoint confirms
+    the SNS subscription by itself, and the confirmation creates no event, so set the ARN
+    before you subscribe the topic. Raw message delivery must be off, and a repeat of one
+    SNS message (the same `MessageId`) is stored once.
+- **`service_unavailable` maps to `BaseCradle::ServiceUnavailableError`.** The API
+  documents this code (`503`): a webhook delivery could not be verified right now, because
+  the sender's own certificate (Amazon SNS's) could not be fetched or its handshake could
+  not be completed, so nothing was stored and the sender sends it again. It is an answer to
+  a *sender*; no call this SDK makes receives it today. Until now the registry did not
+  list it, so it would have read as a bare `BaseCradle::Error`.
+
 ## [0.17.3] - 2026-11-26
 
 A patch release that corrects what the SDK says about a platform change of 2026-11-26
@@ -34,6 +68,7 @@ no verb is added or removed, and no signature changes.
   `configure_verification` already passed the verifier through as a string, so `twilio`
   works with this SDK as it is; only the docs listed four. The README,
   `WebhookVerification` and `configure_verification` now list all five.
+  *Corrected in 0.17.4: since 2026-11-27 it has seven, adding `stripe` and `sns`.*
 
 ## [0.17.2] - 2026-11-26
 
@@ -65,7 +100,8 @@ no verb is added or removed, and no signature changes.
   `slack`. It is required in the same call that moves an endpoint to
   `shared_secret_header`, or from it back to `hmac_sha256_hex`; a call that passes only
   `verifier:` there raises `BaseCradle::ValidationError`.
-  *Corrected in 0.17.3: since 2026-11-26 it has five, adding `twilio`.*
+  *Corrected in 0.17.3: since 2026-11-26 it has five, adding `twilio`; and in 0.17.4: since
+  2026-11-27 seven, adding `stripe` and `sns`.*
 
 ## [0.17.1] - 2026-11-21
 
@@ -178,7 +214,8 @@ you upgrade your own Ruby, to 3.3.14, 3.4.13 or 4.0.10.
     *Corrected in 0.17.2: since 2026-11-25 the platform has four schemes, adding
     `shared_secret_header` and `slack`, and `signature_header:` also names the header a
     `shared_secret_header` endpoint reads the secret from. Corrected again in 0.17.3:
-    since 2026-11-26 it has five, adding `twilio`.*
+    since 2026-11-26 it has five, adding `twilio`. Corrected again in 0.17.4: since
+    2026-11-27 it has seven, adding `stripe` and `sns`.*
   - **`clear_verification`** sends `clear_credential: true`, which removes the secret and
     turns verification off.
   - Both update the endpoint in place and return it, like `rotate`, so the new state
@@ -1105,6 +1142,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.17.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.4
 [0.17.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.3
 [0.17.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.2
 [0.17.1]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.1
