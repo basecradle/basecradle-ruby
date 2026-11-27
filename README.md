@@ -226,7 +226,7 @@ and the SDK invents none. `BaseCradle.uuid_of(endpoint)` reads it too, and is wh
 **Signature verification is configured with two verbs.**
 `endpoint.configure_verification(verifier:, credential:, signature_header:)` sends only
 the keywords you pass, so anything left out stays as it is; passing none raises
-`ArgumentError` before any request. `verifier:` is the scheme, one of five today:
+`ArgumentError` before any request. `verifier:` is the scheme, one of seven today:
 
 | `verifier:` | For | The header it reads |
 |---|---|---|
@@ -234,7 +234,13 @@ the keywords you pass, so anything left out stays as it is; passing none raises
 | `"github"` | a GitHub webhook, pointed straight at the `ingest_url` | `X-Hub-Signature-256`, fixed |
 | `"shared_secret_header"` | a sender that cannot sign | the `signature_header:` you set; carries the secret itself |
 | `"slack"` | a Slack app's Events API | `X-Slack-Signature`, fixed; the endpoint answers Slack's `url_verification` handshake itself, and the handshake creates no event |
+| `"stripe"` | a Stripe webhook destination | `Stripe-Signature`, fixed; it carries the signed timestamp and the digest |
 | `"twilio"` | the webhooks Twilio sends (an incoming text message, a recording or transcription callback, a status callback) | `X-Twilio-Signature`, fixed; Twilio signs the URL it was given, so give it the `ingest_url` exactly as the endpoint reports it |
+| `"sns"` | an Amazon SNS topic's HTTPS subscription | none: SNS signs inside the message, so `verification.signature_header` is an empty string |
+
+Under `stripe` the secret is the destination's Signing secret at Stripe (`whsec_…`), which
+is not an API key. A delivery whose signed timestamp is more than five minutes from now is
+refused, and a repeat of one Stripe event (the same event `id`) is stored once.
 
 Under `twilio` the secret is a shared key made at Twilio for signing webhooks (Twilio's own
 recommendation) or the account's Auth Token. Twilio reads the reply to a delivery, so a
@@ -247,22 +253,33 @@ other is refused with `401`, and Twilio does not resend it by default, so when y
 between a shared key and the Auth Token, or replace a shared key, change the secret here in
 the same minute you change it at Twilio.
 
+Under `sns` the credential is **the ARN of the topic** the endpoint listens to. It is not a
+secret, and it is still write-only: the API never returns it. **Pass `credential:` in the
+same call that moves an endpoint to or from `sns`**: a topic's ARN is never carried over to
+a secret scheme, nor a secret to `sns`, so a call that passes only `verifier:` there raises
+`BaseCradle::ValidationError`.
+The endpoint confirms the SNS subscription by itself, and the confirmation creates no event,
+so set the ARN before you subscribe the topic: with no ARN set, the confirmation is stored as
+an event and its `SubscribeURL` is yours to open. Topics in the standard and GovCloud regions
+are supported, the China regions are not. Raw message delivery must be off, and a repeat of
+one SNS message (the same `MessageId`) is stored once.
+
 The verifier is passed through as given, so a scheme the platform adds later needs no SDK
 release; one it does not know raises `BaseCradle::ValidationError`. Use a signing scheme
 whenever the sender can sign: `shared_secret_header` proves only that the sender holds the
 secret, not that the body arrived unaltered. `credential:` is the signing secret (under
 `shared_secret_header`, the header's exact value, compared as sent, so include any prefix
-such as `Bearer `), and setting it turns verification on; a blank one is no change at all (the API's rule): the current secret
+such as `Bearer `; under `sns`, the topic's ARN), and setting it turns verification on; a blank one is no change at all (the API's rule): the current secret
 stays, and `verification.enabled` cannot tell you a rotation was skipped, so make sure a
 secret read from the environment is not empty before passing it. It is **write-only**: the
 API never returns it, and the SDK keeps no copy and never puts it in an `inspect` or an
 error message. `signature_header:` names the header that is read: the signature's under
-`hmac_sha256_hex`, the secret's under `shared_secret_header`; a `github`, `slack` or
-`twilio` endpoint ignores it. **Pass it in the same call that moves an endpoint to
+`hmac_sha256_hex`, the secret's under `shared_secret_header`; a `github`, `slack`, `sns`,
+`stripe` or `twilio` endpoint ignores it. **Pass it in the same call that moves an endpoint to
 `shared_secret_header`, or from it back to `hmac_sha256_hex`** — a header named for one
 scheme is never carried over to the other, so a call that passes only `verifier:` raises
-`BaseCradle::ValidationError`. A move from `shared_secret_header` to `github`, `slack` or
-`twilio` that names no header resets it to `X-Signature`. `endpoint.clear_verification` removes the secret and turns verification
+`BaseCradle::ValidationError`. A move from `shared_secret_header` to `github`, `slack`,
+`sns`, `stripe` or `twilio` that names no header resets it to `X-Signature`. `endpoint.clear_verification` removes the secret and turns verification
 off. Both return the endpoint, updated in place; read the result at
 `endpoint.content.verification`. How senders sign is in the API docs:
 [Verifying Inbound Deliveries](https://basecradle.com/docs/api#verifying-inbound-deliveries-optional).

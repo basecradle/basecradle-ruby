@@ -56,7 +56,10 @@ module BaseCradle
   # +invalid_credentials+ — sign-in failed: the email address or password is wrong.
   class InvalidCredentialsError < AuthenticationError; end
 
-  # +invalid_signature+ — webhook ingest: the signature is missing or does not match.
+  # +invalid_signature+ — webhook ingest: the delivery did not prove it holds the
+  # endpoint's secret. Its signature (or, under "shared_secret_header", its secret header)
+  # is missing or does not match, or a signed timestamp is more than five minutes from now,
+  # or, under "sns", the message is not from the endpoint's topic.
   class InvalidSignatureError < AuthenticationError; end
 
   # --- 403: account / permissions --------------------------------------------------------
@@ -153,6 +156,12 @@ module BaseCradle
   # +binary_payload+ — webhook ingest: the request body is not UTF-8 text (HTTP 415).
   class BinaryPayloadError < Error; end
 
+  # +service_unavailable+ — webhook ingest: the delivery could not be verified right now,
+  # because the sender's own certificate could not be fetched (Amazon SNS's) or its
+  # handshake could not be completed (HTTP 503). Nothing was stored; the sender sends it
+  # again. It is an answer to a *sender*: no call this SDK makes receives it today.
+  class ServiceUnavailableError < Error; end
+
   # --- the code => class registry ----------------------------------------------------------
 
   # Every API error is an RFC 9457 application/problem+json document with a stable,
@@ -177,7 +186,8 @@ module BaseCradle
     "invalid_filter" => InvalidFilterError,
     "endpoint_disabled" => EndpointDisabledError,
     "payload_too_large" => PayloadTooLargeError,
-    "binary_payload" => BinaryPayloadError
+    "binary_payload" => BinaryPayloadError,
+    "service_unavailable" => ServiceUnavailableError
   }.freeze
 
   class Error

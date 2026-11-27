@@ -383,9 +383,24 @@ class WebhooksTest < Minitest::Test
   def test_configure_verification_passes_an_unheard_of_verifier_through
     stub_verification_patch
 
-    an_endpoint.configure_verification(verifier: "stripe")
+    an_endpoint.configure_verification(verifier: "not_yet_a_scheme")
 
-    assert_patched({ "verifier" => "stripe" })
+    assert_patched({ "verifier" => "not_yet_a_scheme" })
+  end
+
+  # SNS signs inside the message, so an sns endpoint reports no header: an empty string,
+  # read as the API sent it — never nil, never a MissingFieldError. The ARN rides in the
+  # same call as the move, as the API requires.
+  def test_an_sns_endpoint_reports_an_empty_signature_header
+    endpoint = an_endpoint
+    stub_verification_patch(SNS_VERIFICATION)
+
+    endpoint.configure_verification(verifier: "sns", credential: TOPIC_ARN)
+
+    assert_patched({ "verifier" => "sns", "verification_credential" => TOPIC_ARN })
+    assert endpoint.content.verification.enabled
+    assert_equal "sns", endpoint.content.verification.verifier
+    assert_equal "", endpoint.content.verification.signature_header
   end
 
   # The API's rule is that a blank secret is no change; the SDK does not repair it. What
@@ -556,6 +571,10 @@ class WebhooksTest < Minitest::Test
   end
 
   VERIFICATION_URL = "#{BASE_URL}/webhook_endpoints/#{WEBHOOK_ENDPOINT_UUID}".freeze
+
+  # The topic's ARN the API docs' own example uses — fabricated.
+  TOPIC_ARN = "arn:aws:sns:us-east-1:123456789012:example-alerts"
+  SNS_VERIFICATION = { "enabled" => true, "signature_header" => "", "verifier" => "sns" }.freeze
 
   def stub_verification_patch(verification = VERIFICATION_OFF)
     stub_request(:patch, VERIFICATION_URL)
