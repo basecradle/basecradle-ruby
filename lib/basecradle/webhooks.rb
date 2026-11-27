@@ -108,7 +108,10 @@ module BaseCradle
     #   API key. Under "sns" it is the ARN of the topic the endpoint listens to: not a
     #   secret, and still write-only. Pass it in the same call that moves an endpoint to
     #   or from "sns": a topic's ARN is never carried over to a secret scheme, nor a secret
-    #   to "sns", so passing only +verifier+ there raises ValidationError.
+    #   to "sns", so passing only +verifier+ there raises ValidationError. That rule binds
+    #   only an endpoint that holds a credential: one with none moves between any two
+    #   schemes freely. So to move an endpoint off "sns" before the new sender's secret
+    #   exists, call clear_verification first, then name the new scheme here.
     #   Under "twilio" it is a shared key made at Twilio for signing webhooks (Twilio's own
     #   recommendation) or the account's Auth Token. An endpoint holds one secret, a
     #   delivery signed with the other is refused with 401, and Twilio does not resend it
@@ -147,8 +150,11 @@ module BaseCradle
     end
 
     # Remove the signing secret and turn verification off: deliveries are accepted
-    # unsigned again, and +content.verification.enabled+ reads false. Returns this
-    # endpoint, which adopts the one the API returns.
+    # unsigned again, and +content.verification.enabled+ reads false. The verifier
+    # stays: an endpoint with no credential moves between any two schemes freely, so this,
+    # then configure_verification(verifier: ...), moves an endpoint off "sns" before the
+    # new sender's secret exists. Returns this endpoint, which adopts the one the API
+    # returns.
     def clear_verification
       adopt(require_client.request("PATCH", endpoint_path,
                                    json: { "webhook_endpoint" => { "clear_credential" => true } }))
