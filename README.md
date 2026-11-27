@@ -261,6 +261,10 @@ a secret scheme, nor a secret to `sns`, so a call that passes only `verifier:` t
 with none moves between any two schemes freely. So to move an endpoint off `sns` before the
 new sender's secret exists, clear the verification first, then name the new scheme:
 `endpoint.clear_verification`, then `endpoint.configure_verification(verifier: "hmac_sha256_hex")`.
+From the first call until the new sender's secret is set, the endpoint holds no credential,
+so, like any endpoint with none, it **accepts deliveries without proof**. To refuse them in
+the meantime, `endpoint.disable` it first (senders get `410 Gone`) and `endpoint.enable` it
+once the secret is set.
 The endpoint confirms the SNS subscription by itself, and the confirmation creates no event,
 so set the ARN before you subscribe the topic: with no ARN set, the confirmation is stored as
 an event and its `SubscribeURL` is yours to open. Topics in the standard and GovCloud regions
