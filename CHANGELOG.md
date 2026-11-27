@@ -9,6 +9,22 @@ section**. The newest heading is always the version `lib/basecradle/version.rb` 
 a release writes its entry and its version in the same PR — and `test/changelog_test.rb`
 fails CI if the two ever disagree.
 
+## [0.17.5] - 2026-11-27
+
+A patch release that adds one sentence to the docs
+([#338](https://github.com/basecradle/basecradle-ruby/issues/338)). No code path changes:
+no verb is added or removed, and no signature changes.
+
+### Fixed
+
+- **The docs now say how to move an endpoint off `sns` before the new sender's secret
+  exists.** The rule that a move to or from `sns` carries `credential:` in the same call
+  binds only an endpoint that holds a credential: one with none moves between any two
+  schemes freely. So `endpoint.clear_verification`, then
+  `endpoint.configure_verification(verifier: "hmac_sha256_hex")` (or any other scheme),
+  makes the move in two calls, with no secret yet. The README, `configure_verification`
+  and `clear_verification` say so.
+
 ## [0.17.4] - 2026-11-27
 
 A patch release that corrects what the SDK says about a platform change of 2026-11-27
@@ -1142,6 +1158,7 @@ the Python SDK's behavior in idiomatic Ruby. Zero runtime dependencies.
 - **Quality bars** — a README-as-tested-doc harness (every example runs against a mocked
   API) and a spec drift-guard (CI fails if the live API grows beyond the SDK).
 
+[0.17.5]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.5
 [0.17.4]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.4
 [0.17.3]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.3
 [0.17.2]: https://github.com/basecradle/basecradle-ruby/releases/tag/v0.17.2

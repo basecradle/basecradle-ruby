@@ -257,7 +257,10 @@ Under `sns` the credential is **the ARN of the topic** the endpoint listens to. 
 secret, and it is still write-only: the API never returns it. **Pass `credential:` in the
 same call that moves an endpoint to or from `sns`**: a topic's ARN is never carried over to
 a secret scheme, nor a secret to `sns`, so a call that passes only `verifier:` there raises
-`BaseCradle::ValidationError`.
+`BaseCradle::ValidationError`. That rule binds only an endpoint that holds a credential: one
+with none moves between any two schemes freely. So to move an endpoint off `sns` before the
+new sender's secret exists, clear the verification first, then name the new scheme:
+`endpoint.clear_verification`, then `endpoint.configure_verification(verifier: "hmac_sha256_hex")`.
 The endpoint confirms the SNS subscription by itself, and the confirmation creates no event,
 so set the ARN before you subscribe the topic: with no ARN set, the confirmation is stored as
 an event and its `SubscribeURL` is yours to open. Topics in the standard and GovCloud regions
